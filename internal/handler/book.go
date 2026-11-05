@@ -44,6 +44,14 @@ type bookQuestion struct {
 }
 
 type bookPageData struct {
+	PublicTheme     string
+	PublicCopyJSON  string
+	PublicSkinHTML  template.HTML
+	BookingEffect   string
+	CancelEffect    string
+	HideAttribution bool
+	ExperienceJS    template.JS
+
 	PhoneChoice      bool
 	AccentColor      string
 	AccentForeground string
@@ -536,6 +544,8 @@ func (h *Handler) BookPage(w http.ResponseWriter, r *http.Request) {
 	i18nJSON, _ := loc.JSON()
 
 	data := bookPageData{
+		PublicTheme: brand.PublicTheme, PublicCopyJSON: brand.PublicCopyJSON(), PublicSkinHTML: template.HTML(bookmeetSkinHTML),
+		BookingEffect: brand.BookingEffect, CancelEffect: brand.CancelEffect, HideAttribution: brand.HideAttribution, ExperienceJS: template.JS(bookmeetEffectsJS),
 		PhoneChoice:         allowPhoneCall && onlineMeetingLocation(locType),
 		AccentColor:         accentColor,
 		AccentForeground:    accentForeground(accentColor),

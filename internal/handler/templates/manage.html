@@ -8,6 +8,9 @@
 {{template "demoNoindex" .}}
 {{template "trackingHead" .}}
 {{.HeadHTML}}
+<meta name="bookmeet-theme" content="{{.PublicTheme}}">
+<meta name="bookmeet-copy" content="{{.PublicCopyJSON}}">
+{{.PublicSkinHTML}}
 {{/* SAFE (generic.html-templates.security.var-in-script-tag): .I18NJSON is server-built via
      json.Marshal (HTML-escapes <,>,& by default), same pattern as .DataLayerFields below —
      never raw/attacker-controlled data. */}}
@@ -622,6 +625,7 @@ body {
         btn.disabled = false; btn.textContent = t('yes_cancel_booking'); return;
       }
       showView('success-cancel-view');
+      window.dispatchEvent(new CustomEvent('bookmeet:cancelled'));
       if (window.__CALNODE_DL && typeof calnodePush === 'function') {
         calnodePush('calnode_booking_cancelled', {
           booking_id: {{.BookingID}},

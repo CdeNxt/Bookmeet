@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import '$lib/bookmeet-effects.js';
 	import { api } from '$lib/api';
 	import { currentUser } from '$lib/stores';
 	import { Button } from '$lib/components/ui/button';
@@ -13,7 +14,13 @@
 	import type CropperType from 'cropperjs';
 
 	type Branding = {
-		business_name: string;
+		public_theme: string;
+        public_copy: Record<string,string>;
+        default_public_copy: Record<string,string>;
+        booking_effect: string;
+        cancel_effect: string;
+        hide_attribution: boolean;
+        business_name: string;
 		logo_url: string;
 		logo_height: number;
 		logo_opacity: number;
@@ -32,7 +39,19 @@
 	const loadingFlag = createAsyncFlag(true);
 	const savingFlag = createAsyncFlag();
 	const uploadingFlag = createAsyncFlag();
-	let businessName = $state('');
+	let publicTheme = $state('auto');
+    let publicCopy = $state<Record<string,string>>({});
+    let defaultPublicCopy = $state<Record<string,string>>({});
+    const copyGroups = [
+        {name:'Header', fields:[{key:'nav_note',label:'Header note'}]},
+        {name:'Booking page', fields:[{key:'booking_eyebrow',label:'Booking eyebrow'},{key:'booking_title',label:'Booking headline'},{key:'booking_subtitle',label:'Booking message'},{key:'ai_button',label:'AI button label'}]},
+        {name:'Manage page', fields:[{key:'manage_eyebrow',label:'Manage eyebrow'},{key:'manage_title',label:'Manage headline'},{key:'manage_subtitle',label:'Manage message'}]},
+        {name:'Meeting directory', fields:[{key:'directory_eyebrow',label:'Directory eyebrow'},{key:'directory_title',label:'Directory headline'},{key:'directory_subtitle',label:'Directory message'}]}
+    ];
+    let bookingEffect = $state('both');
+    let cancelEffect = $state('sad');
+    let hideAttribution = $state(true);
+    let businessName = $state('');
 	let logoUrl = $state('');
 	let logoHeight = $state(28);
 	let logoOpacity = $state(100);
@@ -73,7 +92,13 @@
 
 	onMount(() => loadingFlag.run(async () => {
 		const b = await api.get<Branding>('/v1/settings/branding');
-		businessName = b.business_name ?? '';
+		publicTheme = b.public_theme ?? 'auto';
+        publicCopy = b.public_copy ?? {};
+        defaultPublicCopy = b.default_public_copy ?? {};
+        bookingEffect = b.booking_effect ?? 'both';
+        cancelEffect = b.cancel_effect ?? 'sad';
+        hideAttribution = b.hide_attribution ?? true;
+        businessName = b.business_name ?? '';
 		logoUrl = b.logo_url ?? '';
 		logoHeight = b.logo_height || 28;
 		logoOpacity = b.logo_opacity || 100;
@@ -160,7 +185,12 @@
 	async function save() {
 		await savingFlag.run(async () => {
 			const b = await api.patch<Branding>('/v1/settings/branding', {
-				business_name: businessName,
+				public_theme: publicTheme,
+                public_copy: publicCopy,
+                booking_effect: bookingEffect,
+                cancel_effect: cancelEffect,
+                hide_attribution: hideAttribution,
+                business_name: businessName,
 				logo_height: logoHeight,
 				logo_opacity: logoOpacity,
 				banner_opacity: bannerOpacity,
@@ -168,7 +198,13 @@
 				terms_url: termsUrl,
 				fallback_locale: fallbackLocale
 			});
-			businessName = b.business_name ?? '';
+			publicTheme = b.public_theme ?? 'auto';
+        publicCopy = b.public_copy ?? {};
+        defaultPublicCopy = b.default_public_copy ?? {};
+        bookingEffect = b.booking_effect ?? 'both';
+        cancelEffect = b.cancel_effect ?? 'sad';
+        hideAttribution = b.hide_attribution ?? true;
+        businessName = b.business_name ?? '';
 			logoHeight = b.logo_height || 28;
 			logoOpacity = b.logo_opacity || 100;
 			bannerOpacity = b.banner_opacity || 100;
@@ -284,6 +320,68 @@
 			</div>
 		</div>
 
+        <div class="rounded-lg border bg-card p-6">
+            <h2 class="text-sm font-semibold">Public page appearance</h2>
+            <p class="mt-1 text-xs text-muted-foreground">The same interactive skin in a dark or light palette. Auto follows the visitor's device. Visitors can also change Appearance in the page header; their choice stays on that browser.</p>
+            <div class="mt-4 space-y-2">
+                <Label for="public-theme">Default appearance</Label>
+                <select id="public-theme" bind:value={publicTheme} class="h-10 w-full rounded-md border bg-background px-3 text-sm">
+                    <option value="auto">Auto — follow the visitor's device</option>
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                </select>
+            </div>
+        </div>
+        <div class="rounded-lg border bg-card p-6">
+            <h2 class="text-sm font-semibold">A personal welcome</h2>
+            <p class="mt-1 text-xs text-muted-foreground">Speak directly to the person booking with you. All copy below is plain text. Leave an eyebrow, message, or header note blank to hide it. Save applies your copy to every public page in this workspace.</p>
+            {#each copyGroups as group}
+                <details class="mt-4 rounded-md border p-4" open={group.name === 'Booking page' || group.name === 'Manage page'}>
+                    <summary class="cursor-pointer text-sm font-medium">{group.name}</summary>
+                    <div class="mt-4 space-y-4">
+                        {#each group.fields as field}
+                            <div class="space-y-1.5">
+                                <Label for={'copy-' + field.key}>{field.label}</Label>
+                                <Input id={'copy-' + field.key} bind:value={publicCopy[field.key]} maxlength={500} />
+                            </div>
+                        {/each}
+                    </div>
+                </details>
+            {/each}
+            <Button type="button" variant="outline" size="sm" class="mt-4" onclick={() => { publicCopy = { ...defaultPublicCopy }; }}>Use the friendly defaults</Button>
+            <p class="mt-2 text-xs text-muted-foreground">This resets the text above. Save to publish it. The calendar and reschedule/cancel controls handle the actions directly; redundant jump buttons are omitted.</p>
+        </div>
+        <div class="rounded-lg border bg-card p-6">
+            <h2 class="text-sm font-semibold">A little whimsy</h2>
+            <p class="mt-1 text-xs text-muted-foreground">A brief celebration after a successful booking, and a little farewell after cancellation. Effects appear on public pages, keep every button usable, and respect reduced motion.</p>
+            <div class="mt-5 space-y-2">
+                <Label for="booking-effect">Booking celebration</Label>
+                <select id="booking-effect" bind:value={bookingEffect} class="h-10 w-full rounded-md border bg-background px-3 text-sm">
+                    <option value="both">Confetti + flying unicorns</option>
+                    <option value="confetti">Confetti</option>
+                    <option value="unicorns">Flying unicorns</option>
+                    <option value="off">Off</option>
+                </select>
+                <Button type="button" variant="outline" size="sm" onclick={() => (window as any).BookMeetEffects?.(bookingEffect)}>Preview booking celebration</Button>
+            </div>
+            <div class="mt-5 space-y-2">
+                <Label for="cancel-effect">Cancellation effect</Label>
+                <select id="cancel-effect" bind:value={cancelEffect} class="h-10 w-full rounded-md border bg-background px-3 text-sm">
+                    <option value="sad">Sad + crying emoji rain</option>
+                    <option value="off">Off</option>
+                </select>
+                <Button type="button" variant="outline" size="sm" onclick={() => (window as any).BookMeetEffects?.(cancelEffect)}>Preview cancellation effect</Button>
+            </div>
+            <p class="mt-4 text-xs text-muted-foreground">Preview uses your current selection. Save to apply it for everyone. Animations are silent and finish within six seconds; email stays static.</p>
+        </div>
+        <div class="rounded-lg border bg-card p-6">
+            <h2 class="text-sm font-semibold">Public attribution</h2>
+            <label class="mt-4 flex items-center gap-3 text-sm" for="hide-attribution">
+                <input id="hide-attribution" type="checkbox" bind:checked={hideAttribution} />
+                Hide Calnode branding and links on public booking pages
+            </label>
+            <p class="mt-2 text-xs text-muted-foreground">Keeps your own legal links, language selector, and cookie controls available.</p>
+        </div>
 		<div class="rounded-lg border bg-card p-6">
 			<h2 class="text-sm font-semibold">Legal links</h2>
 			<p class="mt-0.5 text-xs text-muted-foreground">

@@ -8,6 +8,9 @@
 {{template "demoNoindex" .}}
 {{template "trackingHead" .}}
 {{.HeadHTML}}
+<meta name="bookmeet-theme" content="{{.PublicTheme}}">
+<meta name="bookmeet-copy" content="{{.PublicCopyJSON}}">
+{{.PublicSkinHTML}}
 {{/* SAFE (generic.html-templates.security.var-in-script-tag): .I18NJSON is server-built via
      json.Marshal (HTML-escapes <,>,& by default), same pattern as .DataLayerFields/.QuestionsJSON
      below — never raw/attacker-controlled data. */}}
@@ -756,6 +759,7 @@ body {
 
       $('confirm-time').textContent = `${fmtDate(pickedDate)} · ${fmtTime(pickedSlot.start)}`;
       showView('confirm-view');
+      window.dispatchEvent(new CustomEvent('bookmeet:booked'));
 
       if (window.__CALNODE_DL && typeof calnodePush === 'function') {
         var dlAnswers = {};
@@ -943,6 +947,7 @@ body {
         messages.push({ role: 'assistant', content: botEl.textContent });
         if (booking) botEl.className = 'asst-msg ok';
       }
+      if (booking) window.dispatchEvent(new CustomEvent('bookmeet:booked'));
       if (booking && typeof calnodePush === 'function') {
         calnodePush('calnode_booking_confirmed', { booking_id: booking.id, via: 'assistant' });
       }

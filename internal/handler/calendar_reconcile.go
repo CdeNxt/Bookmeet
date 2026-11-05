@@ -241,9 +241,14 @@ func (h *Handler) reconcileCreations(ctx context.Context, gc *calendar.Service) 
 			}
 		}
 		loc := i18n.Get(m.orgLocale) // nil (→ English) if empty/unrecognized; i18n.Locale.T handles nil safely
+		description, err := h.calendarBookingDescription(ctx, m.bookingID, loc.Tf("calendar_event_booking_id", m.bookingID))
+		if err != nil {
+			h.logger.Error("reconcile: calendar manage link", "error", err, "booking_id", m.bookingID)
+			continue
+		}
 		eventID, link, calID, provider, err := gc.CreateEvent(ctx, m.userID, calendar.CreateEventParams{
 			Summary:        loc.Tf("calendar_event_summary", m.etName, m.orgName),
-			Description:    loc.Tf("calendar_event_booking_id", m.bookingID),
+			Description:    description,
 			Location:       m.bookingLoc,
 			Start:          start,
 			End:            end,

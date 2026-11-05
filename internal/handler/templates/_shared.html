@@ -129,8 +129,10 @@
   });
   </script>
   {{end}}
-  <a href="https://calnode.com" target="_blank" rel="noopener noreferrer">Calnode</a>
-</footer>{{end}}
+  {{if not .HideAttribution}}<a href="https://calnode.com" target="_blank" rel="noopener noreferrer">Calnode</a>{{end}}
+</footer>
+<script id="bm-experience" data-booked="{{.BookingEffect}}" data-cancelled="{{.CancelEffect}}">{{.ExperienceJS}}</script>
+{{end}}
 
 {{define "demoNoindex"}}{{if .DemoMode}}<meta name="robots" content="noindex,nofollow">{{end}}{{end}}
 

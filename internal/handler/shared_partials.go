@@ -9,3 +9,9 @@ import _ "embed"
 //
 //go:embed templates/_shared.html
 var sharedPartialsSrc string
+
+//go:embed assets/bookmeet-effects.js
+var bookmeetEffectsJS string
+
+//go:embed assets/bookmeet-skin.html
+var bookmeetSkinHTML string

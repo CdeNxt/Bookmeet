@@ -266,7 +266,7 @@ func TestBookPage_assistantDisclosure(t *testing.T) {
 	req.SetPathValue("slug", slug)
 	rec := httptest.NewRecorder()
 	h.BookPage(rec, req)
-	if strings.Contains(rec.Body.String(), "asst-disclosure") {
+	if strings.Contains(rec.Body.String(), `<p class="asst-disclosure"`) {
 		t.Error("disclosure rendered while LLM/assistant is disabled")
 	}
 

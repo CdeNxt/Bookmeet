@@ -1,0 +1,40 @@
+ARG BUILD_MODE=prebuilt
+FROM ghcr.io/calnode/calnode:__UPSTREAM_VERSION__
+
+# Future updater builds reapply and test the invite patch against its target release.
+FROM alpine:3.24 AS patched-source
+RUN apk add --no-cache curl patch
+COPY Dockerfile /tmp/local.Dockerfile
+COPY invite-links.patch /tmp/invite-links.patch
+WORKDIR /source
+RUN set -eu; VERSION=$(sed -n 's|^FROM ghcr.io/calnode/calnode:||p' /tmp/local.Dockerfile); curl -fsSL "https://github.com/Calnode/calnode/archive/refs/tags/v${VERSION}.tar.gz" | tar -xz --strip-components=1; patch --batch -p1 < /tmp/invite-links.patch; printf '%s' "$VERSION" > /source/BOOKMEET_BASE_VERSION
+
+FROM node:22-alpine AS frontend-builder
+RUN corepack enable && corepack prepare pnpm@10.32.1 --activate
+WORKDIR /app
+COPY --from=patched-source /source/frontend/ ./
+COPY --from=patched-source /source/internal/handler/assets/bookmeet-skin.html /bookmeet-tests/bookmeet-skin.html
+COPY --from=patched-source /source/internal/handler/assets/bookmeet-skin.test.cjs /bookmeet-tests/bookmeet-skin.test.cjs
+RUN node --test /bookmeet-tests/bookmeet-skin.test.cjs
+RUN pnpm install --frozen-lockfile && pnpm build
+
+FROM golang:1.27.3-alpine AS go-builder
+WORKDIR /source
+COPY --from=patched-source /source/ ./
+COPY --from=frontend-builder /app/build ./frontend/build
+RUN go test -timeout 180s ./internal/booking ./internal/handler ./internal/mailer ./internal/branding
+RUN VERSION=$(cat BOOKMEET_BASE_VERSION); CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X github.com/calnode/calnode/internal/buildinfo.Version=__BOOKMEET_VERSION__" -o /calnode ./cmd/calnode
+
+FROM scratch AS prebuilt
+COPY calnode-bookmeet-arm64 /calnode
+FROM scratch AS built
+COPY --from=go-builder /calnode /calnode
+FROM ${BUILD_MODE} AS selected
+
+FROM scratch
+COPY --from=0 / /
+COPY --from=selected /calnode /calnode
+COPY run.sh /__WRAPPER__
+RUN chmod +x /calnode /__WRAPPER__
+ENV PORT=3000 DATABASE_URL=sqlite:///data/calnode.db
+ENTRYPOINT ["/__WRAPPER__"]

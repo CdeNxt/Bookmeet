@@ -86,16 +86,22 @@ func (h *Handler) GetBranding(w http.ResponseWriter, r *http.Request) {
 	}
 	b := h.loadBranding(r.Context())
 	h.writeJSON(w, http.StatusOK, map[string]any{
-		"business_name":     b.BusinessName,
-		"logo_url":          b.LogoURL,
-		"logo_height":       b.LogoHeight,
-		"logo_opacity":      b.LogoOpacity,
-		"banner_url":        b.BannerURL,
-		"banner_opacity":    b.BannerOpacity,
-		"privacy_url":       b.PrivacyURL,
-		"terms_url":         b.TermsURL,
-		"fallback_locale":   b.FallbackLocale,
-		"supported_locales": i18n.SupportedLocales(),
+		"public_theme":        b.PublicTheme,
+		"public_copy":         b.PublicCopy,
+		"default_public_copy": branding.DefaultPublicCopy(),
+		"booking_effect":      b.BookingEffect,
+		"cancel_effect":       b.CancelEffect,
+		"hide_attribution":    b.HideAttribution,
+		"business_name":       b.BusinessName,
+		"logo_url":            b.LogoURL,
+		"logo_height":         b.LogoHeight,
+		"logo_opacity":        b.LogoOpacity,
+		"banner_url":          b.BannerURL,
+		"banner_opacity":      b.BannerOpacity,
+		"privacy_url":         b.PrivacyURL,
+		"terms_url":           b.TermsURL,
+		"fallback_locale":     b.FallbackLocale,
+		"supported_locales":   i18n.SupportedLocales(),
 	})
 }
 
@@ -107,17 +113,53 @@ func (h *Handler) PatchBranding(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
 	var req struct {
-		BusinessName   string `json:"business_name"`
-		LogoHeight     int    `json:"logo_height"`
-		LogoOpacity    int    `json:"logo_opacity"`
-		BannerOpacity  int    `json:"banner_opacity"`
-		PrivacyURL     string `json:"privacy_url"`
-		TermsURL       string `json:"terms_url"`
-		FallbackLocale string `json:"fallback_locale"`
+		PublicTheme     *string            `json:"public_theme"`
+		PublicCopy      *map[string]string `json:"public_copy"`
+		BookingEffect   *string            `json:"booking_effect"`
+		CancelEffect    *string            `json:"cancel_effect"`
+		HideAttribution *bool              `json:"hide_attribution"`
+		BusinessName    string             `json:"business_name"`
+		LogoHeight      int                `json:"logo_height"`
+		LogoOpacity     int                `json:"logo_opacity"`
+		BannerOpacity   int                `json:"banner_opacity"`
+		PrivacyURL      string             `json:"privacy_url"`
+		TermsURL        string             `json:"terms_url"`
+		FallbackLocale  string             `json:"fallback_locale"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
+	}
+	if req.BookingEffect != nil && *req.BookingEffect != "off" && *req.BookingEffect != "confetti" && *req.BookingEffect != "unicorns" && *req.BookingEffect != "both" {
+		h.writeError(w, http.StatusBadRequest, "unsupported booking effect")
+		return
+	}
+	if req.CancelEffect != nil && *req.CancelEffect != "off" && *req.CancelEffect != "sad" {
+		h.writeError(w, http.StatusBadRequest, "unsupported cancellation effect")
+		return
+	}
+	if req.PublicTheme != nil && *req.PublicTheme != "auto" && *req.PublicTheme != "light" && *req.PublicTheme != "dark" {
+		h.writeError(w, http.StatusBadRequest, "unsupported public theme")
+		return
+	}
+	var publicCopyJSON *string
+	if req.PublicCopy != nil {
+		current := h.loadBranding(r.Context()).PublicCopy
+		defaults := branding.DefaultPublicCopy()
+		for key, value := range *req.PublicCopy {
+			if _, ok := defaults[key]; !ok {
+				h.writeError(w, http.StatusBadRequest, "unknown public copy field")
+				return
+			}
+			if len(value) > 500 {
+				h.writeError(w, http.StatusBadRequest, "public copy fields must be 500 bytes or fewer")
+				return
+			}
+			current[key] = strings.TrimSpace(value)
+		}
+		encoded, _ := json.Marshal(current)
+		text := string(encoded)
+		publicCopyJSON = &text
 	}
 	req.BusinessName = strings.TrimSpace(req.BusinessName)
 	if len(req.BusinessName) > 200 {
@@ -174,8 +216,8 @@ func (h *Handler) PatchBranding(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := h.db.ExecContext(r.Context(), `
 		UPDATE server_settings SET business_name = ?, logo_height = ?, logo_opacity = ?,
-		       banner_opacity = ?, privacy_url = ?, terms_url = ?, fallback_locale = ?, updated_at = datetime('now')
-		WHERE id = 1`, req.BusinessName, req.LogoHeight, req.LogoOpacity, req.BannerOpacity, privacyURL, termsURL, req.FallbackLocale); err != nil {
+		       banner_opacity = ?, privacy_url = ?, terms_url = ?, fallback_locale = ?, booking_effect = COALESCE(?, booking_effect), cancel_effect = COALESCE(?, cancel_effect), hide_attribution = COALESCE(?, hide_attribution), public_theme = COALESCE(?, public_theme), public_copy = COALESCE(?, public_copy), updated_at = datetime('now')
+		WHERE id = 1`, req.BusinessName, req.LogoHeight, req.LogoOpacity, req.BannerOpacity, privacyURL, termsURL, req.FallbackLocale, req.BookingEffect, req.CancelEffect, req.HideAttribution, req.PublicTheme, publicCopyJSON); err != nil {
 		h.logger.ErrorContext(r.Context(), "branding settings: update", "error", err)
 		h.writeError(w, http.StatusInternalServerError, "internal error")
 		return

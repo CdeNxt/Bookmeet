@@ -43,6 +43,7 @@ env:
 
 jobs:
   build:
+    if: github.repository == 'Calnode/calnode'
     runs-on: ubuntu-latest
     outputs:
       # Digest of the multi-arch index this job pushed. The arm64 smoke test
@@ -136,6 +137,7 @@ jobs:
           if-no-files-found: error
 
   arm64-smoke:
+    if: github.repository == 'Calnode/calnode'
     # Proves the arm64 half of the multi-arch image actually runs on an ARM CPU,
     # not under QEMU. The build job cross-builds both arches under emulation,
     # which cannot demonstrate native execution.
@@ -279,7 +281,7 @@ jobs:
 
   release:
     # On a version tag, and on a dry-run dispatch, where it stops before publishing.
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.dry_run)
+    if: github.repository == 'Calnode/calnode' && (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.dry_run))
     needs: build
     runs-on: ubuntu-latest
     permissions:

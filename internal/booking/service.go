@@ -376,6 +376,34 @@ func (s *Service) IssueManageToken(ctx context.Context, bookingID string) (strin
 	return rawHex, nil
 }
 
+// Calendar tokens are hashed and namespaced so email-link rotation can preserve
+// the capability embedded in an external calendar event. No raw token is stored.
+const calendarTokenPrefix = "calendar:"
+
+// IssueCalendarManageToken issues a link for a provider invitation. Unlike email
+// links it survives rescheduling, because providers retain the event description.
+// It expires 60 days after the later of issue time and the scheduled booking end.
+func (s *Service) IssueCalendarManageToken(ctx context.Context, bookingID string) (string, error) {
+	raw, hash, _, err := generateManageToken()
+	if err != nil {
+		return "", err
+	}
+	b, err := s.Get(ctx, bookingID)
+	if err != nil {
+		return "", err
+	}
+	base := time.Now().UTC()
+	if b.EndAt.After(base) {
+		base = b.EndAt
+	}
+	expiry := base.Add(manageTokenTTL).Format(time.RFC3339)
+	_, err = s.db.ExecContext(ctx, `INSERT INTO booking_manage_tokens (token_hash, booking_id, expires_at) VALUES (?, ?, ?)`, calendarTokenPrefix+hash, bookingID, expiry)
+	if err != nil {
+		return "", fmt.Errorf("booking: insert calendar token: %w", err)
+	}
+	return raw, nil
+}
+
 // manageTokenTTL is how long an issued/rotated manage-link token stays valid.
 const manageTokenTTL = 60 * 24 * time.Hour
 
@@ -408,7 +436,7 @@ func (s *Service) ValidateManageToken(ctx context.Context, rawToken string) (*Bo
 	var bookingID string
 	err := s.db.QueryRowContext(ctx, `
 		SELECT booking_id FROM booking_manage_tokens
-		WHERE token_hash = ? AND expires_at > ?`, hash, now).Scan(&bookingID)
+		WHERE (token_hash = ? OR token_hash = ?) AND expires_at > ?`, hash, calendarTokenPrefix+hash, now).Scan(&bookingID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrTokenNotFound
 	}
@@ -664,7 +692,7 @@ func (s *Service) CancelByToken(ctx context.Context, rawToken, reason string) (*
 	return b, nil
 }
 
-// RotateManageToken invalidates all existing manage tokens for a booking and
+// RotateManageToken invalidates email manage tokens for a booking and
 // issues a fresh one atomically. Called after a reschedule so that the original
 // confirmation-email link cannot be reused or undo the new time.
 func (s *Service) RotateManageToken(ctx context.Context, bookingID string) (string, error) {
@@ -680,7 +708,7 @@ func (s *Service) RotateManageToken(ctx context.Context, bookingID string) (stri
 	defer tx.Rollback() //nolint:errcheck
 
 	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM booking_manage_tokens WHERE booking_id = ?`, bookingID); err != nil {
+		`DELETE FROM booking_manage_tokens WHERE booking_id = ? AND substr(token_hash, 1, 9) <> 'calendar:'`, bookingID); err != nil {
 		return "", fmt.Errorf("booking: delete old tokens: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `

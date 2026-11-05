@@ -6,8 +6,11 @@ name: CI
 # toolchain needed.
 on:
   push:
-    branches: [main]
+    branches: [main, bookmeet]
   pull_request:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -88,6 +91,9 @@ jobs:
         working-directory: frontend
         run: pnpm check
 
+      - name: Bookmeet appearance preferences and inverse animation
+        run: node --test internal/handler/assets/bookmeet-skin.test.cjs
+
       - name: Build frontend (required by the Go embed)
         working-directory: frontend
         run: pnpm build
@@ -128,3 +134,22 @@ jobs:
 
       - name: go test
         run: go test ./...
+
+      - name: Build the Bookmeet Pi artifact
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOARCH: arm64
+        run: |
+          mkdir -p release
+          version=$(cat packaging/home-assistant/version.txt)
+          go build -ldflags="-s -w -X github.com/calnode/calnode/internal/buildinfo.Version=${version}" -o release/calnode-bookmeet-arm64 ./cmd/calnode
+          cd release
+          sha256sum calnode-bookmeet-arm64 > SHA256SUMS
+
+      - name: Save the tested Pi artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: bookmeet-pi-${{ github.sha }}
+          path: release/
+          retention-days: 30

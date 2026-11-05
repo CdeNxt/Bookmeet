@@ -1241,13 +1241,19 @@ func (h *Handler) createHostEvents(ctx context.Context, b *booking.Booking, in b
 	if gc == nil {
 		return
 	}
+	description, err := h.calendarBookingDescription(ctx, b.ID, bData.Tf("calendar_event_booking_id", b.ID))
+	if err != nil {
+		h.logger.Error("calendar manage link", "error", err, "booking_id", b.ID)
+		h.nudgeCalendarReconcile()
+		return
+	}
 	create := func(host assignedHost, location string) (link string) {
 		eventID, link, calID, provider, err := gc.CreateEvent(ctx, host.UserID, calendar.CreateEventParams{
 			// The attendee is added as a calendar invitee below, so this text reaches
 			// them via the provider's own native invite (Google/Outlook/CalDAV) —
 			// follows their locale like the confirmation email, not English/host-fixed.
 			Summary:        bData.Tf("calendar_event_summary", in.EventTypeName, in.OrganizerName),
-			Description:    bData.Tf("calendar_event_booking_id", b.ID),
+			Description:    description,
 			Location:       location,
 			Start:          b.StartAt,
 			End:            b.EndAt,

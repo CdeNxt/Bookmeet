@@ -31,6 +31,14 @@ type directoryMember struct {
 }
 
 type directoryPageData struct {
+	PublicTheme     string
+	PublicCopyJSON  string
+	PublicSkinHTML  template.HTML
+	BookingEffect   string
+	CancelEffect    string
+	HideAttribution bool
+	ExperienceJS    template.JS
+
 	Locale     string
 	Title      string
 	Subtitle   string // server-composed sentence naming the person/team
@@ -98,6 +106,13 @@ func (h *Handler) renderDirectory(w http.ResponseWriter, r *http.Request, data d
 	data.HeadHTML = template.HTML(track.HeadHTML) // #nosec G203 -- admin-only code injection, intentionally raw, gated by requireAdmin
 	data.GTMContainerID = track.GTMContainerID
 	data.GA4MeasurementID = track.GA4MeasurementID
+	data.BookingEffect = brand.BookingEffect
+	data.CancelEffect = brand.CancelEffect
+	data.HideAttribution = brand.HideAttribution
+	data.ExperienceJS = template.JS(bookmeetEffectsJS)
+	data.PublicTheme = brand.PublicTheme
+	data.PublicCopyJSON = brand.PublicCopyJSON()
+	data.PublicSkinHTML = template.HTML(bookmeetSkinHTML)
 	data.BusinessName = brand.BusinessName
 	data.LogoURL = brand.LogoURL
 	data.LogoHeight = pageLogoHeight(brand.LogoHeight)
