@@ -23,7 +23,7 @@ WORKDIR /source
 COPY --from=patched-source /source/ ./
 COPY --from=frontend-builder /app/build ./frontend/build
 RUN go test -timeout 180s ./internal/booking ./internal/handler ./internal/mailer ./internal/branding
-RUN VERSION=$(cat BOOKMEET_BASE_VERSION); CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X github.com/calnode/calnode/internal/buildinfo.Version=__BOOKMEET_VERSION__" -o /calnode ./cmd/calnode
+RUN VERSION=$(cat BOOKMEET_BASE_VERSION); CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X github.com/calnode/calnode/internal/buildinfo.Version=${VERSION}+bookmeet.__BOOKMEET_PATCH__" -o /calnode ./cmd/calnode
 
 FROM scratch AS prebuilt
 COPY calnode-bookmeet-arm64 /calnode
