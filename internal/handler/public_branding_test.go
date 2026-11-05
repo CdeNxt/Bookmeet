@@ -53,6 +53,11 @@ func TestPublicPages_businessBranding(t *testing.T) {
 					if rec.Code != http.StatusOK || !strings.Contains(body, "</html>") {
 						t.Fatalf("incomplete page: status %d, body %.200s", rec.Code, body)
 					}
+					for _, want := range []string{`name="bookmeet-theme"`, `name="bookmeet-copy"`, `window.BookMeetTheme=`, `bm-theme-chevron`} {
+						if !strings.Contains(body, want) {
+							t.Errorf("public skin/config missing %q on %s", want, page.name)
+						}
+					}
 					start := strings.Index(body, "<header ")
 					if tc.logoURL == "" && tc.businessName == "" {
 						if start != -1 {

@@ -1,3 +1,10 @@
+{{/* Native skin/config must be shared by every public page, including directories. */}}
+{{define "publicSkinHead"}}
+<meta name="bookmeet-theme" content="{{.PublicTheme}}">
+<meta name="bookmeet-copy" content="{{.PublicCopyJSON}}">
+{{.PublicSkinHTML}}
+{{end}}
+
 {{/*
   Partials SHARED by the book, manage and directory public pages — parsed into all
   three template sets so these pieces live in ONE place:

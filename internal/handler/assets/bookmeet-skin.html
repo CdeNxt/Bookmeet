@@ -109,7 +109,14 @@ html body.bm-scene .card,html body.bm-scene .dir-card{position:relative;z-index:
 
 html[data-bm-theme="light"] body.bm-scene #bm-field{filter:invert(1)}
 .bm-nav-controls{display:flex;align-items:center;gap:22px}
-.bm-theme-control select{font:inherit;font-size:12px;color:#d7dbef;background:#242735;border:1px solid #ffffff25;border-radius:999px;padding:8px 12px;cursor:pointer}
+.bm-theme-control{position:relative;display:inline-flex;align-items:center;flex-shrink:0;color:#d7dbef}
+.bm-theme-control select{appearance:none;-webkit-appearance:none;box-sizing:border-box;display:block;min-width:114px;height:42px;margin:0;font:inherit;font-size:12px;font-weight:500;line-height:20px;letter-spacing:.01em;color:inherit;background:#242735;border:1px solid #ffffff25;border-radius:999px;padding:10px 33px 10px 35px;cursor:pointer;box-shadow:0 1px 2px #0001;transition:background .18s,border-color .18s}
+.bm-theme-control select:hover{background:#303445;border-color:#ffffff40}
+.bm-theme-control select:focus-visible{outline:2px solid #aab4ff;outline-offset:3px}
+.bm-theme-icon,.bm-theme-chevron{position:absolute;z-index:1;display:block;pointer-events:none;color:inherit}
+.bm-theme-icon{left:13px;width:14px;height:14px}
+.bm-theme-icon svg{width:100%;height:100%;display:block}
+.bm-theme-chevron{right:13px;width:12px;height:12px}
 .bm-hero h2{white-space:pre-line}
 .bm-hero:has(.bm-actions:empty){padding-bottom:35px}
 .bm-actions:empty{display:none}
@@ -119,7 +126,9 @@ html[data-bm-theme="light"] body.bm-scene .bm-nav{border-color:#2629441a}
 html[data-bm-theme="light"] body.bm-scene .bm-nav img{filter:none}
 html[data-bm-theme="light"] body.bm-scene .bm-nav span{color:#252735!important}
 html[data-bm-theme="light"] body.bm-scene .bm-nav .bm-nav-note{color:#656b7c!important}
-html[data-bm-theme="light"] body.bm-scene .bm-theme-control select{background:#fff9;border-color:#d8dbe6;color:#444b62}
+html[data-bm-theme="light"] body.bm-scene .bm-theme-control{color:#444b62}
+html[data-bm-theme="light"] body.bm-scene .bm-theme-control select{background:#fff9;border-color:#d8dbe6;color:inherit}
+html[data-bm-theme="light"] body.bm-scene .bm-theme-control select:hover{background:#fff;border-color:#aeb8d3}
 html[data-bm-theme="light"] body.bm-scene .bm-hero h2{color:#242735}
 html[data-bm-theme="light"] body.bm-scene .bm-hero h2 span{color:#646c80}
 html[data-bm-theme="light"] body.bm-scene .bm-eyebrow,
@@ -220,7 +229,7 @@ html[data-bm-theme="light"] body.bm-scene .cookie-banner{background:#fff;color:#
 html[data-bm-theme="light"] body.bm-scene .cookie-text{color:#606b87}
 html[data-bm-theme="light"] body.bm-scene .cookie-btn{background:#f3f5fc;color:#3b476c;border-color:#c9d0e6}
 html[data-bm-theme="light"] body.bm-scene .cookie-btn-primary{background:#5965e9;color:#fff}
-@media(max-width:700px){.bm-nav-controls{gap:8px}.bm-scene .bm-nav .bm-nav-note{display:none}.bm-theme-control select{font-size:11px;padding:7px 10px}}
+@media(max-width:700px){.bm-nav-controls{gap:8px}.bm-scene .bm-nav .bm-nav-note{display:none}.bm-theme-control select{min-width:108px;height:42px;font-size:12px}}
 
 </style>
 <script>
@@ -239,7 +248,11 @@ html[data-bm-theme="light"] body.bm-scene .cookie-btn-primary{background:#5965e9
    const label=document.createElement('label');label.className='bm-theme-control';
    const select=document.createElement('select');select.setAttribute('aria-label','Appearance');
    for(const [value,name] of [['auto','Auto'],['light','Light'],['dark','Dark']]){const option=document.createElement('option');option.value=value;option.textContent=name;select.append(option)}
-   select.value=window.BookMeetTheme.get();select.addEventListener('change',()=>window.BookMeetTheme.set(select.value));label.append(select);controls.append(label);header.append(controls);
+   const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');icon.classList.add('bm-theme-icon');icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('fill','none');icon.setAttribute('stroke','currentColor');icon.setAttribute('stroke-width','1.7');icon.setAttribute('stroke-linecap','round');icon.setAttribute('stroke-linejoin','round');icon.setAttribute('aria-hidden','true');
+   const icons={auto:'<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/>',light:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/>',dark:'<path d="M20.5 13.2A8.5 8.5 0 0 1 10.8 3.5a8.5 8.5 0 1 0 9.7 9.7Z"/>'};
+   const chevron=document.createElementNS('http://www.w3.org/2000/svg','svg');chevron.classList.add('bm-theme-chevron');chevron.setAttribute('viewBox','0 0 16 16');chevron.setAttribute('fill','none');chevron.setAttribute('stroke','currentColor');chevron.setAttribute('stroke-width','1.5');chevron.setAttribute('stroke-linecap','round');chevron.setAttribute('stroke-linejoin','round');chevron.setAttribute('aria-hidden','true');chevron.innerHTML='<path d="m4 6 4 4 4-4"/>';
+   select.value=window.BookMeetTheme.get();icon.innerHTML=icons[select.value];
+   select.addEventListener('change',()=>{window.BookMeetTheme.set(select.value);icon.innerHTML=icons[select.value]});label.append(icon,select,chevron);controls.append(label);header.append(controls);
   }
   const manage=location.pathname.startsWith('/manage/'),directory=!!document.querySelector('.dir-card');
   const kind=manage?'manage':directory?'directory':'booking';

@@ -8,9 +8,7 @@
 {{template "demoNoindex" .}}
 {{template "trackingHead" .}}
 {{.HeadHTML}}
-<meta name="bookmeet-theme" content="{{.PublicTheme}}">
-<meta name="bookmeet-copy" content="{{.PublicCopyJSON}}">
-{{.PublicSkinHTML}}
+{{template "publicSkinHead" .}}
 {{/* SAFE (generic.html-templates.security.var-in-script-tag): .I18NJSON is server-built via
      json.Marshal (HTML-escapes <,>,& by default), same pattern as .DataLayerFields below —
      never raw/attacker-controlled data. */}}
