@@ -526,9 +526,9 @@
           choices.appendChild(button);
         });
         var grid = el('div', { class: 'time-grid' });
-        if (list.length) listEl.appendChild(choices);
+        if (list.length && this.info.group_times) listEl.appendChild(choices);
         listEl.appendChild(grid);
-        list.filter(function (s) { return periodFor(s) === st.period; }).forEach(function (s) {
+        list.filter(function (s) { return !self.info.group_times || periodFor(s) === st.period; }).forEach(function (s) {
           if (s.taken) {
             // Disabled rather than click-guarded: it keeps the same box as a bookable
             // slot and is announced as unavailable instead of read out as a plain time.

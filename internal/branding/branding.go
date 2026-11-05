@@ -21,6 +21,7 @@ import (
 // Settings is the instance-wide brand identity used in emails and on the public
 // booking/manage/directory pages.
 type Settings struct {
+	GroupTimes      bool
 	PublicTheme     string
 	PublicCopy      map[string]string
 	BookingEffect   string
@@ -49,9 +50,9 @@ func Load(ctx context.Context, db *sql.DB) Settings {
 		       COALESCE(logo_height,28), COALESCE(logo_opacity,100),
 		       COALESCE(banner_url,''), COALESCE(banner_opacity,100),
 		       COALESCE(privacy_url,''), COALESCE(terms_url,''),
-		       COALESCE(fallback_locale,'en'), booking_effect, cancel_effect, hide_attribution, public_theme, public_copy
+		       COALESCE(fallback_locale,'en'), booking_effect, cancel_effect, hide_attribution, public_theme, public_copy, group_times
 		FROM server_settings WHERE id = 1`).Scan(&s.BusinessName, &s.LogoURL, &s.LogoHeight, &s.LogoOpacity,
-		&s.BannerURL, &s.BannerOpacity, &s.PrivacyURL, &s.TermsURL, &s.FallbackLocale, &s.BookingEffect, &s.CancelEffect, &s.HideAttribution, &s.PublicTheme, &copyJSON)
+		&s.BannerURL, &s.BannerOpacity, &s.PrivacyURL, &s.TermsURL, &s.FallbackLocale, &s.BookingEffect, &s.CancelEffect, &s.HideAttribution, &s.PublicTheme, &copyJSON, &s.GroupTimes)
 	_ = json.Unmarshal([]byte(copyJSON), &s.PublicCopy)
 	if s.PublicTheme != "light" && s.PublicTheme != "dark" {
 		s.PublicTheme = "auto"

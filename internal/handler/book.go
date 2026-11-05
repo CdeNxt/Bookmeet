@@ -44,6 +44,7 @@ type bookQuestion struct {
 }
 
 type bookPageData struct {
+	GroupTimes      bool
 	PublicTheme     string
 	PublicCopyJSON  string
 	PublicSkinHTML  template.HTML
@@ -437,6 +438,7 @@ func (h *Handler) PublicEventType(w http.ResponseWriter, r *http.Request) {
 		// it makes later carries no language of its own, and min_notice_minutes alone
 		// would leave it rebuilding a plural-aware label the server already has (#20).
 		"min_notice_minutes": minNotice,
+		"group_times":        brand.GroupTimes,
 		"min_notice_label":   noticeLabel(minNotice, loc),
 		"assistant_enabled":  h.getLLM() != nil,
 		"assistant_greeting": assistantGreeting(msgGreeting, loc),
@@ -544,7 +546,7 @@ func (h *Handler) BookPage(w http.ResponseWriter, r *http.Request) {
 	i18nJSON, _ := loc.JSON()
 
 	data := bookPageData{
-		PublicTheme: brand.PublicTheme, PublicCopyJSON: brand.PublicCopyJSON(), PublicSkinHTML: template.HTML(bookmeetSkinHTML),
+		GroupTimes: brand.GroupTimes, PublicTheme: brand.PublicTheme, PublicCopyJSON: brand.PublicCopyJSON(), PublicSkinHTML: template.HTML(bookmeetSkinHTML),
 		BookingEffect: brand.BookingEffect, CancelEffect: brand.CancelEffect, HideAttribution: brand.HideAttribution, ExperienceJS: template.JS(bookmeetEffectsJS),
 		PhoneChoice:         allowPhoneCall && onlineMeetingLocation(locType),
 		AccentColor:         accentColor,

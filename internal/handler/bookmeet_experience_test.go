@@ -91,3 +91,45 @@ func TestBookMeetCopyAndAppearance(t *testing.T) {
 		t.Fatal("redundant jump action present")
 	}
 }
+
+func TestBookMeetTimeGroupingSetting(t *testing.T) {
+	h, key, _ := setupWorkspace(t)
+	slug, _ := seedEventTypeHTTP(t, h, key)
+	for _, body := range []string{`{"group_times":true}`, `{"business_name":"BookMeet"}`, `{"group_times":false}`} {
+		rec := httptest.NewRecorder()
+		h.RequireAuth(h.PatchBranding)(rec, authReq(http.MethodPatch, "/v1/settings/branding", body, key))
+		if rec.Code != 200 {
+			t.Fatalf("patch: %d %s", rec.Code, rec.Body.String())
+		}
+		want := !strings.Contains(body, "false")
+		rec = httptest.NewRecorder()
+		h.RequireAuth(h.GetBranding)(rec, authReq(http.MethodGet, "/v1/settings/branding", "", key))
+		var settings map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &settings); err != nil {
+			t.Fatal(err)
+		}
+		if settings["group_times"] != want {
+			t.Fatalf("group_times = %v; want %v", settings["group_times"], want)
+		}
+		req := httptest.NewRequest(http.MethodGet, "/book/"+slug, nil)
+		req.SetPathValue("slug", slug)
+		page := httptest.NewRecorder()
+		h.BookPage(page, req)
+		literal := "false"
+		if want {
+			literal = "true"
+		}
+		if page.Code != 200 || !strings.Contains(strings.ReplaceAll(page.Body.String(), " ", ""), "constGROUP_TIMES="+literal+";") {
+			t.Fatal("booking page lost grouping preference")
+		}
+		pub := httptest.NewRecorder()
+		h.PublicEventType(pub, req)
+		var info map[string]any
+		if err := json.Unmarshal(pub.Body.Bytes(), &info); err != nil {
+			t.Fatal(err)
+		}
+		if info["group_times"] != want {
+			t.Fatal("embed lost grouping preference")
+		}
+	}
+}

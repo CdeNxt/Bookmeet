@@ -257,6 +257,7 @@ body {
 <script>
 (function () {
   'use strict';
+  const GROUP_TIMES = {{.GroupTimes}};
 
   const TOKEN       = {{.Token}};
   const SLUG        = {{.EventTypeSlug}};
@@ -480,12 +481,12 @@ body {
     const periods = [...new Set(slotsCache.map(slotPeriod))].sort();
     if (!periods.includes(selectedPeriod)) selectedPeriod = periods[0];
     const labels = ['time_morning', 'time_afternoon', 'time_evening'];
-    const buttons = slotsCache.map((s, i) => ({s, i})).filter(({s}) => slotPeriod(s) === selectedPeriod).map(({s, i}) => s.taken
+    const buttons = slotsCache.map((s, i) => ({s, i})).filter(({s}) => !GROUP_TIMES || slotPeriod(s) === selectedPeriod).map(({s, i}) => s.taken
       ? `<button class="slot-btn taken" disabled aria-label="${fmtTime(s.start)} - ${t('slot_taken')}">${fmtTime(s.start)}</button>`
       : `<button class="slot-btn" data-i="${i}">${fmtTime(s.start)}</button>`
     ).join('');
     const choices = periods.map(period => `<button type="button" data-period="${period}" aria-pressed="${period === selectedPeriod}">${esc(t(labels[period]))}</button>`).join('');
-    list.innerHTML = `<div class="time-periods" role="group" aria-label="${esc(t('time_period'))}">${choices}</div><div class="time-grid">${buttons}</div>`;
+    list.innerHTML = `${GROUP_TIMES ? `<div class="time-periods" role="group" aria-label="${esc(t('time_period'))}">${choices}</div>` : ''}<div class="time-grid">${buttons}</div>`;
     if (slotsCache.length && !slotsCache.some(s => !s.taken)) {
       list.insertAdjacentHTML('beforeend', `<p class="hint">${t('all_times_taken')}</p>`);
     }

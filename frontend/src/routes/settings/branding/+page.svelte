@@ -5,6 +5,7 @@
 	import { currentUser } from '$lib/stores';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
+	import { Switch } from '$lib/components/ui/switch';
 	import { Label } from '$lib/components/ui/label';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Select from '$lib/components/ui/select';
@@ -14,6 +15,7 @@
 	import type CropperType from 'cropperjs';
 
 	type Branding = {
+		group_times: boolean;
 		public_theme: string;
         public_copy: Record<string,string>;
         default_public_copy: Record<string,string>;
@@ -39,6 +41,7 @@
 	const loadingFlag = createAsyncFlag(true);
 	const savingFlag = createAsyncFlag();
 	const uploadingFlag = createAsyncFlag();
+	let groupTimes = $state(false);
 	let publicTheme = $state('auto');
     let publicCopy = $state<Record<string,string>>({});
     let defaultPublicCopy = $state<Record<string,string>>({});
@@ -92,6 +95,7 @@
 
 	onMount(() => loadingFlag.run(async () => {
 		const b = await api.get<Branding>('/v1/settings/branding');
+		groupTimes = b.group_times ?? false;
 		publicTheme = b.public_theme ?? 'auto';
         publicCopy = b.public_copy ?? {};
         defaultPublicCopy = b.default_public_copy ?? {};
@@ -185,6 +189,7 @@
 	async function save() {
 		await savingFlag.run(async () => {
 			const b = await api.patch<Branding>('/v1/settings/branding', {
+				group_times: groupTimes,
 				public_theme: publicTheme,
                 public_copy: publicCopy,
                 booking_effect: bookingEffect,
@@ -198,7 +203,8 @@
 				terms_url: termsUrl,
 				fallback_locale: fallbackLocale
 			});
-			publicTheme = b.public_theme ?? 'auto';
+			groupTimes = b.group_times ?? false;
+		publicTheme = b.public_theme ?? 'auto';
         publicCopy = b.public_copy ?? {};
         defaultPublicCopy = b.default_public_copy ?? {};
         bookingEffect = b.booking_effect ?? 'both';
@@ -331,6 +337,14 @@
                     <option value="dark">Dark</option>
                 </select>
             </div>
+        </div>
+        <div class="rounded-lg border bg-card p-6">
+            <h2 class="text-sm font-semibold">Available times</h2>
+            <label class="mt-4 flex items-center justify-between gap-4 text-sm" for="group-times">
+                <span>Split times into Morning, Afternoon, and Evening</span>
+                <Switch id="group-times" bind:checked={groupTimes} />
+            </label>
+            <p class="mt-2 text-xs text-muted-foreground">Off shows all times for the day together in one scrollable panel. Applies to booking, rescheduling, and embedded booking pages. Save to apply.</p>
         </div>
         <div class="rounded-lg border bg-card p-6">
             <h2 class="text-sm font-semibold">A personal welcome</h2>

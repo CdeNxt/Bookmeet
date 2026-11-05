@@ -86,6 +86,7 @@ func (h *Handler) GetBranding(w http.ResponseWriter, r *http.Request) {
 	}
 	b := h.loadBranding(r.Context())
 	h.writeJSON(w, http.StatusOK, map[string]any{
+		"group_times":         b.GroupTimes,
 		"public_theme":        b.PublicTheme,
 		"public_copy":         b.PublicCopy,
 		"default_public_copy": branding.DefaultPublicCopy(),
@@ -113,6 +114,7 @@ func (h *Handler) PatchBranding(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
 	var req struct {
+		GroupTimes      *bool              `json:"group_times"`
 		PublicTheme     *string            `json:"public_theme"`
 		PublicCopy      *map[string]string `json:"public_copy"`
 		BookingEffect   *string            `json:"booking_effect"`
@@ -216,8 +218,8 @@ func (h *Handler) PatchBranding(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := h.db.ExecContext(r.Context(), `
 		UPDATE server_settings SET business_name = ?, logo_height = ?, logo_opacity = ?,
-		       banner_opacity = ?, privacy_url = ?, terms_url = ?, fallback_locale = ?, booking_effect = COALESCE(?, booking_effect), cancel_effect = COALESCE(?, cancel_effect), hide_attribution = COALESCE(?, hide_attribution), public_theme = COALESCE(?, public_theme), public_copy = COALESCE(?, public_copy), updated_at = datetime('now')
-		WHERE id = 1`, req.BusinessName, req.LogoHeight, req.LogoOpacity, req.BannerOpacity, privacyURL, termsURL, req.FallbackLocale, req.BookingEffect, req.CancelEffect, req.HideAttribution, req.PublicTheme, publicCopyJSON); err != nil {
+		       banner_opacity = ?, privacy_url = ?, terms_url = ?, fallback_locale = ?, booking_effect = COALESCE(?, booking_effect), cancel_effect = COALESCE(?, cancel_effect), hide_attribution = COALESCE(?, hide_attribution), public_theme = COALESCE(?, public_theme), public_copy = COALESCE(?, public_copy), group_times = COALESCE(?, group_times), updated_at = datetime('now')
+		WHERE id = 1`, req.BusinessName, req.LogoHeight, req.LogoOpacity, req.BannerOpacity, privacyURL, termsURL, req.FallbackLocale, req.BookingEffect, req.CancelEffect, req.HideAttribution, req.PublicTheme, publicCopyJSON, req.GroupTimes); err != nil {
 		h.logger.ErrorContext(r.Context(), "branding settings: update", "error", err)
 		h.writeError(w, http.StatusInternalServerError, "internal error")
 		return

@@ -26,6 +26,7 @@ var manageTmpl = template.Must(template.Must(template.New("manage").Funcs(templa
 }).Parse(sharedPartialsSrc)).Parse(manageTmplSrc))
 
 type managePageData struct {
+	GroupTimes      bool
 	PublicTheme     string
 	PublicCopyJSON  string
 	PublicSkinHTML  template.HTML
@@ -190,6 +191,7 @@ func (h *Handler) renderManage(w http.ResponseWriter, r *http.Request, data mana
 	data.HideAttribution = brand.HideAttribution
 	data.ExperienceJS = template.JS(bookmeetEffectsJS)
 	data.PublicTheme = brand.PublicTheme
+	data.GroupTimes = brand.GroupTimes
 	data.PublicCopyJSON = brand.PublicCopyJSON()
 	data.PublicSkinHTML = template.HTML(bookmeetSkinHTML)
 	data.BusinessName = brand.BusinessName
