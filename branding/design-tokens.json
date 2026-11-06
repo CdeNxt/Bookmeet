@@ -1,0 +1,40 @@
+{
+  "brand": {
+    "name": "BookMeet",
+    "fontStack": "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    "primary": "#5965e9",
+    "primaryHover": "#6a75f2"
+  },
+  "dark": {
+    "background": "#15161e",
+    "surface": "#191b26",
+    "surfaceAlpha": "rgba(25,27,38,.96)",
+    "text": "#f2f2f7",
+    "heading": "#f5f5fb",
+    "secondaryText": "#b6b7c7",
+    "border": "#ffffff20",
+    "slot": "#232637",
+    "slotBorder": "#40465f"
+  },
+  "light": {
+    "background": "#eae9e1",
+    "text": "#252735",
+    "surface": "#ffffff",
+    "primary": "#5965e9"
+  },
+  "shape": {
+    "cardRadius": "20px",
+    "itemRadius": "12px",
+    "inputRadius": "9px",
+    "buttonRadius": "999px"
+  },
+  "motion": {
+    "maxFPS": 25,
+    "pointerRadius": 200,
+    "pointerDisplacement": 14,
+    "canvasOpacity": 0.82,
+    "reducedMotion": "Static frame; no pointer response",
+    "lightMode": "Exact RGB inverse of the same painter"
+  },
+  "sourceCommit": "432432410cadbe7326d5c080b86ccc89f96d7671"
+}

@@ -1,0 +1,2 @@
+:root{--bm-accent:#5965e9;--bm-accent-hover:#6a75f2;--bm-bg:#15161e;--bm-surface:rgba(25,27,38,.96);--bm-text:#f2f2f7;--bm-muted:#b6b7c7;--bm-border:#ffffff20;--bm-radius-card:20px;--bm-radius-input:9px;--bm-radius-pill:999px;--bm-font:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+:root[data-bm-theme="light"]{--bm-bg:#eae9e1;--bm-surface:#fff;--bm-text:#252735;--bm-muted:#606b87;--bm-border:#d8dbe6}

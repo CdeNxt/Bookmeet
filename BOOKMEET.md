@@ -14,6 +14,10 @@ All operator choices are in **Settings → Branding** and persist in SQLite. The
 
 The **Settings → Branding → Available times** switch controls Morning/Afternoon/Evening groups. Off (the default) shows every time in a single scrollable panel, including rescheduling and embeds.
 
+## Branding assets
+
+The reusable design kit lives in [`branding/`](branding/START-HERE.md): black/white transparent PNG and outlined SVG logos, dark/light vector and PNG backgrounds, CSS, animation code, a local preview, and a Claude CRM brief. The native app files remain the runtime source of truth; the design kit is a portable snapshot. The Home Assistant customization export omits this asset library because the app does not load it.
+
 ## Development and checks
 
 Use the Go version required by `go.mod`, Node 22, and pnpm 10.32.1. From `frontend`, run `pnpm install --frozen-lockfile`, `pnpm check`, and `pnpm build`. Then from the repository root:

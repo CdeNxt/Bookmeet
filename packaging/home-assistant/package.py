@@ -28,7 +28,7 @@ def main():
         raise SystemExit("Invalid upstream base tag")
     if not args.binary.is_file():
         raise SystemExit("Build or supply the tested ARM64 binary first.")
-    patch = git("diff", "--binary", base, "HEAD", "--", ".", ":!.github", ":!AGENTS.md", ":!BOOKMEET.md", ":!packaging/home-assistant", ":!.gitignore")
+    patch = git("diff", "--binary", base, "HEAD", "--", ".", ":!.github", ":!AGENTS.md", ":!BOOKMEET.md", ":!packaging/home-assistant", ":!branding", ":!.gitignore")
     wrapper = "run-ha-bookmeet-" + version.split("bookmeet.")[-1] + ".sh"
     docker = (HERE / "Dockerfile.in").read_text().replace("__UPSTREAM_VERSION__", base[1:]).replace("__BOOKMEET_PATCH__", version.split("bookmeet.")[-1]).replace("__WRAPPER__", wrapper)
     args.output.parent.mkdir(parents=True, exist_ok=True)

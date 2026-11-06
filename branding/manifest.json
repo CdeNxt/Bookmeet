@@ -1,0 +1,206 @@
+{
+  "name": "BookMeet Design Package",
+  "date": "2026-11-06",
+  "files": [
+    {
+      "path": "ASSET-PREVIEW.png",
+      "bytes": 246186,
+      "sha256": "839f6075eb6626bf074786a84a5e55ea0c73a8402a4ba9883f70ceb687c832a7"
+    },
+    {
+      "path": "CLAUDE-CRM-BRIEF.md",
+      "bytes": 1640,
+      "sha256": "4d8887c03d88eda0c71abe8d9abe839eea468c832f61abe87831ef63a391c087"
+    },
+    {
+      "path": "DESIGN-GUIDE.md",
+      "bytes": 2692,
+      "sha256": "1a3fa0f047f521f70ac8225045fcaeac6d34fded5f4e771a9528ab54b381e61f"
+    },
+    {
+      "path": "START-HERE.md",
+      "bytes": 3439,
+      "sha256": "8693164a7be3d04d0e9940ebca57bba3877a4dd14f27c9678099c7cb4d3ad96b"
+    },
+    {
+      "path": "backgrounds/bookmeet-desktop-dark.png",
+      "bytes": 335877,
+      "sha256": "79be8eb23861567395cabc273c26b9e124e59b87b2dd479eb24dfa9c96382ef9"
+    },
+    {
+      "path": "backgrounds/bookmeet-desktop-dark.svg",
+      "bytes": 1539105,
+      "sha256": "5cb7ca86473dff237ae46d8a4acc4325d334c22e01a46cbe0107b7a2241dda1c"
+    },
+    {
+      "path": "backgrounds/bookmeet-desktop-light.png",
+      "bytes": 364000,
+      "sha256": "413f4f654e5cd5e23ebf7f886b46529290a8adf71365125959f9f2b5c7bf8f0e"
+    },
+    {
+      "path": "backgrounds/bookmeet-desktop-light.svg",
+      "bytes": 1489741,
+      "sha256": "41d20e9c922be79087088fc7168a5c630a3894d092c3363beec17805383b892a"
+    },
+    {
+      "path": "backgrounds/bookmeet-header-dark.png",
+      "bytes": 156135,
+      "sha256": "be73ee1f9ede3600ef01d93132295b7c8121d3ba44d54a9efd4b0aebb81fe95b"
+    },
+    {
+      "path": "backgrounds/bookmeet-header-dark.svg",
+      "bytes": 1222959,
+      "sha256": "882e8d52f776d885831d1261c64aa40aec80a51e1c00a0c4c2fc0c7736e6e97a"
+    },
+    {
+      "path": "backgrounds/bookmeet-header-light.png",
+      "bytes": 199118,
+      "sha256": "5878f1bf445c8acf785cb3e9537026a868825a7df185b8195c25d08785473479"
+    },
+    {
+      "path": "backgrounds/bookmeet-header-light.svg",
+      "bytes": 1183471,
+      "sha256": "89897dc81840baa6db7a45a7a9427f2226c9f71f0c1fdf4b3299add6a171d366"
+    },
+    {
+      "path": "backgrounds/bookmeet-mobile-dark.png",
+      "bytes": 136706,
+      "sha256": "2a661f8ebbb871c9e40b8e23c8e48774537552660a03d029449a5a494c874eef"
+    },
+    {
+      "path": "backgrounds/bookmeet-mobile-dark.svg",
+      "bytes": 841883,
+      "sha256": "52eaba933bd599711b6e41aec2c2915ef1d665487e544a58b9b5329bc0babe60"
+    },
+    {
+      "path": "backgrounds/bookmeet-mobile-light.png",
+      "bytes": 172056,
+      "sha256": "e2eef8ecde4a1a3718393820d75d398ae9ae6078367c870643b57fe04d48d7f5"
+    },
+    {
+      "path": "backgrounds/bookmeet-mobile-light.svg",
+      "bytes": 814716,
+      "sha256": "d36930c4de0de204d7a022982a7c32923694ece3f3aab42aa41005711a043c4c"
+    },
+    {
+      "path": "backgrounds/bookmeet-original-email-banner.png",
+      "bytes": 186798,
+      "sha256": "bc4187bf6737b8c34068fdf34e54d1c1b9525add6fd6a2ca035be825778e19f9"
+    },
+    {
+      "path": "css/booking-components.css",
+      "bytes": 19483,
+      "sha256": "50b3ee00716063f2d05ced7191dca01a61acca34e53e113efcb6ebeec145b27c"
+    },
+    {
+      "path": "css/bookmeet-background.css",
+      "bytes": 392,
+      "sha256": "26e8f51eeebc97e5691f2b1295e0c5136dc90813914a671aae3abe36b018a850"
+    },
+    {
+      "path": "css/bookmeet-public-skin.css",
+      "bytes": 20009,
+      "sha256": "f8a11c5ec067f4c4867b2461a6ef17270dcc79529fc370ff6325bb84912acce9"
+    },
+    {
+      "path": "css/bookmeet-tokens.css",
+      "bytes": 419,
+      "sha256": "a0edd30fc551e6213b7b8b8596bc9f5bfc8767fbcda5d7c931761eafda053044"
+    },
+    {
+      "path": "design-tokens.json",
+      "bytes": 1001,
+      "sha256": "5507c81e18f035c97819c89e2828e5044350ea40a57d343385e9653442170d53"
+    },
+    {
+      "path": "js/bookmeet-background.js",
+      "bytes": 3635,
+      "sha256": "95c78f58761af133ba0cd8b8a39ef3014969fc9801c0a6f071121f602a70405b"
+    },
+    {
+      "path": "js/bookmeet-effects.js",
+      "bytes": 3904,
+      "sha256": "69522910338df290d522bf1f71e9ce79d3c53dfc094cdbd9487e300a8e4f834f"
+    },
+    {
+      "path": "js/bookmeet-theme.js",
+      "bytes": 823,
+      "sha256": "0aac89a0e859f30a5b1cfdf640528f38b5847072763142fcad5f800dff960592"
+    },
+    {
+      "path": "logos/bookmeet-logo-black.png",
+      "bytes": 21467,
+      "sha256": "afb3e40e7072ebc467f10772b63607e92b04b3b013d1e382d9f3897a7d79bea5"
+    },
+    {
+      "path": "logos/bookmeet-logo-black.svg",
+      "bytes": 10593,
+      "sha256": "c7cb0cb3dfffbbc36037f7d5982abd5e7e1d1b69cd1005572993eb222bbbb42f"
+    },
+    {
+      "path": "logos/bookmeet-logo-white.png",
+      "bytes": 21989,
+      "sha256": "7ed0b665f4d2561afc0c7a360f19a835d79ac6aea109709e8dd2cfd1fd810a9c"
+    },
+    {
+      "path": "logos/bookmeet-logo-white.svg",
+      "bytes": 10593,
+      "sha256": "0013846022f9c9634c4cbcb3e50b7b50a7826180bda19336e85cd14332cc7797"
+    },
+    {
+      "path": "logos/bookmeet-mark-black.png",
+      "bytes": 9157,
+      "sha256": "3f9c389247722d7c5bb21d393cfa4818dcfe5b0a27d0a85891c241e42886c719"
+    },
+    {
+      "path": "logos/bookmeet-mark-black.svg",
+      "bytes": 4773,
+      "sha256": "5696e2c7299eba5982a12721159fb616359f637749db32443ab7e08c1e916438"
+    },
+    {
+      "path": "logos/bookmeet-mark-white.png",
+      "bytes": 9070,
+      "sha256": "c5e9a02c0f4fdcd729a27652c1da56defed2e25df404e6b2487f7f82e1813853"
+    },
+    {
+      "path": "logos/bookmeet-mark-white.svg",
+      "bytes": 4773,
+      "sha256": "966ec1aa407b202e44506823a9f7215c8abcb5448f771a732d2ce451961137db"
+    },
+    {
+      "path": "logos/bookmeet-original-logo.png",
+      "bytes": 8446,
+      "sha256": "6e2203c34ec567876ee768e5a59149b103600f99e0b4d25f11f2f1bd3ba6fb63"
+    },
+    {
+      "path": "preview.html",
+      "bytes": 2930,
+      "sha256": "a2683dfd5eeaf6ada9c2c0910f23167125dcf4f9a595f316871d604ffdd71840"
+    },
+    {
+      "path": "reference/directory-dark.png",
+      "bytes": 112915,
+      "sha256": "64c9db22587a6581ed6a11c755599323a94af1687d82b011770da952fe18b707"
+    },
+    {
+      "path": "reference/directory-mobile-light.png",
+      "bytes": 34700,
+      "sha256": "de152d31534197893008b554ed1a98c1ae7fb2ed3f9b82789b3fd98cb5d22858"
+    },
+    {
+      "path": "source/LICENSE",
+      "bytes": 11342,
+      "sha256": "fe5054b17e5b17b2d6897bc2f4871d9a0091884e0df265ec429db6dc31f00151"
+    },
+    {
+      "path": "source/admin-app.css",
+      "bytes": 5657,
+      "sha256": "870c30e11926d687742e9988c8e27329065bd4f168af30a589d167cebe389549"
+    },
+    {
+      "path": "source/bookmeet-native-skin.html",
+      "bytes": 28393,
+      "sha256": "e0015472a1da09b3383cdc002f9c7333d653d8077bfc1c4282d1188892addd10"
+    }
+  ]
+}
