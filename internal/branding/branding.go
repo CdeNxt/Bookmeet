@@ -21,6 +21,7 @@ import (
 // Settings is the instance-wide brand identity used in emails and on the public
 // booking/manage/directory pages.
 type Settings struct {
+	EmailHeader     string
 	GroupTimes      bool
 	PublicTheme     string
 	PublicCopy      map[string]string
@@ -50,9 +51,9 @@ func Load(ctx context.Context, db *sql.DB) Settings {
 		       COALESCE(logo_height,28), COALESCE(logo_opacity,100),
 		       COALESCE(banner_url,''), COALESCE(banner_opacity,100),
 		       COALESCE(privacy_url,''), COALESCE(terms_url,''),
-		       COALESCE(fallback_locale,'en'), booking_effect, cancel_effect, hide_attribution, public_theme, public_copy, group_times
+		       COALESCE(fallback_locale,'en'), booking_effect, cancel_effect, hide_attribution, public_theme, public_copy, group_times, email_header
 		FROM server_settings WHERE id = 1`).Scan(&s.BusinessName, &s.LogoURL, &s.LogoHeight, &s.LogoOpacity,
-		&s.BannerURL, &s.BannerOpacity, &s.PrivacyURL, &s.TermsURL, &s.FallbackLocale, &s.BookingEffect, &s.CancelEffect, &s.HideAttribution, &s.PublicTheme, &copyJSON, &s.GroupTimes)
+		&s.BannerURL, &s.BannerOpacity, &s.PrivacyURL, &s.TermsURL, &s.FallbackLocale, &s.BookingEffect, &s.CancelEffect, &s.HideAttribution, &s.PublicTheme, &copyJSON, &s.GroupTimes, &s.EmailHeader)
 	_ = json.Unmarshal([]byte(copyJSON), &s.PublicCopy)
 	if s.PublicTheme != "light" && s.PublicTheme != "dark" {
 		s.PublicTheme = "auto"
@@ -86,6 +87,17 @@ func (s Settings) ApplyTo(d *mailer.BookingData, baseURL string) {
 	d.LogoURL = absoluteAssetURL(s.LogoURL, baseURL)
 	d.BannerOpacity = s.BannerOpacity
 	d.BannerURL = absoluteAssetURL(s.BannerURL, baseURL)
+	switch s.EmailHeader {
+	case "artwork":
+		d.LogoURL = ""
+		d.BannerURL = absoluteAssetURL("/branding/bookmeet-email-header.png", baseURL)
+		d.BannerOpacity = 100
+		d.BannerAlt = d.Brand()
+	case "logo":
+		d.BannerURL = ""
+	case "off":
+		d.LogoURL, d.BannerURL = "", ""
+	}
 }
 
 // absoluteAssetURL joins a relative served path onto the public base URL,

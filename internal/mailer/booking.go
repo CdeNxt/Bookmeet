@@ -61,6 +61,7 @@ type BookingData struct {
 	LogoHeight    int // email logo height in px; falls back to 28 (LogoPx)
 	LogoOpacity   int // 20–100; CSS opacity for a subtle logo. 0/unset = 100 (opaque)
 	BannerURL     string
+	BannerAlt     string
 	BannerOpacity int // 20–100; CSS opacity for the banner. 0/unset = 100 (opaque)
 	// HideManageLink suppresses the "reschedule or cancel" footer link in HTML
 	// emails. Set for host notifications — the manage token is the attendee's

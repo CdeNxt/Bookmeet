@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"image/png"
@@ -26,6 +27,15 @@ const logoServePath = "/branding/logo"
 
 // bannerServePath is the served path for the instance banner image.
 const bannerServePath = "/branding/banner"
+
+//go:embed assets/bookmeet-email-header.png
+var bookmeetEmailHeader []byte
+
+func (h *Handler) ServeBookmeetEmailHeader(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	http.ServeContent(w, r, "bookmeet-email-header.png", time.Time{}, bytes.NewReader(bookmeetEmailHeader))
+}
 
 // brandingSettings is the instance-wide brand identity. The definition lives in
 // internal/branding so the background worker can load it too (reminder emails);
@@ -86,6 +96,7 @@ func (h *Handler) GetBranding(w http.ResponseWriter, r *http.Request) {
 	}
 	b := h.loadBranding(r.Context())
 	h.writeJSON(w, http.StatusOK, map[string]any{
+		"email_header":        b.EmailHeader,
 		"group_times":         b.GroupTimes,
 		"public_theme":        b.PublicTheme,
 		"public_copy":         b.PublicCopy,
@@ -114,6 +125,7 @@ func (h *Handler) PatchBranding(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
 	var req struct {
+		EmailHeader     *string            `json:"email_header"`
 		GroupTimes      *bool              `json:"group_times"`
 		PublicTheme     *string            `json:"public_theme"`
 		PublicCopy      *map[string]string `json:"public_copy"`
@@ -131,6 +143,14 @@ func (h *Handler) PatchBranding(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
+	}
+	if req.EmailHeader != nil {
+		switch *req.EmailHeader {
+		case "stacked", "artwork", "logo", "off":
+		default:
+			h.writeError(w, http.StatusBadRequest, "unsupported email header")
+			return
+		}
 	}
 	if req.BookingEffect != nil && *req.BookingEffect != "off" && *req.BookingEffect != "confetti" && *req.BookingEffect != "unicorns" && *req.BookingEffect != "both" {
 		h.writeError(w, http.StatusBadRequest, "unsupported booking effect")
@@ -218,8 +238,8 @@ func (h *Handler) PatchBranding(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := h.db.ExecContext(r.Context(), `
 		UPDATE server_settings SET business_name = ?, logo_height = ?, logo_opacity = ?,
-		       banner_opacity = ?, privacy_url = ?, terms_url = ?, fallback_locale = ?, booking_effect = COALESCE(?, booking_effect), cancel_effect = COALESCE(?, cancel_effect), hide_attribution = COALESCE(?, hide_attribution), public_theme = COALESCE(?, public_theme), public_copy = COALESCE(?, public_copy), group_times = COALESCE(?, group_times), updated_at = datetime('now')
-		WHERE id = 1`, req.BusinessName, req.LogoHeight, req.LogoOpacity, req.BannerOpacity, privacyURL, termsURL, req.FallbackLocale, req.BookingEffect, req.CancelEffect, req.HideAttribution, req.PublicTheme, publicCopyJSON, req.GroupTimes); err != nil {
+		       banner_opacity = ?, privacy_url = ?, terms_url = ?, fallback_locale = ?, booking_effect = COALESCE(?, booking_effect), cancel_effect = COALESCE(?, cancel_effect), hide_attribution = COALESCE(?, hide_attribution), public_theme = COALESCE(?, public_theme), public_copy = COALESCE(?, public_copy), group_times = COALESCE(?, group_times), email_header = COALESCE(?, email_header), updated_at = datetime('now')
+		WHERE id = 1`, req.BusinessName, req.LogoHeight, req.LogoOpacity, req.BannerOpacity, privacyURL, termsURL, req.FallbackLocale, req.BookingEffect, req.CancelEffect, req.HideAttribution, req.PublicTheme, publicCopyJSON, req.GroupTimes, req.EmailHeader); err != nil {
 		h.logger.ErrorContext(r.Context(), "branding settings: update", "error", err)
 		h.writeError(w, http.StatusInternalServerError, "internal error")
 		return

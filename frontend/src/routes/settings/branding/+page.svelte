@@ -16,6 +16,7 @@
 
 	type Branding = {
 		group_times: boolean;
+		email_header: string;
 		public_theme: string;
         public_copy: Record<string,string>;
         default_public_copy: Record<string,string>;
@@ -59,6 +60,7 @@
 	let logoHeight = $state(28);
 	let logoOpacity = $state(100);
 	let bannerUrl = $state('');
+	let emailHeader = $state('stacked');
 	let bannerOpacity = $state(100);
 	let privacyUrl = $state('');
 	let termsUrl = $state('');
@@ -97,6 +99,7 @@
 		const b = await api.get<Branding>('/v1/settings/branding');
 		groupTimes = b.group_times ?? false;
 		publicTheme = b.public_theme ?? 'auto';
+		emailHeader = b.email_header ?? 'stacked';
         publicCopy = b.public_copy ?? {};
         defaultPublicCopy = b.default_public_copy ?? {};
         bookingEffect = b.booking_effect ?? 'both';
@@ -190,6 +193,7 @@
 		await savingFlag.run(async () => {
 			const b = await api.patch<Branding>('/v1/settings/branding', {
 				group_times: groupTimes,
+				email_header: emailHeader,
 				public_theme: publicTheme,
                 public_copy: publicCopy,
                 booking_effect: bookingEffect,
@@ -205,6 +209,7 @@
 			});
 			groupTimes = b.group_times ?? false;
 		publicTheme = b.public_theme ?? 'auto';
+		emailHeader = b.email_header ?? 'stacked';
         publicCopy = b.public_copy ?? {};
         defaultPublicCopy = b.default_public_copy ?? {};
         bookingEffect = b.booking_effect ?? 'both';
@@ -285,6 +290,21 @@
 					can crop it next. JPEG, PNG, GIF or WebP, max 5 MB; it is re-encoded as a PNG. Adjust size
 					and opacity (preview updates live), then Save.
 				</p>
+			</div>
+
+			<div class="mt-6 space-y-3 border-t pt-5">
+				<Label for="email-header">Booking email header</Label>
+				<select id="email-header" bind:value={emailHeader} class="block w-full max-w-md rounded-md border bg-background p-2 text-sm">
+					<option value="artwork">White BookMeet logo over artwork</option>
+					<option value="logo">Uploaded logo only</option>
+					<option value="off">No header</option>
+					<option value="stacked">Uploaded logo and banner in separate rows</option>
+				</select>
+				{#if emailHeader === 'artwork'}
+					<img src="/branding/bookmeet-email-header.png" alt="White BookMeet logo over dark dotted artwork" class="w-full max-w-md rounded-md" />
+				{:else if emailHeader === 'logo' && logoUrl}
+					<img src={logoUrl} alt="Email logo preview" style="height:{logoHeight}px;opacity:{logoOpacity / 100};" />
+				{/if}
 			</div>
 
 			<div class="mt-6 space-y-3 border-t pt-5">

@@ -268,17 +268,11 @@ html body.bm-scene .card:has(#venue-results:not([hidden])){overflow:visible}
 #venue-map{width:100%;height:210px;border:0;border-radius:8px}
 .directory-back{display:inline-block;margin-top:12px}
 .venue-address{overflow-wrap:anywhere}
-@keyframes bm-page-in{from{opacity:0;transform:translateY(4px)}}
-@keyframes bm-cover-in{from{opacity:1}to{opacity:0}}
-@keyframes bm-cover-out{from{opacity:0}to{opacity:1}}
+@keyframes bm-page-in{from{transform:translateY(4px)}}
 @media(prefers-reduced-motion:no-preference){
- html::after{
-  content:'';position:fixed;inset:0;z-index:2147482999;pointer-events:none;
-  background:#15161e;opacity:0;animation:bm-cover-in 210ms ease-out both
- }
- html[data-bm-theme="light"]::after{background:#eae9e1}
- html.bm-leaving::after{animation:bm-cover-out 140ms ease-in both}
- .bm-scene :is(#slots-view,#form-view,#confirm-view,#main-view,#reschedule-view,#confirm-reschedule-view,#cancel-confirm-view,#success-reschedule-view,#success-cancel-view):not(.hidden){animation:bm-page-in 180ms ease-out both}
+ @view-transition{navigation:auto}
+ ::view-transition-old(root),::view-transition-new(root){animation-duration:180ms}
+ .bm-scene :is(#slots-view,#form-view,#confirm-view,#reschedule-view,#confirm-reschedule-view,#cancel-confirm-view,#success-reschedule-view,#success-cancel-view):not(.hidden){animation:bm-page-in 180ms ease-out both}
 }
 </style>
 <script>
@@ -287,22 +281,6 @@ html body.bm-scene .card:has(#venue-results:not([hidden])){overflow:visible}
   if(!document.querySelector('.card,.dir-card')||document.body.classList.contains('bm-scene'))return;
   document.body.classList.add('bm-scene');
   const card=document.querySelector('.card,.dir-card');card.id=card.id||'bm-booking';
-  const root=document.documentElement;
-  const publicPage=/^\/(?:book|u|team|manage)\//;
-  addEventListener('pageshow',()=>root.classList.remove('bm-leaving'));
-  document.addEventListener('click',event=>{
-   const link=event.target instanceof Element ? event.target.closest('a[href]') : null;
-   if(!link || event.defaultPrevented || event.button!==0 || event.metaKey || event.ctrlKey ||
-      event.altKey || event.shiftKey || link.hasAttribute('download') ||
-      (link.target && link.target!=='_self') || matchMedia('(prefers-reduced-motion: reduce)').matches)return;
-   const next=new URL(link.href,location.href);
-   if(next.origin!==location.origin || !publicPage.test(next.pathname) || next.pathname===location.pathname)return;
-   event.preventDefault();
-   if(root.classList.contains('bm-leaving'))return;
-   root.classList.add('bm-leaving');
-   setTimeout(()=>location.assign(next.href),140);
-   setTimeout(()=>root.classList.remove('bm-leaving'),5000);
-  });
   let copy={};try{copy=JSON.parse(document.querySelector('meta[name="bookmeet-copy"]')?.content||'{}')}catch(_){}
   const text=key=>typeof copy[key]==='string'?copy[key]:'';
   const header=document.querySelector('body > header');
