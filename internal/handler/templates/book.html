@@ -141,12 +141,14 @@ body {
       <label><input type="checkbox" id="venue-toggle"> In person</label>
       <div id="venue-fields" class="field venue-fields" hidden>
         <label for="venue-address">Meeting location</label>
-        <input id="venue-address" name="physical_location" form="booking-form" type="text" maxlength="500" placeholder="Place name or address" autocomplete="off" data-1p-ignore disabled>
-        {{if .PlacesSearch}}<small class="hint venue-hint">Suggestions by Google Maps. You can also enter a location manually.</small>
-        <div id="venue-results" aria-live="polite"></div>{{end}}
-        <div class="venue-map-actions" hidden>
-          {{if .MapsEmbedKey}}<button type="button" id="venue-map-button" class="back-btn venue-search" aria-expanded="false" aria-controls="venue-map" data-map-key="{{.MapsEmbedKey}}">Preview map</button>{{end}}
-          <a id="venue-map-link" class="back-btn venue-search" target="_blank" rel="noopener noreferrer">Open in Maps ↗</a>
+        <div class="venue-input">
+          <input id="venue-address" name="physical_location" form="booking-form" type="text" maxlength="500" placeholder="Place name or address" autocomplete="off" data-1p-ignore {{if .PlacesSearch}}role="combobox" aria-autocomplete="list" aria-controls="venue-options" aria-expanded="false"{{end}} disabled>
+          {{if .MapsEmbedKey}}<button type="button" id="venue-map-button" class="venue-map-icon" aria-label="Preview map" title="Preview map" aria-expanded="false" aria-controls="venue-map" data-map-key="{{.MapsEmbedKey}}" disabled><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15m6-12v15"/></svg></button>
+          {{else}}<a id="venue-map-link" class="venue-map-icon" aria-label="Open in Google Maps" title="Open in Google Maps" target="_blank" rel="noopener noreferrer" hidden><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15m6-12v15"/></svg></a>{{end}}
+          {{if .PlacesSearch}}<div id="venue-results" hidden>
+            <div id="venue-options" role="listbox" aria-label="Suggested locations"></div>
+            <div class="venue-attribution" translate="no">Google Maps</div>
+          </div>{{end}}
         </div>
         {{if .MapsEmbedKey}}<iframe id="venue-map" title="Meeting location on Google Maps" referrerpolicy="strict-origin-when-cross-origin" loading="lazy" allowfullscreen hidden></iframe>{{end}}
       </div>
@@ -383,6 +385,8 @@ body {
   const venueToggle = $('venue-toggle');
   const venueAddress = $('venue-address');
   const venueResults = $('venue-results');
+  const venueOptions = $('venue-options');
+  let venueActive = -1;
   const venueMap = $('venue-map');
   const venueMapButton = $('venue-map-button');
   const venueMapLink = $('venue-map-link');
@@ -391,15 +395,37 @@ body {
 
   function refreshVenueMap() {
     const address = venueAddress.value.trim();
-    venueMapLink.parentElement.hidden = address.length < 3;
-    venueMapLink.href = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(address);
+    if (venueMapLink) {
+      venueMapLink.hidden = address.length < 3;
+      venueMapLink.href = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(address);
+    }
     if (venueMap) {
+      venueMapButton.disabled = address.length < 3;
       venueMap.hidden = true;
       venueMap.removeAttribute('src');
       venueMapButton.setAttribute('aria-expanded', 'false');
     }
   }
+  function closeVenueResults() {
+    clearTimeout(venueTimer);
+    venueRequest?.abort();
+    if (!venueResults) return;
+    venueResults.hidden = true;
+    venueOptions.replaceChildren();
+    venueActive = -1;
+    venueAddress.setAttribute('aria-expanded', 'false');
+    venueAddress.removeAttribute('aria-activedescendant');
+  }
+
+  function chooseVenue(place) {
+    venueAddress.value = place;
+    closeVenueResults();
+    refreshVenueMap();
+    venueAddress.focus();
+  }
+
   venueMapButton?.addEventListener('click', () => {
+    closeVenueResults();
     if (!venueMap.hidden) {
       refreshVenueMap();
       return;
@@ -412,32 +438,44 @@ body {
   venueToggle?.addEventListener('change', () => {
     $('venue-fields').hidden = !venueToggle.checked;
     venueAddress.disabled = !venueToggle.checked;
-    if (!venueToggle.checked) {
-      clearTimeout(venueTimer);
-      venueRequest?.abort();
-      venueResults?.replaceChildren();
-      refreshVenueMap();
-    }
+    closeVenueResults();
+    refreshVenueMap();
   });
+  venueAddress?.addEventListener('blur', closeVenueResults);
+  venueOptions?.addEventListener('mousedown', event => event.preventDefault());
   venueAddress?.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && venueResults) {
-      clearTimeout(venueTimer);
-      venueRequest?.abort();
-      venueResults.replaceChildren();
+    if (event.isComposing) return;
+    const options = venueOptions?.children;
+    if (options?.length && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
+      event.preventDefault();
+      const step = event.key === 'ArrowDown' ? 1 : -1;
+      venueActive = venueActive < 0 && step < 0 ? options.length - 1
+        : (venueActive + step + options.length) % options.length;
+      for (const [index, option] of Array.from(options).entries()) {
+        option.setAttribute('aria-selected', String(index === venueActive));
+      }
+      const active = options[venueActive];
+      venueAddress.setAttribute('aria-activedescendant', active.id);
+      active.scrollIntoView({block: 'nearest'});
+    } else if (event.key === 'Escape' && venueResults && !venueResults.hidden) {
+      event.preventDefault();
+      closeVenueResults();
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      if (venueActive >= 0) chooseVenue(options[venueActive].textContent);
     }
-    if (event.key === 'Enter') event.preventDefault();
   });
-  venueAddress?.addEventListener('input', event => {
+  function updateVenueSearch(event) {
     venueAddress.setCustomValidity('');
-    clearTimeout(venueTimer);
-    venueRequest?.abort();
-    venueResults?.replaceChildren();
+    closeVenueResults();
     refreshVenueMap();
     const query = venueAddress.value.trim();
     if (venueResults && query.length >= 4 && !event.isComposing) {
       venueTimer = setTimeout(() => searchVenue(query), 700);
     }
-  });
+  }
+  venueAddress?.addEventListener('input', updateVenueSearch);
+  venueAddress?.addEventListener('compositionend', updateVenueSearch);
   async function searchVenue(query) {
     const request = new AbortController();
     venueRequest = request;
@@ -450,23 +488,20 @@ body {
       });
       if (!res.ok) throw new Error('search failed');
       const places = await res.json();
-      if (request.signal.aborted) return;
-      venueResults.replaceChildren();
-      for (const place of places) {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.textContent = place;
-        button.addEventListener('click', () => {
-          venueAddress.value = place;
-          venueResults.replaceChildren();
-          refreshVenueMap();
-          venueAddress.focus();
-        });
-        venueResults.append(button);
+      if (request.signal.aborted || !places.length) return;
+      for (const [index, place] of places.entries()) {
+        const option = document.createElement('div');
+        option.id = 'venue-option-' + index;
+        option.setAttribute('role', 'option');
+        option.setAttribute('aria-selected', 'false');
+        option.textContent = place;
+        option.addEventListener('click', () => chooseVenue(place));
+        venueOptions.append(option);
       }
-      if (!places.length) venueResults.textContent = 'No matches. Enter the location manually.';
+      venueResults.hidden = false;
+      venueAddress.setAttribute('aria-expanded', 'true');
     } catch {
-      if (!request.signal.aborted) venueResults.textContent = 'Suggestions are unavailable. Enter the location manually.';
+      // Keep manual entry available when the lookup fails.
     }
   }
 
