@@ -59,6 +59,7 @@ type bookPageData struct {
 	PhoneChoice      bool
 	InPersonChoice   bool
 	PlacesSearch     bool
+	MapsEmbedKey     string
 	DirectoryURL     string
 	AccentColor      string
 	AccentForeground string
@@ -607,9 +608,20 @@ func (h *Handler) BookPage(w http.ResponseWriter, r *http.Request) {
 		DemoMode:      h.demoMode,
 	}
 
+	policy := publicCSP(track)
+	if allowInPerson {
+		data.MapsEmbedKey = strings.TrimSpace(os.Getenv("BOOKMEET_GOOGLE_MAPS_EMBED_KEY"))
+	}
+	if data.MapsEmbedKey != "" {
+		if strings.Contains(policy, "frame-src ") {
+			policy = strings.Replace(policy, "frame-src ", "frame-src https://www.google.com ", 1)
+		} else {
+			policy += "; frame-src https://www.google.com"
+		}
+	}
 	h.persistLangOverride(w, r)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Content-Security-Policy", publicCSP(track))
+	w.Header().Set("Content-Security-Policy", policy)
 	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	// The body varies by resolved locale (Accept-Language, or the calnode_lang override

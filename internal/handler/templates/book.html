@@ -142,8 +142,13 @@ body {
       <div id="venue-fields" class="field venue-fields" hidden>
         <label for="venue-address">Meeting location</label>
         <input id="venue-address" name="physical_location" form="booking-form" type="text" maxlength="500" placeholder="Place name or address" autocomplete="off" data-1p-ignore disabled>
-        {{if .PlacesSearch}}<button type="button" id="venue-search" class="back-btn venue-search">Search places</button>
+        {{if .PlacesSearch}}<small class="hint venue-hint">Suggestions by Google Maps. You can also enter a location manually.</small>
         <div id="venue-results" aria-live="polite"></div>{{end}}
+        <div class="venue-map-actions" hidden>
+          {{if .MapsEmbedKey}}<button type="button" id="venue-map-button" class="back-btn venue-search" aria-expanded="false" aria-controls="venue-map" data-map-key="{{.MapsEmbedKey}}">Preview map</button>{{end}}
+          <a id="venue-map-link" class="back-btn venue-search" target="_blank" rel="noopener noreferrer">Open in Maps ↗</a>
+        </div>
+        {{if .MapsEmbedKey}}<iframe id="venue-map" title="Meeting location on Google Maps" referrerpolicy="strict-origin-when-cross-origin" loading="lazy" allowfullscreen hidden></iframe>{{end}}
       </div>
     </div></div>
     {{end}}
@@ -377,35 +382,65 @@ body {
 
   const venueToggle = $('venue-toggle');
   const venueAddress = $('venue-address');
-  const venueSearch = $('venue-search');
   const venueResults = $('venue-results');
+  const venueMap = $('venue-map');
+  const venueMapButton = $('venue-map-button');
+  const venueMapLink = $('venue-map-link');
   let venueRequest;
+  let venueTimer;
+
+  function refreshVenueMap() {
+    const address = venueAddress.value.trim();
+    venueMapLink.parentElement.hidden = address.length < 3;
+    venueMapLink.href = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(address);
+    if (venueMap) {
+      venueMap.hidden = true;
+      venueMap.removeAttribute('src');
+      venueMapButton.setAttribute('aria-expanded', 'false');
+    }
+  }
+  venueMapButton?.addEventListener('click', () => {
+    if (!venueMap.hidden) {
+      refreshVenueMap();
+      return;
+    }
+    const params = new URLSearchParams({key: venueMapButton.dataset.mapKey, q: venueAddress.value.trim()});
+    venueMap.src = 'https://www.google.com/maps/embed/v1/place?' + params;
+    venueMap.hidden = false;
+    venueMapButton.setAttribute('aria-expanded', 'true');
+  });
   venueToggle?.addEventListener('change', () => {
     $('venue-fields').hidden = !venueToggle.checked;
     venueAddress.disabled = !venueToggle.checked;
-    if (!venueToggle.checked) venueRequest?.abort();
+    if (!venueToggle.checked) {
+      clearTimeout(venueTimer);
+      venueRequest?.abort();
+      venueResults?.replaceChildren();
+      refreshVenueMap();
+    }
   });
   venueAddress?.addEventListener('keydown', event => {
-    if (event.key === 'Enter' && venueSearch) {
-      event.preventDefault();
-      venueSearch.click();
+    if (event.key === 'Escape' && venueResults) {
+      clearTimeout(venueTimer);
+      venueRequest?.abort();
+      venueResults.replaceChildren();
     }
+    if (event.key === 'Enter') event.preventDefault();
   });
-  venueAddress?.addEventListener('input', () => {
+  venueAddress?.addEventListener('input', event => {
     venueAddress.setCustomValidity('');
+    clearTimeout(venueTimer);
     venueRequest?.abort();
     venueResults?.replaceChildren();
-  });
-  venueSearch?.addEventListener('click', async () => {
+    refreshVenueMap();
     const query = venueAddress.value.trim();
-    if (query.length < 3) {
-      venueResults.textContent = 'Enter at least three characters to search.';
-      return;
+    if (venueResults && query.length >= 4 && !event.isComposing) {
+      venueTimer = setTimeout(() => searchVenue(query), 700);
     }
-    venueRequest?.abort();
+  });
+  async function searchVenue(query) {
     const request = new AbortController();
     venueRequest = request;
-    venueResults.textContent = 'Searching…';
     try {
       const res = await fetch('/v1/event-types/' + encodeURIComponent(SLUG) + '/places', {
         method: 'POST',
@@ -424,17 +459,16 @@ body {
         button.addEventListener('click', () => {
           venueAddress.value = place;
           venueResults.replaceChildren();
+          refreshVenueMap();
           venueAddress.focus();
         });
         venueResults.append(button);
       }
-      const note = document.createElement('small');
-      note.textContent = places.length ? 'Google Maps' : 'No matches. You can enter the location manually.';
-      venueResults.append(note);
+      if (!places.length) venueResults.textContent = 'No matches. Enter the location manually.';
     } catch {
-      if (!request.signal.aborted) venueResults.textContent = 'Search is unavailable. You can enter the location manually.';
+      if (!request.signal.aborted) venueResults.textContent = 'Suggestions are unavailable. Enter the location manually.';
     }
-  });
+  }
 
   const venueMobile = matchMedia('(max-width: 700px)');
   function positionVenueChoice() {

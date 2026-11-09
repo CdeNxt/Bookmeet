@@ -42,6 +42,24 @@ func (h *Handler) SearchBookingPlaces(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusBadRequest, "invalid place query")
 		return
 	}
+	// Reserve quota before contacting Google. The shared database counter also
+	// covers concurrent requests and survives restarts.
+	result, err := h.db.ExecContext(r.Context(), `
+		INSERT INTO bookmeet_place_search_usage (id, day, count)
+		VALUES (1, ?, 1)
+		ON CONFLICT(id) DO UPDATE SET day = excluded.day,
+		  count = CASE WHEN day = excluded.day THEN count + 1 ELSE 1 END
+		WHERE day < excluded.day OR (day = excluded.day AND count < 150)`,
+		time.Now().UTC().Format(time.DateOnly))
+	if err != nil {
+		h.writeError(w, http.StatusServiceUnavailable, "place search is unavailable")
+		return
+	}
+	reserved, err := result.RowsAffected()
+	if err != nil || reserved != 1 {
+		h.writeError(w, http.StatusTooManyRequests, "place search is unavailable")
+		return
+	}
 	places, err := searchGooglePlaces(r.Context(), key, in.Query)
 	if err != nil {
 		h.writeError(w, http.StatusBadGateway, "place search is unavailable")
