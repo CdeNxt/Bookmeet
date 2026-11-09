@@ -107,14 +107,15 @@ func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
 // GetMe handles GET /v1/users/me.
 func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 	user, _ := userFromContext(r.Context())
-	var accent string
+	var accent, homeAddress string
 	var handleOut sql.NullString
-	if err := h.db.QueryRowContext(r.Context(), `SELECT booking_accent, handle FROM users WHERE id = ?`, user.ID).Scan(&accent, &handleOut); err != nil {
+	if err := h.db.QueryRowContext(r.Context(), `SELECT booking_accent, handle, home_address FROM users WHERE id = ?`, user.ID).Scan(&accent, &handleOut, &homeAddress); err != nil {
 		h.writeError(w, http.StatusInternalServerError, "could not load profile")
 		return
 	}
 	out := map[string]any{
 		"booking_accent": accent,
+		"home_address":   homeAddress,
 		"handle":         handleOut.String,
 		"id":             user.ID,
 		"email":          user.Email,
@@ -150,6 +151,7 @@ func (h *Handler) PatchMe(w http.ResponseWriter, r *http.Request) {
 		Name                 *string `json:"name"`
 		Handle               *string `json:"handle"`
 		BookingAccent        *string `json:"booking_accent"`
+		HomeAddress          *string `json:"home_address"`
 		Timezone             *string `json:"timezone"`
 		TimeFormat           *string `json:"time_format"`
 		WeekStart            *int    `json:"week_start"`
@@ -167,11 +169,21 @@ func (h *Handler) PatchMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var accent string
+	var accent, homeAddress string
 	var handle sql.NullString
-	if err := h.db.QueryRowContext(r.Context(), `SELECT booking_accent, handle FROM users WHERE id = ?`, user.ID).Scan(&accent, &handle); err != nil {
+	if err := h.db.QueryRowContext(r.Context(), `SELECT booking_accent, handle, home_address FROM users WHERE id = ?`, user.ID).Scan(&accent, &handle, &homeAddress); err != nil {
 		h.writeError(w, http.StatusInternalServerError, "could not load profile")
 		return
+	}
+	// Validated on change only: a stored value is never re-checked just because the
+	// editor resubmitted the whole form.
+	if req.HomeAddress != nil {
+		addr := strings.TrimSpace(*req.HomeAddress)
+		if len(addr) > 500 {
+			h.writeError(w, http.StatusBadRequest, "home_address is too long (max 500 characters)")
+			return
+		}
+		homeAddress = addr
 	}
 	if req.BookingAccent != nil {
 		if !regexp.MustCompile(`^#[0-9a-fA-F]{6}$`).MatchString(*req.BookingAccent) {
@@ -302,11 +314,11 @@ func (h *Handler) PatchMe(w http.ResponseWriter, r *http.Request) {
 
 	if _, err := h.db.ExecContext(r.Context(), `
 		UPDATE users SET
-			booking_accent = ?, handle = ?, name = ?, iana_timezone = ?, time_format = ?, week_start = ?, date_format = ?,
+			booking_accent = ?, home_address = ?, handle = ?, name = ?, iana_timezone = ?, time_format = ?, week_start = ?, date_format = ?,
 			notify_confirmation = ?, notify_cancellation = ?, notify_reschedule = ?, notify_reminder = ?,
 			notify_host_booking = ?, notify_host_cancel = ?, notify_host_reschedule = ?
 		WHERE id = ?`,
-		accent, handle, current.Name, current.Timezone, current.TimeFormat, current.WeekStart, current.DateFormat,
+		accent, homeAddress, handle, current.Name, current.Timezone, current.TimeFormat, current.WeekStart, current.DateFormat,
 		boolToInt(current.NotifyConfirmation), boolToInt(current.NotifyCancellation),
 		boolToInt(current.NotifyReschedule), boolToInt(current.NotifyReminder),
 		boolToInt(current.NotifyHostBooking), boolToInt(current.NotifyHostCancel),
@@ -325,6 +337,7 @@ func (h *Handler) PatchMe(w http.ResponseWriter, r *http.Request) {
 
 	out := map[string]any{
 		"booking_accent": accent,
+		"home_address":   homeAddress,
 		"handle":         handle.String,
 		"id":             user.ID,
 		"email":          user.Email,

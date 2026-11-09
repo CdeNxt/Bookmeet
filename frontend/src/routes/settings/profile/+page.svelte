@@ -25,6 +25,7 @@
 
 	let name = $state('');
 	let booking_accent = $state('#111827');
+	let home_address = $state('');
 	let timezone = $state('UTC');
 	let time_format = $state<'12h' | '24h'>('12h');
 	let week_start = $state(1);
@@ -78,6 +79,7 @@
 		name = user.name ?? '';
 		handle = user.handle ?? '';
 		booking_accent = user.booking_accent;
+		home_address = user.home_address ?? '';
 		timezone = user.timezone;
 		time_format = user.time_format ?? '12h';
 		week_start = user.week_start ?? 1;
@@ -132,7 +134,7 @@
 	async function save() {
 		await savingFlag.run(async () => {
 			const updated = await api.patch<User>('/v1/users/me', {
-				name, timezone, time_format, week_start, date_format, booking_accent, handle,
+				name, timezone, time_format, week_start, date_format, booking_accent, handle, home_address,
 			});
 			currentUser.set(updated);
 			prefs.set(prefsFromUser(updated));
@@ -199,6 +201,11 @@
 						<span class="text-sm text-muted-foreground">{booking_accent}</span>
 					</div>
 					<p class="text-xs text-muted-foreground">Used on your booking pages.</p>
+				</div>
+				<div class="space-y-1.5">
+					<Label for="home-address">Home address</Label>
+					<Input id="home-address" type="text" maxlength={500} autocomplete="street-address" bind:value={home_address} placeholder="Street, city, region" />
+					<p class="text-xs text-muted-foreground">Your starting point for in-person meetings when you have no earlier meeting that day. Never shown to guests.</p>
 				</div>
 				<div class="space-y-1.5">
 					<Label for="name">Name</Label>

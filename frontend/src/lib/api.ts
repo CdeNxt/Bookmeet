@@ -1,5 +1,7 @@
 export type User = {
 	booking_accent: string;
+	/** Where you travel from for in-person meetings when no earlier meeting gives a start point. */
+	home_address?: string;
 	handle?: string;
 	id: string;
 	email: string;
