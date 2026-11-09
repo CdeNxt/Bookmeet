@@ -20,6 +20,8 @@ const (
 )
 
 type eventTypeJSON struct {
+	AllowInPerson       bool    `json:"allow_in_person"`
+	InPersonVideo       bool    `json:"in_person_video"`
 	AllowPhoneCall      bool    `json:"allow_phone_call"`
 	ID                  string  `json:"id"`
 	Slug                string  `json:"slug"`
@@ -111,7 +113,7 @@ func scanEventTypeRow(s rowScanner, trailing ...any) (*eventTypeJSON, error) {
 	dests := []any{
 		&et.ID, &et.Slug, &et.Name, &desc,
 		&et.DurationMinutes, &et.SlotIntervalMinutes,
-		&et.LocationType, &locVal, &et.AllowPhoneCall,
+		&et.LocationType, &locVal, &et.AllowPhoneCall, &et.AllowInPerson, &et.InPersonVideo,
 		&et.RoutingMode, &et.RRStrategy,
 		&et.BufferBeforeMinutes, &et.BufferAfterMinutes,
 		&et.MinNoticeMinutes, &et.MaxFutureDays, &et.MaxActiveBookings,
@@ -170,7 +172,7 @@ func scanEventTypeRow(s rowScanner, trailing ...any) (*eventTypeJSON, error) {
 
 const etColumns = `id, slug, name, description,
 	duration_minutes, slot_interval_minutes,
-	location_type, location_value, allow_phone_call,
+	location_type, location_value, allow_phone_call, allow_in_person, in_person_video,
 	routing_mode, rr_strategy,
 	buffer_before_minutes, buffer_after_minutes,
 	min_notice_minutes, max_future_days, max_active_bookings,
@@ -280,6 +282,8 @@ func (h *Handler) CreateEventType(w http.ResponseWriter, r *http.Request) {
 		MinNoticeMinutes    *int    `json:"min_notice_minutes"`
 		MaxFutureDays       *int    `json:"max_future_days"`
 		MaxActiveBookings   *int    `json:"max_active_bookings"`
+		AllowInPerson       *bool   `json:"allow_in_person"`
+		InPersonVideo       *bool   `json:"in_person_video"`
 		AllowPhoneCall      *bool   `json:"allow_phone_call"`
 		ShowTakenSlots      *bool   `json:"show_taken_slots"`
 		InviteDelivery      *string `json:"invite_delivery"`
@@ -383,13 +387,13 @@ func (h *Handler) CreateEventType(w http.ResponseWriter, r *http.Request) {
 	_, err = tx.ExecContext(r.Context(), `
 		INSERT INTO event_types
 		  (id, user_id, slug, name, description, duration_minutes,
-		   slot_interval_minutes, location_type, location_value, allow_phone_call,
+		   slot_interval_minutes, location_type, location_value, allow_phone_call, allow_in_person, in_person_video,
 		   routing_mode, buffer_before_minutes, buffer_after_minutes,
 		   min_notice_minutes, max_future_days, max_active_bookings, show_taken_slots, invite_delivery,
 		   msg_confirmation, msg_cancellation, msg_reschedule, msg_reminder, display_order)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, user.ID, req.Slug, req.Name, req.Description,
-		req.DurationMinutes, slotInterval, locType, req.LocationValue, req.AllowPhoneCall != nil && *req.AllowPhoneCall,
+		req.DurationMinutes, slotInterval, locType, req.LocationValue, req.AllowPhoneCall != nil && *req.AllowPhoneCall, req.AllowInPerson != nil && *req.AllowInPerson, req.InPersonVideo != nil && *req.InPersonVideo,
 		routingMode, bufBefore, bufAfter, minNotice, maxFuture, maxActive, showTaken, inviteDelivery,
 		defaultMsgConfirmation, defaultMsgCancellation, defaultMsgReschedule, defaultMsgReminder, req.DisplayOrder)
 	if err != nil {
@@ -518,6 +522,8 @@ func (h *Handler) PatchEventType(w http.ResponseWriter, r *http.Request) {
 		MaxActiveBookings   *int    `json:"max_active_bookings"`
 		IsActive            *bool   `json:"is_active"`
 		IsPublic            *bool   `json:"is_public"`
+		AllowInPerson       *bool   `json:"allow_in_person"`
+		InPersonVideo       *bool   `json:"in_person_video"`
 		AllowPhoneCall      *bool   `json:"allow_phone_call"`
 		ShowTakenSlots      *bool   `json:"show_taken_slots"`
 		InviteDelivery      *string `json:"invite_delivery"`
@@ -667,6 +673,12 @@ func (h *Handler) PatchEventType(w http.ResponseWriter, r *http.Request) {
 			v = 1
 		}
 		set("is_public", v)
+	}
+	if req.AllowInPerson != nil {
+		set("allow_in_person", *req.AllowInPerson)
+	}
+	if req.InPersonVideo != nil {
+		set("in_person_video", *req.InPersonVideo)
 	}
 	if req.AllowPhoneCall != nil {
 		set("allow_phone_call", *req.AllowPhoneCall)

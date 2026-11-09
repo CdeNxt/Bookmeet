@@ -27,6 +27,7 @@ type BookingData struct {
 	PreviousStartAt    time.Time // non-zero only for reschedule emails
 	PreviousEndAt      time.Time
 	LocationValue      string
+	PhysicalLocation   string
 	CancellationReason string
 	ManageURL          string // manage link (reschedule/cancel), set at booking creation
 	BaseURL            string
@@ -195,8 +196,8 @@ func (d BookingData) GoogleCalURL() string {
 	q.Set("text", d.EventTypeName)
 	q.Set("dates", d.StartAt.UTC().Format("20060102T150405Z")+"/"+d.EndAt.UTC().Format("20060102T150405Z"))
 	q.Set("details", d.calDetails())
-	if d.LocationValue != "" {
-		q.Set("location", d.LocationValue)
+	if location := d.CalendarLocation(); location != "" {
+		q.Set("location", location)
 	}
 	return "https://calendar.google.com/calendar/render?" + q.Encode()
 }
@@ -210,8 +211,8 @@ func (d BookingData) OutlookCalURL() string {
 	q.Set("startdt", d.StartAt.UTC().Format(time.RFC3339))
 	q.Set("enddt", d.EndAt.UTC().Format(time.RFC3339))
 	q.Set("body", d.calDetails())
-	if d.LocationValue != "" {
-		q.Set("location", d.LocationValue)
+	if location := d.CalendarLocation(); location != "" {
+		q.Set("location", location)
 	}
 	return "https://outlook.office.com/calendar/0/deeplink/compose?" + q.Encode()
 }
@@ -439,8 +440,8 @@ var confirmOrgTmpl = template.Must(template.New("confirm-org").Parse(
 {{.T "email_label_event"}}:    {{.EventTypeName}}
 {{.T "email_label_with"}}:     {{.HostName}}
 {{.T "email_label_start"}}:    {{.StartFmt}}
-{{.T "email_label_end"}}:      {{.EndFmt}}{{if .LocationValue}}
-{{.T "email_label_location"}}: {{.LocationValue}}{{end}}
+{{.T "email_label_end"}}:      {{.EndFmt}}{{if .MeetingLocation}}
+{{.T "email_label_location"}}: {{.MeetingLocation}}{{end}}
 
 {{.T "email_add_to_calendar"}}
   {{.T "email_calendar_google"}}:  {{.GoogleCalURL}}
@@ -468,8 +469,8 @@ You have a new booking.
 Event:    {{.EventTypeName}}
 With:     {{.OrganizerName}} <{{.OrganizerEmail}}>
 Start:    {{.StartFmt}}
-End:      {{.EndFmt}}{{if .LocationValue}}
-Location: {{.LocationValue}}{{end}}
+End:      {{.EndFmt}}{{if .MeetingLocation}}
+Location: {{.MeetingLocation}}{{end}}
 
 Booking reference: {{.BookingID}}
 
@@ -521,8 +522,8 @@ var rescheduleOrgTmpl = template.Must(template.New("reschedule-org").Parse(
 {{.T "email_label_with"}}:     {{.HostName}}
 {{.T "email_label_was"}}:      {{.PreviousStartFmt}}
 {{.T "email_label_now"}}:      {{.StartFmt}}
-{{.T "email_label_end"}}:      {{.EndFmt}}{{if .LocationValue}}
-{{.T "email_label_location"}}: {{.LocationValue}}{{end}}
+{{.T "email_label_end"}}:      {{.EndFmt}}{{if .MeetingLocation}}
+{{.T "email_label_location"}}: {{.MeetingLocation}}{{end}}
 
 {{.T "email_add_to_calendar_updated"}}
   {{.T "email_calendar_google"}}:  {{.GoogleCalURL}}
@@ -548,8 +549,8 @@ Event:    {{.EventTypeName}}
 With:     {{.OrganizerName}} <{{.OrganizerEmail}}>
 Was:      {{.PreviousStartFmt}}
 Now:      {{.StartFmt}}
-End:      {{.EndFmt}}{{if .LocationValue}}
-Location: {{.LocationValue}}{{end}}
+End:      {{.EndFmt}}{{if .MeetingLocation}}
+Location: {{.MeetingLocation}}{{end}}
 
 Booking reference: {{.BookingID}}
 
@@ -564,8 +565,8 @@ var reminderOrgTmpl = template.Must(template.New("reminder-org").Parse(
 {{.T "email_label_event"}}:    {{.EventTypeName}}
 {{.T "email_label_with"}}:     {{.HostName}}
 {{.T "email_label_start"}}:    {{.StartFmt}}
-{{.T "email_label_end"}}:      {{.EndFmt}}{{if .LocationValue}}
-{{.T "email_label_location"}}: {{.LocationValue}}{{end}}
+{{.T "email_label_end"}}:      {{.EndFmt}}{{if .MeetingLocation}}
+{{.T "email_label_location"}}: {{.MeetingLocation}}{{end}}
 
 {{.T "email_add_to_calendar"}}
   {{.T "email_calendar_google"}}:  {{.GoogleCalURL}}
@@ -581,3 +582,17 @@ var reminderOrgTmpl = template.Must(template.New("reminder-org").Parse(
 {{end}}
 — {{.Brand}}
 `))
+
+func (d BookingData) CalendarLocation() string {
+	if d.PhysicalLocation != "" {
+		return d.PhysicalLocation
+	}
+	return d.LocationValue
+}
+
+func (d BookingData) MeetingLocation() string {
+	if d.PhysicalLocation != "" && d.LocationValue != "" && d.PhysicalLocation != d.LocationValue {
+		return d.PhysicalLocation + " · " + d.LocationValue
+	}
+	return d.CalendarLocation()
+}

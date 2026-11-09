@@ -42,6 +42,7 @@ type Booking struct {
 	EndAt              time.Time
 	Status             string
 	CancellationReason string
+	PhysicalLocation   string
 	LocationValue      string
 	LocationType       string
 	CreatedAt          time.Time
@@ -94,13 +95,14 @@ type CreateParams struct {
 	RRStrategy string
 	// OptionalHosts attend only if free at booking time; they never block the
 	// booking (Group/collective "optional" hosts). Busy ones are simply omitted.
-	OptionalHosts []string
-	StartAt       time.Time
-	EndAt         time.Time
-	LocationValue string
-	LocationType  string
-	Organizer     Attendee
-	Answers       []Answer
+	OptionalHosts    []string
+	StartAt          time.Time
+	EndAt            time.Time
+	PhysicalLocation string
+	LocationValue    string
+	LocationType     string
+	Organizer        Attendee
+	Answers          []Answer
 	// MaxActivePerInvitee caps how many active (upcoming, non-cancelled) bookings
 	// the organizer's email may already hold for this event type. 0 = unlimited.
 	MaxActivePerInvitee int

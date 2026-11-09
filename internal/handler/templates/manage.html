@@ -139,6 +139,8 @@ body {
     <p class="host-name">{{.HostName}}</p>
     <h1 class="event-name">{{.EventTypeName}}</h1>
     {{template "eventMeta" .}}
+    {{if .PhysicalLocation}}<p class="venue-address">{{.PhysicalLocation}}</p>{{end}}
+    {{if .VideoURL}}<a class="back-btn" href="{{.VideoURL}}">Join video meeting</a>{{end}}
     {{if and (not .TokenInvalid) (ne .Status "cancelled")}}
     <p class="tz-label">
       <span class="tz-wrapper">

@@ -68,6 +68,14 @@ func paymentStatusForWebhook(s string) string {
 
 // onlineMeetingLocation reports whether an event-type location is a native online
 // meeting type (Google Meet or Microsoft Teams) that may be auto-generated.
+func videoMeetingLocation(locType string) bool {
+	switch locType {
+	case "google_meet", "teams", "zoom", "livekit", "custom_video":
+		return true
+	}
+	return false
+}
+
 func onlineMeetingLocation(locType string) bool {
 	return locType == "google_meet" || locType == "teams"
 }
@@ -489,6 +497,8 @@ var errPaymentRequired = errors.New("this event requires payment; please book on
 // and is_public enforced by construction, not by remembering to add the check.
 type bookableEventType struct {
 	AllowPhoneCall      bool
+	AllowInPerson       bool
+	InPersonVideo       bool
 	ID                  string
 	UserID              string
 	Name                string
@@ -524,13 +534,13 @@ func (h *Handler) loadBookableEventType(ctx context.Context, slug string) (*book
 	var isActive, isPublic, showTaken int
 	err := h.db.QueryRowContext(ctx, `
 		SELECT id, user_id, name, duration_minutes, slot_interval_minutes,
-		       location_type, location_value, allow_phone_call, routing_mode, rr_strategy,
+		       location_type, location_value, allow_phone_call, allow_in_person, in_person_video, routing_mode, rr_strategy,
 		       buffer_before_minutes, buffer_after_minutes, min_notice_minutes, max_future_days,
 		       is_active, is_public, show_taken_slots, max_active_bookings, price_cents, currency,
 		       invite_delivery
 		FROM event_types WHERE slug = ?`, slug).
 		Scan(&et.ID, &et.UserID, &et.Name, &et.DurationMinutes, &et.SlotIntervalMinutes,
-			&et.LocationType, &et.LocationValue, &et.AllowPhoneCall, &et.RoutingMode, &et.RRStrategy,
+			&et.LocationType, &et.LocationValue, &et.AllowPhoneCall, &et.AllowInPerson, &et.InPersonVideo, &et.RoutingMode, &et.RRStrategy,
 			&et.BufferBeforeMinutes, &et.BufferAfterMinutes, &et.MinNoticeMinutes, &et.MaxFutureDays,
 			&isActive, &isPublic, &showTaken, &et.MaxActiveBookings, &et.PriceCents, &et.Currency,
 			&et.InviteDelivery)
@@ -647,6 +657,7 @@ type bookingJSON struct {
 	EndAt              string `json:"end_at"`
 	Status             string `json:"status"`
 	CancellationReason string `json:"cancellation_reason,omitempty"`
+	PhysicalLocation   string `json:"physical_location,omitempty"`
 	LocationValue      string `json:"location_value,omitempty"`
 	LocationType       string `json:"location_type,omitempty"`
 	CreatedAt          string `json:"created_at"`
@@ -686,6 +697,7 @@ func toBookingJSON(b *booking.Booking) bookingJSON {
 		Status:             b.Status,
 		CancellationReason: b.CancellationReason,
 		LocationValue:      b.LocationValue,
+		PhysicalLocation:   b.PhysicalLocation,
 		LocationType:       b.LocationType,
 		CreatedAt:          b.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:          b.UpdatedAt.UTC().Format(time.RFC3339),
@@ -749,12 +761,13 @@ func (h *Handler) CreateBooking(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		EventTypeSlug string `json:"event_type_slug"`
-		StartAt       string `json:"start_at"`
-		Name          string `json:"name"`
-		Email         string `json:"email"`
-		Phone         string `json:"phone"`
-		Timezone      string `json:"timezone"`
+		EventTypeSlug    string `json:"event_type_slug"`
+		StartAt          string `json:"start_at"`
+		Name             string `json:"name"`
+		Email            string `json:"email"`
+		Phone            string `json:"phone"`
+		PhysicalLocation string `json:"physical_location"`
+		Timezone         string `json:"timezone"`
 		// Language is the resolved page locale code (e.g. "es") the client already knows —
 		// sent explicitly rather than re-derived from Accept-Language/cookie server-side,
 		// since the embed widget's cross-origin fetch can't rely on the same-origin
@@ -899,6 +912,17 @@ func (h *Handler) CreateBooking(w http.ResponseWriter, r *http.Request) {
 	// Resolve candidate hosts by routing mode: rotation hosts for round-robin,
 	// required hosts otherwise. Archived hosts are excluded by resolveEventTypeHosts.
 	req.Phone = strings.TrimSpace(req.Phone)
+	req.PhysicalLocation = strings.TrimSpace(req.PhysicalLocation)
+	if req.PhysicalLocation != "" {
+		if !et.AllowInPerson || req.Phone != "" || len(req.PhysicalLocation) > 500 || strings.ContainsAny(req.PhysicalLocation, "\r\n\x00") {
+			h.writeError(w, http.StatusBadRequest, "invalid in-person location")
+			return
+		}
+		if !et.InPersonVideo || !videoMeetingLocation(et.LocationType) {
+			et.LocationType = "in_person"
+			locValue = req.PhysicalLocation
+		}
+	}
 	if req.Phone != "" {
 		if !et.AllowPhoneCall || !onlineMeetingLocation(et.LocationType) || len(req.Phone) > 40 || !validPhone(req.Phone) {
 			h.writeError(w, http.StatusBadRequest, "invalid telephone number")
@@ -943,16 +967,17 @@ func (h *Handler) CreateBooking(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	b, err := h.bookingSvc.Create(r.Context(), booking.CreateParams{
-		EventTypeID:   et.ID,
-		HostIDs:       candidates,
-		RoutingMode:   et.RoutingMode,
-		RRStrategy:    et.RRStrategy,
-		RequiredHosts: required,
-		OptionalHosts: optional,
-		StartAt:       startAt.UTC(),
-		EndAt:         endAt,
-		LocationValue: locValue,
-		LocationType:  et.LocationType,
+		EventTypeID:      et.ID,
+		HostIDs:          candidates,
+		RoutingMode:      et.RoutingMode,
+		RRStrategy:       et.RRStrategy,
+		RequiredHosts:    required,
+		OptionalHosts:    optional,
+		StartAt:          startAt.UTC(),
+		EndAt:            endAt,
+		LocationValue:    locValue,
+		PhysicalLocation: req.PhysicalLocation,
+		LocationType:     et.LocationType,
 		Organizer: booking.Attendee{
 			Name:         req.Name,
 			Email:        req.Email,
@@ -1113,7 +1138,7 @@ func (h *Handler) hostBookingData(ctx context.Context, base mailer.BookingData, 
 // createHostEvents), since only the calendar API call itself produces it.
 func (h *Handler) mintMeetingLink(ctx context.Context, b *booking.Booking, in bookingConfirmationInput, bData *mailer.BookingData, hosts []assignedHost) (meetURL string, autoGenMeet bool, livekitHostURL string) {
 	gc := h.getCal()
-	if in.LocationType == "phone" {
+	if in.LocationType == "phone" || in.LocationType == "in_person" || (in.LocationType == "custom_video" && b.PhysicalLocation != "") {
 		meetURL = b.LocationValue
 	}
 	if gc != nil && onlineMeetingLocation(in.LocationType) {
@@ -1248,12 +1273,19 @@ func (h *Handler) createHostEvents(ctx context.Context, b *booking.Booking, in b
 		return
 	}
 	create := func(host assignedHost, location string) (link string) {
+		eventDescription := description
+		if b.PhysicalLocation != "" {
+			if location != "" && location != b.PhysicalLocation {
+				eventDescription += "\n\nVideo: " + location
+			}
+			location = b.PhysicalLocation
+		}
 		eventID, link, calID, provider, err := gc.CreateEvent(ctx, host.UserID, calendar.CreateEventParams{
 			// The attendee is added as a calendar invitee below, so this text reaches
 			// them via the provider's own native invite (Google/Outlook/CalDAV) —
 			// follows their locale like the confirmation email, not English/host-fixed.
 			Summary:        bData.Tf("calendar_event_summary", in.EventTypeName, in.OrganizerName),
-			Description:    description,
+			Description:    eventDescription,
 			Location:       location,
 			Start:          b.StartAt,
 			End:            b.EndAt,
@@ -1293,7 +1325,7 @@ func (h *Handler) createHostEvents(ctx context.Context, b *booking.Booking, in b
 			continue
 		}
 		// meetURL is empty until the primary's event auto-generates it.
-		if link := create(host, hostEventLocation(meetURL, livekitHostURL, bData.LocationValue)); link != "" {
+		if link := create(host, hostEventLocation(meetURL, livekitHostURL, bData.LocationValue)); link != "" && in.LocationType != "in_person" {
 			// Persist the generated Meet link so the confirmation emails (sent after
 			// this), the booking record, and the manage page show it. bData feeds the
 			// emails; updating it here reaches every send that follows.
@@ -1405,6 +1437,7 @@ func (h *Handler) dispatchBookingConfirmation(b *booking.Booking, in bookingConf
 		StartAt:           b.StartAt,
 		EndAt:             b.EndAt,
 		LocationValue:     b.LocationValue,
+		PhysicalLocation:  b.PhysicalLocation,
 		BaseURL:           h.publicURL(),
 		Locale:            i18n.Get(in.OrganizerLocale),
 	}
@@ -2109,6 +2142,7 @@ func (h *Handler) loadCancellationData(ctx context.Context, b *booking.Booking) 
 	d.StartAt = b.StartAt
 	d.EndAt = b.EndAt
 	d.LocationValue = b.LocationValue
+	d.PhysicalLocation = b.PhysicalLocation
 	d.CancellationReason = b.CancellationReason
 
 	// Event type name + slug and the assigned host's name + email. The host

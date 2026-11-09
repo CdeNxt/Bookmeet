@@ -304,14 +304,14 @@ func (w *Worker) sendReminder(ctx context.Context, payload string) error {
 	var locVal, msgReminder, subjReminder sql.NullString
 	var notifyReminder int
 	err := w.db.QueryRowContext(ctx, `
-		SELECT b.status, b.start_at, b.end_at, b.location_value,
+		SELECT b.status, b.start_at, b.end_at, b.location_value, b.physical_location,
 		       et.name, et.slug, et.msg_reminder, et.subj_reminder,
 		       u.name, u.email, COALESCE(u.notify_reminder, 1)
 		FROM bookings b
 		JOIN event_types et ON et.id = b.event_type_id
 		JOIN users u ON u.id = b.host_id
 		WHERE b.id = ?`, p.BookingID).
-		Scan(&status, &startAt, &endAt, &locVal,
+		Scan(&status, &startAt, &endAt, &locVal, &d.PhysicalLocation,
 			&d.EventTypeName, &d.EventTypeSlug, &msgReminder, &subjReminder,
 			&d.HostName, &d.HostEmail, &notifyReminder)
 	if err == sql.ErrNoRows {

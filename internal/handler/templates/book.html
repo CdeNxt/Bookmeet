@@ -136,6 +136,18 @@ body {
     <p id="host-name" class="host-name">{{.HostsLabel}}</p>
     <h1 class="event-name">{{.Name}}</h1>
     {{template "eventMeta" .}}
+    {{if .InPersonChoice}}
+    <div id="venue-home"><div class="venue-choice" id="venue-choice">
+      <label><input type="checkbox" id="venue-toggle"> In person</label>
+      <div id="venue-fields" class="field" hidden>
+        <label for="venue-address">Meeting location</label>
+        <input id="venue-address" name="physical_location" form="booking-form" type="text" maxlength="500" placeholder="Place name or street address" disabled>
+        {{if .PlacesSearch}}<button type="button" id="venue-search" class="back-btn">Search places</button>
+        <div id="venue-results" aria-live="polite"></div>{{end}}
+      </div>
+    </div></div>
+    {{end}}
+    {{if .DirectoryURL}}<a class="back-btn directory-back" href="{{.DirectoryURL}}">← All meeting types</a>{{end}}
     {{if .AssistantEnabled}}
     <button type="button" class="asst-link" id="asst-open-inline">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.8L18.7 9.7l-4.8 1.9L12 16.4l-1.9-4.8L5.3 9.7l4.8-1.9L12 3z"/></svg>
@@ -188,6 +200,7 @@ body {
       </button>
       <p class="slot-label" id="form-slot-label"></p>
       <form id="booking-form" novalidate>
+        {{if .InPersonChoice}}<div id="venue-form-mount"></div>{{end}}
         <!-- Honeypot: hidden from humans (off-screen, not tabbable); a bot that fills
              it is rejected server-side. Real submissions leave it empty. The field is
              deliberately NOT named "company": browsers map that to the organization
@@ -250,6 +263,7 @@ body {
       <div class="confirm-view">
         <h3>{{call .T "booking_confirmed"}}</h3>
         <p class="when" id="confirm-time"></p>
+        <p class="venue-address" id="confirm-location" hidden></p>
         <p class="sub">{{call .T "confirmation_email_sent"}}</p>
       </div>
     </div>
@@ -361,10 +375,82 @@ body {
   }
   function toDateStr(y, m, d) { return `${y}-${pad(m+1)}-${pad(d)}`; }
 
+  const venueToggle = $('venue-toggle');
+  const venueAddress = $('venue-address');
+  const venueSearch = $('venue-search');
+  const venueResults = $('venue-results');
+  let venueRequest;
+  venueToggle?.addEventListener('change', () => {
+    $('venue-fields').hidden = !venueToggle.checked;
+    venueAddress.disabled = !venueToggle.checked;
+    if (venueToggle.checked) venueAddress.focus();
+    else venueRequest?.abort();
+  });
+  venueAddress?.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && venueSearch) {
+      event.preventDefault();
+      venueSearch.click();
+    }
+  });
+  venueAddress?.addEventListener('input', () => {
+    venueAddress.setCustomValidity('');
+    venueRequest?.abort();
+    venueResults?.replaceChildren();
+  });
+  venueSearch?.addEventListener('click', async () => {
+    const query = venueAddress.value.trim();
+    if (query.length < 3) {
+      venueResults.textContent = 'Enter at least three characters to search.';
+      return;
+    }
+    venueRequest?.abort();
+    const request = new AbortController();
+    venueRequest = request;
+    venueResults.textContent = 'Searching…';
+    try {
+      const res = await fetch('/v1/event-types/' + encodeURIComponent(SLUG) + '/places', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({query}),
+        signal: request.signal,
+      });
+      if (!res.ok) throw new Error('search failed');
+      const places = await res.json();
+      if (request.signal.aborted) return;
+      venueResults.replaceChildren();
+      for (const place of places) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = place;
+        button.addEventListener('click', () => {
+          venueAddress.value = place;
+          venueResults.replaceChildren();
+          venueAddress.focus();
+        });
+        venueResults.append(button);
+      }
+      const note = document.createElement('small');
+      note.textContent = places.length ? 'Google Maps' : 'No matches. You can enter the location manually.';
+      venueResults.append(note);
+    } catch {
+      if (!request.signal.aborted) venueResults.textContent = 'Search is unavailable. You can enter the location manually.';
+    }
+  });
+
+  const venueMobile = matchMedia('(max-width: 700px)');
+  function positionVenueChoice() {
+    const choice = $('venue-choice');
+    if (!choice) return;
+    const formVisible = !$('form-view').classList.contains('hidden');
+    const mount = venueMobile.matches && formVisible ? $('venue-form-mount') : $('venue-home');
+    if (choice.parentElement !== mount) mount.append(choice);
+  }
+  venueMobile.addEventListener('change', positionVenueChoice);
   function showView(id) {
     ['slots-view', 'form-view', 'confirm-view'].forEach(v =>
       $(v).classList.toggle('hidden', v !== id)
     );
+    positionVenueChoice();
   }
 
   // Returning from Stripe Checkout (success_url): the payment was captured and the booking
@@ -673,6 +759,13 @@ body {
   // ── Booking form ──────────────────────────────────────────────────────────
   $('booking-form').addEventListener('submit', async e => {
     e.preventDefault();
+    if (venueToggle?.checked && !venueAddress.value.trim()) {
+      venueAddress.setCustomValidity('Enter a meeting location.');
+      $('form-error').textContent = 'Enter a meeting location.';
+      venueAddress.reportValidity();
+      venueAddress.focus();
+      return;
+    }
     if (!pickedSlot) return;
     const form  = e.target;
     const btn   = $('submit-btn');
@@ -718,7 +811,8 @@ body {
           start_at: pickedSlot.start,
           name: form.name.value.trim(),
           email: form.email.value.trim(),
-          phone: form.elements.phone?.value.trim() || "",
+          phone: venueToggle?.checked ? '' : (form.elements.phone?.value.trim() || ''),
+          physical_location: venueToggle?.checked ? venueAddress.value.trim() : '',
           timezone: TZ,
           language: LOCALE,
           hp_extra: form.hp_extra.value,
@@ -751,6 +845,10 @@ body {
       // Paid event types: the server holds the slot and returns a Stripe Checkout URL —
       // redirect there to pay. The booking is confirmed by webhook once payment completes.
       if (booked && booked.checkout_url) { window.location.href = booked.checkout_url; return; }
+      if (booked?.physical_location) {
+        $('confirm-location').textContent = booked.physical_location;
+        $('confirm-location').hidden = false;
+      }
       if (booked && Array.isArray(booked.hosts) && booked.hosts.length) {
         booked.hosts.forEach(h => { hostMeta[h.id] = { name: h.name, avatar_url: h.avatar_url || '' }; });
         renderHosts(booked.hosts.map(h => h.id));
@@ -881,10 +979,20 @@ body {
     return d;
   }
 
+  function fitPanel() {
+    var viewport = window.visualViewport;
+    if (!viewport) return;
+    panel.style.setProperty('--asst-viewport', viewport.height + 'px');
+    panel.style.setProperty('--asst-keyboard', Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop) + 'px');
+  }
+  window.visualViewport?.addEventListener('resize', fitPanel);
+  window.visualViewport?.addEventListener('scroll', fitPanel);
   function openPanel() {
+    fitPanel();
     panel.hidden = false; openBtn.hidden = true;
     openBtn.setAttribute('aria-expanded', 'true');
-    input.focus();
+    if (!matchMedia('(max-width: 700px)').matches) input.focus();
+    else closeBtn.focus({preventScroll: true});
   }
   function closePanel() {
     panel.hidden = true; openBtn.hidden = false;

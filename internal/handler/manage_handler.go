@@ -51,16 +51,18 @@ type managePageData struct {
 	// MinNoticeLabel is the translated minimum-notice duration ("4 hours") of the event
 	// type being rescheduled, or "" when it sets none. Reschedule goes through the same
 	// /slots endpoint as booking, so the same policy hides the same nearest times (#20).
-	MinNoticeLabel  string
-	DurationLabel   string
-	LocationLabel   string
-	PriceLabel      string // empty on manage → the eventMeta partial omits the price row
-	MaxFutureDays   int
-	DurationMinutes int
-	CurrentStartISO string // RFC3339 for JS
-	OrganizerTZ     string
-	Status          string // "confirmed" or "cancelled"
-	TokenInvalid    bool   // token not found or expired
+	MinNoticeLabel   string
+	DurationLabel    string
+	LocationLabel    string
+	PhysicalLocation string
+	VideoURL         string
+	PriceLabel       string // empty on manage → the eventMeta partial omits the price row
+	MaxFutureDays    int
+	DurationMinutes  int
+	CurrentStartISO  string // RFC3339 for JS
+	OrganizerTZ      string
+	Status           string // "confirmed" or "cancelled"
+	TokenInvalid     bool   // token not found or expired
 	// Tracking
 	HeadHTML         template.HTML
 	DataLayerEnabled bool
@@ -164,7 +166,9 @@ func (h *Handler) ManagePage(w http.ResponseWriter, r *http.Request) {
 		SoleHostName:     soleHost,
 		MinNoticeLabel:   noticeLabel(minNotice, loc),
 		DurationLabel:    durationLabel(durMins, loc),
-		LocationLabel:    locationLabel(locType, locValue, loc),
+		LocationLabel:    locationLabel(locType, locationValueForLabel(locType, locValue, b.PhysicalLocation), loc),
+		PhysicalLocation: b.PhysicalLocation,
+		VideoURL:         inPersonVideoURL(b),
 		MaxFutureDays:    maxDays,
 		DurationMinutes:  durMins,
 		CurrentStartISO:  b.StartAt.UTC().Format(time.RFC3339),
@@ -410,4 +414,18 @@ func (h *Handler) CancelByToken(w http.ResponseWriter, r *http.Request) {
 	// Same multi-host fan-out as the admin cancel path (Group bookings remove the
 	// event from every assigned host's calendar and notify each).
 	go h.cancelSideEffects(*b) // #nosec G118 -- deliberately its own context.Background(); see cancelSideEffects' doc comment
+}
+
+func inPersonVideoURL(b *booking.Booking) string {
+	if b.PhysicalLocation != "" && videoMeetingLocation(b.LocationType) {
+		return b.LocationValue
+	}
+	return ""
+}
+
+func locationValueForLabel(locationType, value, physicalLocation string) string {
+	if locationType == "in_person" && physicalLocation != "" {
+		return ""
+	}
+	return value
 }

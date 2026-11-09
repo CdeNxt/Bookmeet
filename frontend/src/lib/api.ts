@@ -25,6 +25,8 @@ export type EventType = {
 	/** Lower first on public person/team pages; ties sort by name, then slug. */
 	display_order: number;
 	allow_phone_call: boolean;
+	allow_in_person: boolean;
+	in_person_video: boolean;
 	id: string;
 	slug: string;
 	name: string;
@@ -112,6 +114,7 @@ export type Booking = {
 	attendees: { name: string; email: string }[];
 	created_at: string;
 	host_name?: string; // populated only in the admin "All bookings" view
+	physical_location?: string;
 	location_value?: string;
 	/** Payment fields — present only for paid bookings (omitted when free). */
 	payment_status?: 'pending' | 'paid' | 'refunded';

@@ -10,6 +10,9 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
+	"os"
+	"regexp"
 	"strings"
 
 	"github.com/calnode/calnode/internal/i18n"
@@ -54,6 +57,9 @@ type bookPageData struct {
 	ExperienceJS    template.JS
 
 	PhoneChoice      bool
+	InPersonChoice   bool
+	PlacesSearch     bool
+	DirectoryURL     string
 	AccentColor      string
 	AccentForeground string
 	Slug             string
@@ -473,17 +479,19 @@ func (h *Handler) BookPage(w http.ResponseWriter, r *http.Request) {
 		currency       string
 		msgGreeting    sql.NullString
 		allowPhoneCall bool
+		allowInPerson  bool
+		ownerHandle    string
 		accentColor    string
 	)
 	err := h.db.QueryRowContext(r.Context(), `
 		SELECT et.id, et.name, COALESCE(et.description, ''),
 		       et.duration_minutes, et.location_type, COALESCE(et.location_value, ''),
 		       et.max_future_days, et.min_notice_minutes, et.routing_mode, u.name, COALESCE(u.avatar_url, ''),
-		       et.price_cents, et.currency, et.msg_greeting, et.allow_phone_call, u.booking_accent
+		       et.price_cents, et.currency, et.msg_greeting, et.allow_phone_call, u.booking_accent, et.allow_in_person, COALESCE(u.handle, '')
 		FROM event_types et
 		JOIN users u ON u.id = et.user_id
 		WHERE et.slug = ? AND et.is_active = 1 AND et.is_public = 1`,
-		slug).Scan(&etID, &name, &description, &durMins, &locType, &locValue, &maxDays, &minNotice, &routingMode, &hostName, &avatarURL, &priceCents, &currency, &msgGreeting, &allowPhoneCall, &accentColor)
+		slug).Scan(&etID, &name, &description, &durMins, &locType, &locValue, &maxDays, &minNotice, &routingMode, &hostName, &avatarURL, &priceCents, &currency, &msgGreeting, &allowPhoneCall, &accentColor, &allowInPerson, &ownerHandle)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "Page not found", http.StatusNotFound)
@@ -548,6 +556,9 @@ func (h *Handler) BookPage(w http.ResponseWriter, r *http.Request) {
 	data := bookPageData{
 		GroupTimes: brand.GroupTimes, PublicTheme: brand.PublicTheme, PublicCopyJSON: brand.PublicCopyJSON(), PublicSkinHTML: template.HTML(bookmeetSkinHTML),
 		BookingEffect: brand.BookingEffect, CancelEffect: brand.CancelEffect, HideAttribution: brand.HideAttribution, ExperienceJS: template.JS(bookmeetEffectsJS),
+		InPersonChoice:      allowInPerson,
+		PlacesSearch:        allowInPerson && strings.TrimSpace(os.Getenv("BOOKMEET_GOOGLE_PLACES_KEY")) != "",
+		DirectoryURL:        bookingDirectoryURL(r, ownerHandle),
 		PhoneChoice:         allowPhoneCall && onlineMeetingLocation(locType),
 		AccentColor:         accentColor,
 		AccentForeground:    accentForeground(accentColor),
@@ -608,4 +619,16 @@ func (h *Handler) BookPage(w http.ResponseWriter, r *http.Request) {
 	if err := bookTmpl.Execute(w, data); err != nil {
 		h.logger.ErrorContext(r.Context(), "book page: template", "error", err)
 	}
+}
+
+var directoryPath = regexp.MustCompile(`^/(u|team)/[a-zA-Z0-9_-]+$`)
+
+func bookingDirectoryURL(r *http.Request, handle string) string {
+	if ref, err := url.Parse(r.Referer()); err == nil && ref.Host == r.Host && directoryPath.MatchString(ref.Path) {
+		return ref.Path
+	}
+	if handle != "" {
+		return "/u/" + url.PathEscape(handle)
+	}
+	return ""
 }

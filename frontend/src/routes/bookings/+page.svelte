@@ -521,13 +521,14 @@
 												</dd>
 											</div>
 										{/if}
-										{#if b.location_value}
+										{#if b.physical_location || b.location_value}
 											<div class="flex gap-4">
 												<dt class="w-48 shrink-0 font-medium text-foreground">Location</dt>
 												<dd class="break-all text-muted-foreground">
-													{#if /^https?:/.test(b.location_value)}
+													{#if b.physical_location}<div class="break-words">{b.physical_location}</div>{/if}
+                                            {#if b.location_value && b.location_value !== b.physical_location && /^https?:/.test(b.location_value)}
 														<a href={b.location_value} target="_blank" rel="noopener noreferrer" class="text-primary underline">{b.location_value}</a>
-													{:else}{b.location_value}{/if}
+													{:else if b.location_value !== b.physical_location}{b.location_value}{/if}
 												</dd>
 											</div>
 										{/if}

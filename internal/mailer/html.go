@@ -73,7 +73,7 @@ var htmlConfirmOrg = content(`{{define "content"}}
 <tr>` + labelTD + `{{.T "email_label_event"}}</td><td style="padding:5px 0;font-weight:500;vertical-align:top;">{{.EventTypeName}}</td></tr>
 <tr>` + labelTD + `{{.T "email_label_with"}}</td>` + valueTD + `{{.HostName}}</td></tr>
 <tr>` + labelTD + `{{.T "email_label_when"}}</td>` + valueTD + `{{.WhenFmt}}</td></tr>
-{{if .LocationValue}}<tr>` + labelTD + `{{.T "email_label_location"}}</td><td style="padding:5px 0;vertical-align:top;word-break:break-word;">{{.LocationValue}}</td></tr>{{end}}
+{{if .MeetingLocation}}<tr>` + labelTD + `{{.T "email_label_location"}}</td><td style="padding:5px 0;vertical-align:top;word-break:break-word;">{{.MeetingLocation}}</td></tr>{{end}}
 {{template "cardClose" .}}
 {{template "mngBtn" .}}
 {{template "calBtns" .}}
@@ -88,7 +88,7 @@ var htmlConfirmHost = content(`{{define "content"}}
 <tr>` + labelTD + `Event</td><td style="padding:5px 0;font-weight:500;vertical-align:top;">{{.EventTypeName}}</td></tr>
 <tr>` + labelTD + `With</td>` + valueTD + `{{.OrganizerName}} &lt;{{.OrganizerEmail}}&gt;</td></tr>
 <tr>` + labelTD + `When</td>` + valueTD + `{{.WhenFmt}}</td></tr>
-{{if .LocationValue}}<tr>` + labelTD + `Location</td><td style="padding:5px 0;vertical-align:top;word-break:break-word;">{{.LocationValue}}</td></tr>{{end}}
+{{if .MeetingLocation}}<tr>` + labelTD + `Location</td><td style="padding:5px 0;vertical-align:top;word-break:break-word;">{{.MeetingLocation}}</td></tr>{{end}}
 {{template "cardClose" .}}
 {{template "ref" .}}
 {{end}}`)
@@ -126,7 +126,7 @@ var htmlRescheduleOrg = content(`{{define "content"}}
 <tr>` + labelTD + `{{.T "email_label_with"}}</td>` + valueTD + `{{.HostName}}</td></tr>
 <tr><td style="color:#a1a1aa;padding:5px 0;width:84px;vertical-align:top;text-decoration:line-through;">{{.T "email_label_was"}}</td><td style="padding:5px 0;vertical-align:top;color:#a1a1aa;text-decoration:line-through;">{{.PreviousStartFmt}}</td></tr>
 <tr>` + labelTD + `{{.T "email_label_now"}}</td><td style="padding:5px 0;font-weight:500;vertical-align:top;">{{.WhenFmt}}</td></tr>
-{{if .LocationValue}}<tr>` + labelTD + `{{.T "email_label_location"}}</td><td style="padding:5px 0;vertical-align:top;word-break:break-word;">{{.LocationValue}}</td></tr>{{end}}
+{{if .MeetingLocation}}<tr>` + labelTD + `{{.T "email_label_location"}}</td><td style="padding:5px 0;vertical-align:top;word-break:break-word;">{{.MeetingLocation}}</td></tr>{{end}}
 {{template "cardClose" .}}
 {{template "mngBtn" .}}
 {{template "calBtns" .}}
@@ -142,7 +142,7 @@ var htmlRescheduleHost = content(`{{define "content"}}
 <tr>` + labelTD + `With</td>` + valueTD + `{{.OrganizerName}} &lt;{{.OrganizerEmail}}&gt;</td></tr>
 <tr><td style="color:#a1a1aa;padding:5px 0;width:84px;vertical-align:top;text-decoration:line-through;">Was</td><td style="padding:5px 0;vertical-align:top;color:#a1a1aa;text-decoration:line-through;">{{.PreviousStartFmt}}</td></tr>
 <tr>` + labelTD + `Now</td><td style="padding:5px 0;font-weight:500;vertical-align:top;">{{.WhenFmt}}</td></tr>
-{{if .LocationValue}}<tr>` + labelTD + `Location</td><td style="padding:5px 0;vertical-align:top;word-break:break-word;">{{.LocationValue}}</td></tr>{{end}}
+{{if .MeetingLocation}}<tr>` + labelTD + `Location</td><td style="padding:5px 0;vertical-align:top;word-break:break-word;">{{.MeetingLocation}}</td></tr>{{end}}
 {{template "cardClose" .}}
 {{template "ref" .}}
 {{end}}`)
@@ -154,7 +154,7 @@ var htmlReminderOrg = content(`{{define "content"}}
 <tr>` + labelTD + `{{.T "email_label_event"}}</td><td style="padding:5px 0;font-weight:500;vertical-align:top;">{{.EventTypeName}}</td></tr>
 <tr>` + labelTD + `{{.T "email_label_with"}}</td>` + valueTD + `{{.HostName}}</td></tr>
 <tr>` + labelTD + `{{.T "email_label_when"}}</td>` + valueTD + `{{.WhenFmt}}</td></tr>
-{{if .LocationValue}}<tr>` + labelTD + `{{.T "email_label_location"}}</td><td style="padding:5px 0;vertical-align:top;word-break:break-word;">{{.LocationValue}}</td></tr>{{end}}
+{{if .MeetingLocation}}<tr>` + labelTD + `{{.T "email_label_location"}}</td><td style="padding:5px 0;vertical-align:top;word-break:break-word;">{{.MeetingLocation}}</td></tr>{{end}}
 {{template "cardClose" .}}
 {{template "mngBtn" .}}
 {{template "calBtns" .}}

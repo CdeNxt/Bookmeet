@@ -41,9 +41,12 @@ func BuildICS(d BookingData, method string) []byte {
 	if d.ManageURL != "" {
 		desc += "\n" + d.T("email_manage_this_booking") + " " + d.ManageURL
 	}
+	if d.PhysicalLocation != "" && d.LocationValue != "" && d.LocationValue != d.PhysicalLocation {
+		desc += "\nVideo: " + d.LocationValue
+	}
 	writeICSLine(&b, "DESCRIPTION:"+escapeICSText(desc))
-	if d.LocationValue != "" {
-		writeICSLine(&b, "LOCATION:"+escapeICSText(d.LocationValue))
+	if location := d.CalendarLocation(); location != "" {
+		writeICSLine(&b, "LOCATION:"+escapeICSText(location))
 	}
 	orgName, orgEmail := d.HostName, d.HostEmail
 	if d.HideHostInInvite {

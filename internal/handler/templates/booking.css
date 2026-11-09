@@ -361,7 +361,7 @@
 /* Persistent AI-disclosure notice (EU AI Act Art. 50(1)): stays pinned above the
    conversation log, not part of scrollback, not dismissible. */
 .asst-disclosure { padding: 0 1rem .625rem; font-size: .75rem; line-height: 1.4; color: #6b7280; }
-.asst-log { flex: 1; display: flex; flex-direction: column; gap: .5rem; overflow-y: auto; padding: 1rem; }
+.asst-log { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: .5rem; overflow-y: auto; padding: 1rem; }
 .asst-msg { max-width: 85%; padding: .5rem .75rem; border-radius: 12px; font-size: .875rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
 .asst-msg.bot { align-self: flex-start; background: #f3f4f6; color: #111827; border-bottom-left-radius: 4px; }
 .asst-msg.user { align-self: flex-end; background: #111827; color: #fff; border-bottom-right-radius: 4px; }
@@ -389,7 +389,16 @@
 .asst-link:focus-visible { outline: 2px solid rgba(14,165,233,.35); outline-offset: 2px; }
 
 @media (max-width: 700px) {
-  .asst-panel { right: 8px; left: 8px; bottom: 8px; width: auto; max-width: none; height: 72vh; }
+  .asst-panel {
+    right: max(8px, env(safe-area-inset-right));
+    left: max(8px, env(safe-area-inset-left));
+    bottom: calc(max(8px, env(safe-area-inset-bottom)) + var(--asst-keyboard, 0px));
+    width: auto; max-width: none; height: 72dvh;
+    max-height: calc(var(--asst-viewport, 100dvh) - 24px);
+  }
+  .asst-input { font-size: 16px; }
+  .asst-head-row { gap: .5rem; }
+  .asst-close { flex-shrink: 0; }
   .asst-fab-btn { right: 12px; bottom: 12px; }
 }
 

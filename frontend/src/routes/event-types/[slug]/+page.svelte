@@ -308,6 +308,9 @@
 	let testSent    = $state<Partial<Record<MsgKey, boolean>>>({});
 	let testError   = $state<Partial<Record<MsgKey, string>>>({});
 
+	let allowInPerson = $state(false);
+	let inPersonVideo = $state(false);
+	const hasVideo = $derived(["google_meet", "teams", "zoom", "livekit", "custom_video"].includes(form.location_type));
 	let allowPhoneCall = $state(false);
 	const slug = $page.params.slug;
 
@@ -316,6 +319,8 @@
 		try {
 			et = await api.get<EventType>(`/v1/event-types/${slug}`);
 			allowPhoneCall = et.allow_phone_call;
+			allowInPerson = et.allow_in_person;
+			inPersonVideo = et.in_person_video;
 			form = {
 				display_order: et.display_order,
 				name: et.name,
@@ -389,6 +394,8 @@
 				show_taken_slots: form.show_taken_slots,
 				invite_delivery: form.invite_delivery,
 				allow_phone_call: allowPhoneCall,
+				allow_in_person: allowInPerson,
+				in_person_video: hasVideo && inPersonVideo,
 				location_type: form.location_type,
 				location_value: form.location_value.trim() || null,
 				buffer_before_minutes: Number(form.buffer_before_minutes),
@@ -710,6 +717,12 @@
 		<!-- Location -->
 		<div class="mt-6 border-t pt-5">
 			<p class="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Location</p>
+            <div class="mb-4 space-y-2">
+                <label class="flex items-center gap-3 text-sm"><input type="checkbox" bind:checked={allowInPerson} /> Allow guests to choose an in-person location</label>
+                {#if allowInPerson && hasVideo}
+                    <label class="flex items-center gap-3 text-sm"><input type="checkbox" bind:checked={inPersonVideo} /> Include the video link for in-person bookings</label>
+                {/if}
+            </div>
 			<div class="grid grid-cols-2 gap-4">
 				<div class="space-y-1.5">
 					<Label for="et-loc">Type</Label>
