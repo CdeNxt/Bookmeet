@@ -340,9 +340,11 @@ html body.bm-scene .card:has(#venue-results:not([hidden])){overflow:visible}
    canvas.style.transform='translate3d('+(-px*10).toFixed(2)+'px,'+(-py*7).toFixed(2)+'px,0)';
    // One painter in both modes: the light canvas is its exact CSS color inverse.
    ctx.fillStyle='#15161e';ctx.fillRect(0,0,width,height);
-   const particleGain=document.documentElement.dataset.bmTheme==='light'?1.25:1.15;
+   const mobile=width<741;
+   const themeGain=document.documentElement.dataset.bmTheme==='light'?1.25:1.15;
+   const particleGain=themeGain*(mobile?1.18:1);
    for(const s of stars){ctx.fillStyle='rgba(188,195,220,'+(s.a*particleGain)+')';ctx.fillRect(s.x*width+px*9,s.y*height+py*6,1,1)}
-   const mobile=width<741,planes=mobile?30:48,half=Math.max(width*.43,mobile?260:440),depth=half*.33;
+   const planes=mobile?30:48,half=Math.max(width*.43,mobile?260:440),depth=half*.33;
    for(let j=0;j<planes;j++){
     const z=(j/(planes-1)-.5)*2,angle=z*.64+.28*Math.sin(z*2.1+time)+time*.08+px*.22;
     const span=half*(1+.14*Math.abs(z)),cy=height*.48+z*height*.70+py*20;
@@ -355,7 +357,7 @@ html body.bm-scene .card:has(#venue-results:not([hidden])){overflow:visible}
       if(dist>1&&near>0){x+=dx/dist*near*14;y+=dy/dist*near*14}
       const quiet=Math.min(1,.48+Math.abs(x-width*.5)/(width*.38));
       const alpha=(.20+.24*(.5+.5*Math.sin(q*.87+j*1.4+time*2))+near*.24)*quiet;
-      ctx.fillStyle='rgba(188,194,220,'+Math.min(1,alpha*particleGain)+')';const size=near>.1?1.15:.8;ctx.fillRect(x,y,size,size);
+      ctx.fillStyle='rgba(188,194,220,'+Math.min(1,alpha*particleGain)+')';const size=near>.1?1.15:mobile?.95:.8;ctx.fillRect(x,y,size,size);
      }
     }
    }
