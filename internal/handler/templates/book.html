@@ -139,10 +139,10 @@ body {
     {{if .InPersonChoice}}
     <div id="venue-home"><div class="venue-choice" id="venue-choice">
       <label><input type="checkbox" id="venue-toggle"> In person</label>
-      <div id="venue-fields" class="field" hidden>
+      <div id="venue-fields" class="field venue-fields" hidden>
         <label for="venue-address">Meeting location</label>
-        <input id="venue-address" name="physical_location" form="booking-form" type="text" maxlength="500" placeholder="Place name or street address" disabled>
-        {{if .PlacesSearch}}<button type="button" id="venue-search" class="back-btn">Search places</button>
+        <input id="venue-address" name="physical_location" form="booking-form" type="text" maxlength="500" placeholder="Place name or address" autocomplete="off" data-1p-ignore disabled>
+        {{if .PlacesSearch}}<button type="button" id="venue-search" class="back-btn venue-search">Search places</button>
         <div id="venue-results" aria-live="polite"></div>{{end}}
       </div>
     </div></div>
@@ -383,8 +383,7 @@ body {
   venueToggle?.addEventListener('change', () => {
     $('venue-fields').hidden = !venueToggle.checked;
     venueAddress.disabled = !venueToggle.checked;
-    if (venueToggle.checked) venueAddress.focus();
-    else venueRequest?.abort();
+    if (!venueToggle.checked) venueRequest?.abort();
   });
   venueAddress?.addEventListener('keydown', event => {
     if (event.key === 'Enter' && venueSearch) {
