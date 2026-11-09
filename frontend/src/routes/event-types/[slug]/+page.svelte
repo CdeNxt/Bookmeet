@@ -81,6 +81,7 @@
 		invite_delivery: 'calendar' as EventType['invite_delivery'],
 		location_type: 'link', location_value: '',
 		buffer_before_minutes: 0, buffer_after_minutes: 0,
+		in_person_before_minutes: 0, in_person_after_minutes: 0, fixed_drive_minutes: 0,
 		min_notice_minutes: 0, max_future_days: 60,
 		max_active_bookings: 1,
 		price_cents: 0, currency: 'usd',
@@ -309,6 +310,10 @@
 	let testError   = $state<Partial<Record<MsgKey, string>>>({});
 
 	let allowInPerson = $state(false);
+	const basicBefore = $derived(Number(form.buffer_before_minutes) || 0);
+	const basicAfter = $derived(Number(form.buffer_after_minutes) || 0);
+	const ipBefore = $derived(basicBefore + (Number(form.in_person_before_minutes) || 0) + (Number(form.fixed_drive_minutes) || 0));
+	const ipAfter = $derived(basicAfter + (Number(form.in_person_after_minutes) || 0));
 	let inPersonVideo = $state(false);
 	const hasVideo = $derived(["google_meet", "teams", "zoom", "livekit", "custom_video"].includes(form.location_type));
 	let allowPhoneCall = $state(false);
@@ -336,6 +341,9 @@
 				location_value: et.location_value ?? '',
 				buffer_before_minutes: et.buffer_before_minutes,
 				buffer_after_minutes: et.buffer_after_minutes,
+				in_person_before_minutes: et.in_person_before_minutes ?? 0,
+				in_person_after_minutes: et.in_person_after_minutes ?? 0,
+				fixed_drive_minutes: et.fixed_drive_minutes ?? 0,
 				min_notice_minutes: et.min_notice_minutes,
 				max_future_days: et.max_future_days,
 				max_active_bookings: et.max_active_bookings,
@@ -400,6 +408,9 @@
 				location_value: form.location_value.trim() || null,
 				buffer_before_minutes: Number(form.buffer_before_minutes),
 				buffer_after_minutes: Number(form.buffer_after_minutes),
+				in_person_before_minutes: Number(form.in_person_before_minutes) || 0,
+				in_person_after_minutes: Number(form.in_person_after_minutes) || 0,
+				fixed_drive_minutes: Number(form.fixed_drive_minutes) || 0,
 				min_notice_minutes: Number(form.min_notice_minutes),
 				max_future_days: Number(form.max_future_days),
 				max_active_bookings: Number(form.max_active_bookings),
@@ -874,6 +885,37 @@
 					<Input id="et-buf-after" type="number" min="0" step="5" bind:value={form.buffer_after_minutes} />
 					<p class="text-xs text-muted-foreground">Blocked time after each meeting</p>
 				</div>
+				{#if allowInPerson}
+					<div class="col-span-2 space-y-3 rounded-md border p-3">
+						<p class="text-sm font-medium">In-person meetings</p>
+						<p class="text-xs text-muted-foreground">
+							Added to the basic buffers above, only when a guest chooses an in-person location.
+						</p>
+						<div class="grid grid-cols-3 gap-3">
+							<div class="space-y-1.5">
+								<Label for="et-ip-drive">Drive time (min)</Label>
+								<Input id="et-ip-drive" type="number" min="0" max="360" step="5" bind:value={form.fixed_drive_minutes} />
+								<p class="text-xs text-muted-foreground">Fixed travel before</p>
+							</div>
+							<div class="space-y-1.5">
+								<Label for="et-ip-before">Extra before (min)</Label>
+								<Input id="et-ip-before" type="number" min="0" max="360" step="5" bind:value={form.in_person_before_minutes} />
+								<p class="text-xs text-muted-foreground">Parking, getting settled</p>
+							</div>
+							<div class="space-y-1.5">
+								<Label for="et-ip-after">Extra after (min)</Label>
+								<Input id="et-ip-after" type="number" min="0" max="360" step="5" bind:value={form.in_person_after_minutes} />
+								<p class="text-xs text-muted-foreground">Wrap-up</p>
+							</div>
+						</div>
+						<p class="text-xs text-muted-foreground" data-testid="in-person-breakdown">
+							Reserved for an in-person meeting: <strong>{ipBefore} min before</strong>
+							({basicBefore} basic + {Number(form.in_person_before_minutes) || 0} extra + {Number(form.fixed_drive_minutes) || 0} drive)
+							and <strong>{ipAfter} min after</strong>
+							({basicAfter} basic + {Number(form.in_person_after_minutes) || 0} extra).
+						</p>
+					</div>
+				{/if}
 				<div class="space-y-1.5">
 					<Label for="et-notice">Minimum notice (min)</Label>
 					<Input id="et-notice" type="number" min="0" step="30" bind:value={form.min_notice_minutes} />

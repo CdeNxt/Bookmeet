@@ -31,6 +31,7 @@
   "all_times_taken": "Alle tijden op deze dag zijn geboekt.",
   "min_notice_hint": "Boekingen moeten minstens %s vooraf worden gemaakt.",
   "could_not_load_times": "Kon de tijden niet laden. Probeer het opnieuw.",
+  "in_person_times_changed": "Op dat tijdstip is er niet genoeg reistijd voor een afspraak op locatie. Kies een ander tijdstip.",
   "times_shown_in": "Tijden weergegeven in ",
   "payment_received": "Betaling ontvangen",
   "payment_confirmed_sub": "Je boeking is bevestigd; er is een bevestigingsmail onderweg.",

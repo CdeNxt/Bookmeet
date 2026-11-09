@@ -596,6 +596,7 @@ func TestDuplicateEventType_handlesEveryEventTypeColumn(t *testing.T) {
 		"location_type": true, "location_value": true, "allow_phone_call": true, "allow_in_person": true, "in_person_video": true,
 		"routing_mode": true, "rr_strategy": true,
 		"buffer_before_minutes": true, "buffer_after_minutes": true,
+		"in_person_before_minutes": true, "in_person_after_minutes": true, "fixed_drive_minutes": true,
 		"min_notice_minutes": true, "max_future_days": true,
 		"max_active_bookings": true, "seat_limit": true,
 		"is_public": true, "show_taken_slots": true,

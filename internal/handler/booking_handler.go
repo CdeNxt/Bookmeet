@@ -496,25 +496,28 @@ var errPaymentRequired = errors.New("this event requires payment; please book on
 // the direct booking page (book.go) always had. A future caller now gets both is_active
 // and is_public enforced by construction, not by remembering to add the check.
 type bookableEventType struct {
-	AllowPhoneCall      bool
-	AllowInPerson       bool
-	InPersonVideo       bool
-	ID                  string
-	UserID              string
-	Name                string
-	DurationMinutes     int
-	SlotIntervalMinutes int
-	LocationType        string
-	LocationValue       *string
-	RoutingMode         string
-	RRStrategy          string
-	BufferBeforeMinutes int
-	BufferAfterMinutes  int
-	MinNoticeMinutes    int
-	MaxFutureDays       int
-	MaxActiveBookings   int
-	PriceCents          int
-	Currency            string
+	AllowPhoneCall        bool
+	AllowInPerson         bool
+	InPersonVideo         bool
+	InPersonBeforeMinutes int
+	InPersonAfterMinutes  int
+	FixedDriveMinutes     int
+	ID                    string
+	UserID                string
+	Name                  string
+	DurationMinutes       int
+	SlotIntervalMinutes   int
+	LocationType          string
+	LocationValue         *string
+	RoutingMode           string
+	RRStrategy            string
+	BufferBeforeMinutes   int
+	BufferAfterMinutes    int
+	MinNoticeMinutes      int
+	MaxFutureDays         int
+	MaxActiveBookings     int
+	PriceCents            int
+	Currency              string
 	// ShowTakenSlots opts this event type into returning the starts a booking removed,
 	// so the page can grey them out. Read by the public slots endpoint only: the MCP
 	// tool and the booking assistant must keep seeing bookable times and nothing else.
@@ -535,13 +538,13 @@ func (h *Handler) loadBookableEventType(ctx context.Context, slug string) (*book
 	err := h.db.QueryRowContext(ctx, `
 		SELECT id, user_id, name, duration_minutes, slot_interval_minutes,
 		       location_type, location_value, allow_phone_call, allow_in_person, in_person_video, routing_mode, rr_strategy,
-		       buffer_before_minutes, buffer_after_minutes, min_notice_minutes, max_future_days,
+		       buffer_before_minutes, buffer_after_minutes, in_person_before_minutes, in_person_after_minutes, fixed_drive_minutes, min_notice_minutes, max_future_days,
 		       is_active, is_public, show_taken_slots, max_active_bookings, price_cents, currency,
 		       invite_delivery
 		FROM event_types WHERE slug = ?`, slug).
 		Scan(&et.ID, &et.UserID, &et.Name, &et.DurationMinutes, &et.SlotIntervalMinutes,
 			&et.LocationType, &et.LocationValue, &et.AllowPhoneCall, &et.AllowInPerson, &et.InPersonVideo, &et.RoutingMode, &et.RRStrategy,
-			&et.BufferBeforeMinutes, &et.BufferAfterMinutes, &et.MinNoticeMinutes, &et.MaxFutureDays,
+			&et.BufferBeforeMinutes, &et.BufferAfterMinutes, &et.InPersonBeforeMinutes, &et.InPersonAfterMinutes, &et.FixedDriveMinutes, &et.MinNoticeMinutes, &et.MaxFutureDays,
 			&isActive, &isPublic, &showTaken, &et.MaxActiveBookings, &et.PriceCents, &et.Currency,
 			&et.InviteDelivery)
 	if err != nil || isActive == 0 || isPublic == 0 {
@@ -952,6 +955,11 @@ func (h *Handler) CreateBooking(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var reservedBefore, reservedAfter int
+	if req.PhysicalLocation != "" {
+		reservedBefore, reservedAfter = et.inPersonReservation()
+		et.useInPersonBuffers()
+	}
 	candidates, optional, err = h.calendarFreeHosts(r.Context(), et, candidates, required, optional, startAt.UTC(), endAt)
 	if err != nil {
 		switch {
@@ -967,17 +975,19 @@ func (h *Handler) CreateBooking(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	b, err := h.bookingSvc.Create(r.Context(), booking.CreateParams{
-		EventTypeID:      et.ID,
-		HostIDs:          candidates,
-		RoutingMode:      et.RoutingMode,
-		RRStrategy:       et.RRStrategy,
-		RequiredHosts:    required,
-		OptionalHosts:    optional,
-		StartAt:          startAt.UTC(),
-		EndAt:            endAt,
-		LocationValue:    locValue,
-		PhysicalLocation: req.PhysicalLocation,
-		LocationType:     et.LocationType,
+		EventTypeID:           et.ID,
+		HostIDs:               candidates,
+		RoutingMode:           et.RoutingMode,
+		RRStrategy:            et.RRStrategy,
+		RequiredHosts:         required,
+		OptionalHosts:         optional,
+		StartAt:               startAt.UTC(),
+		EndAt:                 endAt,
+		LocationValue:         locValue,
+		PhysicalLocation:      req.PhysicalLocation,
+		ReservedBeforeMinutes: reservedBefore,
+		ReservedAfterMinutes:  reservedAfter,
+		LocationType:          et.LocationType,
 		Organizer: booking.Attendee{
 			Name:         req.Name,
 			Email:        req.Email,

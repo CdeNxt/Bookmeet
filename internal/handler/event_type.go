@@ -20,26 +20,29 @@ const (
 )
 
 type eventTypeJSON struct {
-	AllowInPerson       bool    `json:"allow_in_person"`
-	InPersonVideo       bool    `json:"in_person_video"`
-	AllowPhoneCall      bool    `json:"allow_phone_call"`
-	ID                  string  `json:"id"`
-	Slug                string  `json:"slug"`
-	Name                string  `json:"name"`
-	DisplayOrder        int     `json:"display_order"` // lower first on public directories; ties sort by name, then slug
-	Description         *string `json:"description"`
-	DurationMinutes     int     `json:"duration_minutes"`
-	SlotIntervalMinutes int     `json:"slot_interval_minutes"`
-	LocationType        string  `json:"location_type"`
-	LocationValue       *string `json:"location_value"`
-	RoutingMode         string  `json:"routing_mode"`
-	RRStrategy          string  `json:"rr_strategy"`
-	BufferBeforeMinutes int     `json:"buffer_before_minutes"`
-	BufferAfterMinutes  int     `json:"buffer_after_minutes"`
-	MinNoticeMinutes    int     `json:"min_notice_minutes"`
-	MaxFutureDays       int     `json:"max_future_days"`
-	MaxActiveBookings   int     `json:"max_active_bookings"`
-	IsActive            bool    `json:"is_active"`
+	AllowInPerson         bool    `json:"allow_in_person"`
+	InPersonVideo         bool    `json:"in_person_video"`
+	InPersonBeforeMinutes int     `json:"in_person_before_minutes"`
+	InPersonAfterMinutes  int     `json:"in_person_after_minutes"`
+	FixedDriveMinutes     int     `json:"fixed_drive_minutes"`
+	AllowPhoneCall        bool    `json:"allow_phone_call"`
+	ID                    string  `json:"id"`
+	Slug                  string  `json:"slug"`
+	Name                  string  `json:"name"`
+	DisplayOrder          int     `json:"display_order"` // lower first on public directories; ties sort by name, then slug
+	Description           *string `json:"description"`
+	DurationMinutes       int     `json:"duration_minutes"`
+	SlotIntervalMinutes   int     `json:"slot_interval_minutes"`
+	LocationType          string  `json:"location_type"`
+	LocationValue         *string `json:"location_value"`
+	RoutingMode           string  `json:"routing_mode"`
+	RRStrategy            string  `json:"rr_strategy"`
+	BufferBeforeMinutes   int     `json:"buffer_before_minutes"`
+	BufferAfterMinutes    int     `json:"buffer_after_minutes"`
+	MinNoticeMinutes      int     `json:"min_notice_minutes"`
+	MaxFutureDays         int     `json:"max_future_days"`
+	MaxActiveBookings     int     `json:"max_active_bookings"`
+	IsActive              bool    `json:"is_active"`
 	// ShowTakenSlots renders already-booked times greyed out on the booking page
 	// instead of omitting them. Off by default: the slots endpoint is public, so this
 	// makes the host's booked hours legible to anyone with the link (#19).
@@ -115,7 +118,7 @@ func scanEventTypeRow(s rowScanner, trailing ...any) (*eventTypeJSON, error) {
 		&et.DurationMinutes, &et.SlotIntervalMinutes,
 		&et.LocationType, &locVal, &et.AllowPhoneCall, &et.AllowInPerson, &et.InPersonVideo,
 		&et.RoutingMode, &et.RRStrategy,
-		&et.BufferBeforeMinutes, &et.BufferAfterMinutes,
+		&et.BufferBeforeMinutes, &et.BufferAfterMinutes, &et.InPersonBeforeMinutes, &et.InPersonAfterMinutes, &et.FixedDriveMinutes,
 		&et.MinNoticeMinutes, &et.MaxFutureDays, &et.MaxActiveBookings,
 		&isActive, &isPublic, &showTaken, &et.CreatedAt,
 		&msgConf, &msgCancel, &msgResched, &msgRemind, &msgGreeting,
@@ -174,7 +177,7 @@ const etColumns = `id, slug, name, description,
 	duration_minutes, slot_interval_minutes,
 	location_type, location_value, allow_phone_call, allow_in_person, in_person_video,
 	routing_mode, rr_strategy,
-	buffer_before_minutes, buffer_after_minutes,
+	buffer_before_minutes, buffer_after_minutes, in_person_before_minutes, in_person_after_minutes, fixed_drive_minutes,
 	min_notice_minutes, max_future_days, max_active_bookings,
 	is_active, is_public, show_taken_slots, created_at,
 	msg_confirmation, msg_cancellation, msg_reschedule, msg_reminder, msg_greeting,
@@ -268,25 +271,28 @@ func (h *Handler) CreateEventType(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 32<<10)
 
 	var req struct {
-		Slug                string  `json:"slug"`
-		Name                string  `json:"name"`
-		DisplayOrder        int     `json:"display_order"`
-		Description         *string `json:"description"`
-		DurationMinutes     int     `json:"duration_minutes"`
-		SlotIntervalMinutes *int    `json:"slot_interval_minutes"`
-		LocationType        *string `json:"location_type"`
-		LocationValue       *string `json:"location_value"`
-		RoutingMode         *string `json:"routing_mode"`
-		BufferBeforeMinutes *int    `json:"buffer_before_minutes"`
-		BufferAfterMinutes  *int    `json:"buffer_after_minutes"`
-		MinNoticeMinutes    *int    `json:"min_notice_minutes"`
-		MaxFutureDays       *int    `json:"max_future_days"`
-		MaxActiveBookings   *int    `json:"max_active_bookings"`
-		AllowInPerson       *bool   `json:"allow_in_person"`
-		InPersonVideo       *bool   `json:"in_person_video"`
-		AllowPhoneCall      *bool   `json:"allow_phone_call"`
-		ShowTakenSlots      *bool   `json:"show_taken_slots"`
-		InviteDelivery      *string `json:"invite_delivery"`
+		Slug                  string  `json:"slug"`
+		Name                  string  `json:"name"`
+		DisplayOrder          int     `json:"display_order"`
+		Description           *string `json:"description"`
+		DurationMinutes       int     `json:"duration_minutes"`
+		SlotIntervalMinutes   *int    `json:"slot_interval_minutes"`
+		LocationType          *string `json:"location_type"`
+		LocationValue         *string `json:"location_value"`
+		RoutingMode           *string `json:"routing_mode"`
+		BufferBeforeMinutes   *int    `json:"buffer_before_minutes"`
+		BufferAfterMinutes    *int    `json:"buffer_after_minutes"`
+		MinNoticeMinutes      *int    `json:"min_notice_minutes"`
+		MaxFutureDays         *int    `json:"max_future_days"`
+		MaxActiveBookings     *int    `json:"max_active_bookings"`
+		AllowInPerson         *bool   `json:"allow_in_person"`
+		InPersonVideo         *bool   `json:"in_person_video"`
+		InPersonBeforeMinutes *int    `json:"in_person_before_minutes"`
+		InPersonAfterMinutes  *int    `json:"in_person_after_minutes"`
+		FixedDriveMinutes     *int    `json:"fixed_drive_minutes"`
+		AllowPhoneCall        *bool   `json:"allow_phone_call"`
+		ShowTakenSlots        *bool   `json:"show_taken_slots"`
+		InviteDelivery        *string `json:"invite_delivery"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid JSON")
@@ -390,12 +396,12 @@ func (h *Handler) CreateEventType(w http.ResponseWriter, r *http.Request) {
 		   slot_interval_minutes, location_type, location_value, allow_phone_call, allow_in_person, in_person_video,
 		   routing_mode, buffer_before_minutes, buffer_after_minutes,
 		   min_notice_minutes, max_future_days, max_active_bookings, show_taken_slots, invite_delivery,
-		   msg_confirmation, msg_cancellation, msg_reschedule, msg_reminder, display_order)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		   msg_confirmation, msg_cancellation, msg_reschedule, msg_reminder, display_order, in_person_before_minutes, in_person_after_minutes, fixed_drive_minutes)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?,0), COALESCE(?,0), COALESCE(?,0))`,
 		id, user.ID, req.Slug, req.Name, req.Description,
 		req.DurationMinutes, slotInterval, locType, req.LocationValue, req.AllowPhoneCall != nil && *req.AllowPhoneCall, req.AllowInPerson != nil && *req.AllowInPerson, req.InPersonVideo != nil && *req.InPersonVideo,
 		routingMode, bufBefore, bufAfter, minNotice, maxFuture, maxActive, showTaken, inviteDelivery,
-		defaultMsgConfirmation, defaultMsgCancellation, defaultMsgReschedule, defaultMsgReminder, req.DisplayOrder)
+		defaultMsgConfirmation, defaultMsgCancellation, defaultMsgReschedule, defaultMsgReminder, req.DisplayOrder, req.InPersonBeforeMinutes, req.InPersonAfterMinutes, req.FixedDriveMinutes)
 	if err != nil {
 		if db.IsUniqueViolation(err) {
 			h.writeError(w, http.StatusConflict, "slug already in use")
@@ -505,41 +511,44 @@ func (h *Handler) PatchEventType(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 32<<10)
 
 	var req struct {
-		Slug                *string `json:"slug"`
-		Name                *string `json:"name"`
-		DisplayOrder        *int    `json:"display_order"`
-		Description         *string `json:"description"`
-		DurationMinutes     *int    `json:"duration_minutes"`
-		SlotIntervalMinutes *int    `json:"slot_interval_minutes"`
-		LocationType        *string `json:"location_type"`
-		LocationValue       *string `json:"location_value"`
-		RoutingMode         *string `json:"routing_mode"`
-		RRStrategy          *string `json:"rr_strategy"`
-		BufferBeforeMinutes *int    `json:"buffer_before_minutes"`
-		BufferAfterMinutes  *int    `json:"buffer_after_minutes"`
-		MinNoticeMinutes    *int    `json:"min_notice_minutes"`
-		MaxFutureDays       *int    `json:"max_future_days"`
-		MaxActiveBookings   *int    `json:"max_active_bookings"`
-		IsActive            *bool   `json:"is_active"`
-		IsPublic            *bool   `json:"is_public"`
-		AllowInPerson       *bool   `json:"allow_in_person"`
-		InPersonVideo       *bool   `json:"in_person_video"`
-		AllowPhoneCall      *bool   `json:"allow_phone_call"`
-		ShowTakenSlots      *bool   `json:"show_taken_slots"`
-		InviteDelivery      *string `json:"invite_delivery"`
-		Archived            *bool   `json:"archived"`
-		MsgConfirmation     *string `json:"msg_confirmation"`
-		MsgCancellation     *string `json:"msg_cancellation"`
-		MsgReschedule       *string `json:"msg_reschedule"`
-		MsgReminder         *string `json:"msg_reminder"`
-		MsgGreeting         *string `json:"msg_greeting"`
-		SubjConfirmation    *string `json:"subj_confirmation"`
-		SubjCancellation    *string `json:"subj_cancellation"`
-		SubjReschedule      *string `json:"subj_reschedule"`
-		SubjReminder        *string `json:"subj_reminder"`
-		PriceCents          *int    `json:"price_cents"`
-		Currency            *string `json:"currency"`
-		Reminders           []int   `json:"reminders"` // nil = don't touch; [] = clear all
+		Slug                  *string `json:"slug"`
+		Name                  *string `json:"name"`
+		DisplayOrder          *int    `json:"display_order"`
+		Description           *string `json:"description"`
+		DurationMinutes       *int    `json:"duration_minutes"`
+		SlotIntervalMinutes   *int    `json:"slot_interval_minutes"`
+		LocationType          *string `json:"location_type"`
+		LocationValue         *string `json:"location_value"`
+		RoutingMode           *string `json:"routing_mode"`
+		RRStrategy            *string `json:"rr_strategy"`
+		BufferBeforeMinutes   *int    `json:"buffer_before_minutes"`
+		BufferAfterMinutes    *int    `json:"buffer_after_minutes"`
+		MinNoticeMinutes      *int    `json:"min_notice_minutes"`
+		MaxFutureDays         *int    `json:"max_future_days"`
+		MaxActiveBookings     *int    `json:"max_active_bookings"`
+		IsActive              *bool   `json:"is_active"`
+		IsPublic              *bool   `json:"is_public"`
+		AllowInPerson         *bool   `json:"allow_in_person"`
+		InPersonVideo         *bool   `json:"in_person_video"`
+		InPersonBeforeMinutes *int    `json:"in_person_before_minutes"`
+		InPersonAfterMinutes  *int    `json:"in_person_after_minutes"`
+		FixedDriveMinutes     *int    `json:"fixed_drive_minutes"`
+		AllowPhoneCall        *bool   `json:"allow_phone_call"`
+		ShowTakenSlots        *bool   `json:"show_taken_slots"`
+		InviteDelivery        *string `json:"invite_delivery"`
+		Archived              *bool   `json:"archived"`
+		MsgConfirmation       *string `json:"msg_confirmation"`
+		MsgCancellation       *string `json:"msg_cancellation"`
+		MsgReschedule         *string `json:"msg_reschedule"`
+		MsgReminder           *string `json:"msg_reminder"`
+		MsgGreeting           *string `json:"msg_greeting"`
+		SubjConfirmation      *string `json:"subj_confirmation"`
+		SubjCancellation      *string `json:"subj_cancellation"`
+		SubjReschedule        *string `json:"subj_reschedule"`
+		SubjReminder          *string `json:"subj_reminder"`
+		PriceCents            *int    `json:"price_cents"`
+		Currency              *string `json:"currency"`
+		Reminders             []int   `json:"reminders"` // nil = don't touch; [] = clear all
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid JSON")
@@ -618,6 +627,19 @@ func (h *Handler) PatchEventType(w http.ResponseWriter, r *http.Request) {
 		default:
 			h.writeError(w, http.StatusBadRequest, "rr_strategy must be 'even', 'soonest', or 'priority'")
 			return
+		}
+	}
+	for name, value := range map[string]*int{
+		"in_person_before_minutes": req.InPersonBeforeMinutes,
+		"in_person_after_minutes":  req.InPersonAfterMinutes,
+		"fixed_drive_minutes":      req.FixedDriveMinutes,
+	} {
+		if value != nil {
+			if *value < 0 || *value > 360 {
+				h.writeError(w, http.StatusBadRequest, name+" must be between 0 and 360")
+				return
+			}
+			set(name, *value)
 		}
 	}
 	if req.BufferBeforeMinutes != nil {

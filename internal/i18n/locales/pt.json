@@ -31,6 +31,7 @@
   "all_times_taken": "Todos os horários deste dia estão reservados.",
   "min_notice_hint": "As reservas devem ser feitas com pelo menos %s de antecedência.",
   "could_not_load_times": "Não foi possível carregar os horários. Tente novamente.",
+  "in_person_times_changed": "Esse horário não deixa tempo suficiente de deslocamento para uma reunião presencial. Escolha outro.",
   "times_shown_in": "Horários apresentados em ",
   "payment_received": "Pagamento recebido",
   "payment_confirmed_sub": "A sua marcação está confirmada; vai receber um e-mail de confirmação.",

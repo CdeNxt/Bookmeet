@@ -53,6 +53,11 @@ export type EventType = {
 	location_value?: string;
 	buffer_before_minutes: number;
 	buffer_after_minutes: number;
+	/** Extra time reserved only for in-person bookings, on top of the basic buffers. */
+	in_person_before_minutes: number;
+	in_person_after_minutes: number;
+	/** Fixed travel time to the venue, added before an in-person meeting. */
+	fixed_drive_minutes: number;
 	min_notice_minutes: number;
 	max_future_days: number;
 	max_active_bookings: number;

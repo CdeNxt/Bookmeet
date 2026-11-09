@@ -31,6 +31,7 @@
   "all_times_taken": "Alla tider den här dagen är bokade.",
   "min_notice_hint": "Bokningar måste göras minst %s i förväg.",
   "could_not_load_times": "Det gick inte att läsa in tiderna. Försök igen.",
+  "in_person_times_changed": "Den tiden lämnar inte tillräcklig restid för ett möte på plats. Välj en annan tid.",
   "times_shown_in": "Tider visas i ",
   "payment_received": "Betalning mottagen",
   "payment_confirmed_sub": "Din bokning är bekräftad – ett bekräftelsemejl är på väg.",

@@ -68,7 +68,7 @@ func (h *Handler) GetSlots(w http.ResponseWriter, r *http.Request) {
 	// when the event type opted in; computeSlots enforces the second half.
 	res, err := h.computeSlots(r.Context(), slug, tzName,
 		r.URL.Query().Get("from"), r.URL.Query().Get("to"),
-		slotsWanted{Taken: true, NoticeGap: true})
+		slotsWanted{Taken: true, NoticeGap: true, InPerson: r.URL.Query().Get("in_person") == "1"})
 	switch {
 	case errors.Is(err, errEventTypeNotFound):
 		h.writeError(w, http.StatusNotFound, "event type not found")
@@ -148,6 +148,7 @@ func (h *Handler) GetSlots(w http.ResponseWriter, r *http.Request) {
 // human staring at a thin calendar; an agent is handed only bookable times and has
 // nothing to explain.
 type slotsWanted struct {
+	InPerson bool
 	// Taken asks for the starts a booking or calendar conflict removed. Still subject
 	// to the event type's own show_taken_slots opt-in.
 	Taken bool
@@ -166,6 +167,9 @@ func (h *Handler) computeSlots(ctx context.Context, slug, tzName, fromStr, toStr
 		return slotsResult{}, err
 	}
 
+	if want.InPerson && et.AllowInPerson {
+		et.useInPersonBuffers()
+	}
 	if tzName == "" {
 		tzName = "UTC"
 	}
@@ -450,7 +454,7 @@ func (h *Handler) hostAvailability(ctx context.Context, userID, eventTypeID stri
 	// busy — join booking_hosts rather than matching bookings.host_id, so a host on
 	// a multi-host call isn't offered an overlapping slot on another event.
 	busyRows, err := h.db.QueryContext(ctx, `
-		SELECT b.start_at, b.end_at FROM bookings b
+		SELECT b.start_at, b.end_at, b.reserved_before_minutes, b.reserved_after_minutes FROM bookings b
 		JOIN booking_hosts bh ON bh.booking_id = b.id
 		WHERE bh.user_id = ? AND b.status != 'cancelled'
 		  AND b.start_at >= ? AND b.start_at < ?`,
@@ -462,7 +466,8 @@ func (h *Handler) hostAvailability(ctx context.Context, userID, eventTypeID stri
 	var busy []slots.Interval
 	for busyRows.Next() {
 		var startStr, endStr string
-		if err := busyRows.Scan(&startStr, &endStr); err != nil {
+		var before, after int
+		if err := busyRows.Scan(&startStr, &endStr, &before, &after); err != nil {
 			return slots.HostAvailability{}, false, err
 		}
 		s, err1 := time.Parse(time.RFC3339Nano, startStr)
@@ -470,7 +475,7 @@ func (h *Handler) hostAvailability(ctx context.Context, userID, eventTypeID stri
 		if err1 != nil || err2 != nil {
 			continue
 		}
-		busy = append(busy, slots.Interval{Start: s, End: e})
+		busy = append(busy, slots.Interval{Start: s.Add(-time.Duration(before) * time.Minute), End: e.Add(time.Duration(after) * time.Minute)})
 	}
 	if err := busyRows.Err(); err != nil {
 		return slots.HostAvailability{}, false, err

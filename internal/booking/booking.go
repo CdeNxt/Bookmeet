@@ -35,21 +35,23 @@ const (
 
 // Booking is a confirmed or cancelled appointment.
 type Booking struct {
-	ID                 string
-	EventTypeID        string
-	HostID             string
-	StartAt            time.Time
-	EndAt              time.Time
-	Status             string
-	CancellationReason string
-	PhysicalLocation   string
-	LocationValue      string
-	LocationType       string
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
-	PaymentStatus      string // none | pending | paid | refunded | refunding (refund claimed, Stripe call in flight)
-	AmountPaidCents    int
-	AmountPaidCurrency string
+	ID                    string
+	EventTypeID           string
+	HostID                string
+	StartAt               time.Time
+	EndAt                 time.Time
+	Status                string
+	CancellationReason    string
+	PhysicalLocation      string
+	ReservedBeforeMinutes int
+	ReservedAfterMinutes  int
+	LocationValue         string
+	LocationType          string
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+	PaymentStatus         string // none | pending | paid | refunded | refunding (refund claimed, Stripe call in flight)
+	AmountPaidCents       int
+	AmountPaidCurrency    string
 	// ConfirmFailed reports whether the initial confirmation email failed (after
 	// retry). Operator-visible via the booking JSON; see migration 00064.
 	ConfirmFailed bool
@@ -95,14 +97,16 @@ type CreateParams struct {
 	RRStrategy string
 	// OptionalHosts attend only if free at booking time; they never block the
 	// booking (Group/collective "optional" hosts). Busy ones are simply omitted.
-	OptionalHosts    []string
-	StartAt          time.Time
-	EndAt            time.Time
-	PhysicalLocation string
-	LocationValue    string
-	LocationType     string
-	Organizer        Attendee
-	Answers          []Answer
+	OptionalHosts         []string
+	StartAt               time.Time
+	EndAt                 time.Time
+	PhysicalLocation      string
+	ReservedBeforeMinutes int
+	ReservedAfterMinutes  int
+	LocationValue         string
+	LocationType          string
+	Organizer             Attendee
+	Answers               []Answer
 	// MaxActivePerInvitee caps how many active (upcoming, non-cancelled) bookings
 	// the organizer's email may already hold for this event type. 0 = unlimited.
 	MaxActivePerInvitee int

@@ -31,6 +31,7 @@
   "all_times_taken": "Every time on this day is booked.",
   "min_notice_hint": "Bookings must be made at least %s in advance.",
   "could_not_load_times": "Could not load times. Please try again.",
+  "in_person_times_changed": "That time doesn't leave enough travel time for an in-person meeting. Please choose another.",
   "times_shown_in": "Times shown in ",
   "payment_received": "Payment received",
   "payment_confirmed_sub": "Your booking is confirmed — a confirmation email is on its way.",

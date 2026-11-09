@@ -39,6 +39,7 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (*Booking, error) 
 
 	startStr := p.StartAt.UTC().Format(time.RFC3339Nano)
 	endStr := p.EndAt.UTC().Format(time.RFC3339Nano)
+	busyStart, busyEnd := reservedWindow(p.StartAt, p.EndAt, p.ReservedBeforeMinutes, p.ReservedAfterMinutes)
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -58,7 +59,7 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (*Booking, error) 
 	if p.RoutingMode == "round_robin" {
 		// Fixed hosts always attend — all must be free.
 		for _, hostID := range p.RequiredHosts {
-			busy, err := hostBusy(ctx, tx, hostID, startStr, endStr, "")
+			busy, err := hostBusy(ctx, tx, hostID, busyStart, busyEnd, "")
 			if err != nil {
 				return nil, fmt.Errorf("booking: overlap check: %w", err)
 			}
@@ -70,7 +71,7 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (*Booking, error) 
 		// Rotation pool — pick exactly one free host by strategy.
 		var free []string
 		for _, hostID := range p.HostIDs {
-			busy, err := hostBusy(ctx, tx, hostID, startStr, endStr, "")
+			busy, err := hostBusy(ctx, tx, hostID, busyStart, busyEnd, "")
 			if err != nil {
 				return nil, fmt.Errorf("booking: overlap check: %w", err)
 			}
@@ -89,7 +90,7 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (*Booking, error) 
 		assigned = append(assigned, chosen)
 	} else {
 		for _, hostID := range p.HostIDs {
-			busy, err := hostBusy(ctx, tx, hostID, startStr, endStr, "")
+			busy, err := hostBusy(ctx, tx, hostID, busyStart, busyEnd, "")
 			if err != nil {
 				return nil, fmt.Errorf("booking: overlap check: %w", err)
 			}
@@ -106,7 +107,7 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (*Booking, error) 
 		if slices.Contains(assigned, hostID) {
 			continue
 		}
-		busy, err := hostBusy(ctx, tx, hostID, startStr, endStr, "")
+		busy, err := hostBusy(ctx, tx, hostID, busyStart, busyEnd, "")
 		if err != nil {
 			return nil, fmt.Errorf("booking: optional overlap check: %w", err)
 		}
@@ -160,10 +161,10 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (*Booking, error) 
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO bookings
 		  (id, event_type_id, host_id, start_at, end_at, status, location_value, location_type,
-		   invite_delivery, physical_location, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?)`,
+		   invite_delivery, physical_location, reserved_before_minutes, reserved_after_minutes, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?, ?, ?)`,
 		bookingID, p.EventTypeID, chosenHost, startStr, endStr, p.LocationValue, p.LocationType,
-		inviteDelivery, p.PhysicalLocation, now, now)
+		inviteDelivery, p.PhysicalLocation, p.ReservedBeforeMinutes, p.ReservedAfterMinutes, now, now)
 	if err != nil {
 		if db.IsUniqueViolation(err) {
 			return nil, ErrDoubleBooked
@@ -308,7 +309,7 @@ const bookingColumns = `id, event_type_id, host_id, start_at, end_at, status,
 	       COALESCE(cancellation_reason, ''), COALESCE(location_value, ''),
 	       created_at, updated_at,
 	       payment_status, amount_paid_cents, amount_paid_currency, location_type,
-	       confirm_failed, invite_delivery, physical_location`
+	       confirm_failed, invite_delivery, physical_location, reserved_before_minutes, reserved_after_minutes`
 
 // hostBusy reports whether hostID has any non-cancelled booking overlapping
 // [start, end) — the double-booking invariant every write path (Create, Reschedule,
@@ -331,12 +332,20 @@ func hostBusy(ctx context.Context, tx *sql.Tx, hostID, start, end, excludeBookin
             WHERE checked.user_id = ? AND checked.check_conflicts = 1
               AND destination.user_id = bh.user_id AND destination.is_destination = 1
         )) AND b.status != 'cancelled' AND b.id != ?
-		  AND b.start_at < ? AND b.end_at > ?`,
+		  AND (CASE WHEN b.reserved_before_minutes = 0 THEN julianday(b.start_at)
+		          ELSE julianday(b.start_at, printf('-%d minutes', b.reserved_before_minutes)) END) < julianday(?)
+		  AND (CASE WHEN b.reserved_after_minutes = 0 THEN julianday(b.end_at)
+		          ELSE julianday(b.end_at, printf('+%d minutes', b.reserved_after_minutes)) END) > julianday(?)`,
 		hostID, hostID, excludeBookingID, end, start).Scan(&n)
 	return n > 0, err
 }
 
 // Get returns a single booking by ID.
+func reservedWindow(start, end time.Time, before, after int) (string, string) {
+	return start.UTC().Add(-time.Duration(before) * time.Minute).Format(time.RFC3339Nano),
+		end.UTC().Add(time.Duration(after) * time.Minute).Format(time.RFC3339Nano)
+}
+
 func (s *Service) Get(ctx context.Context, id string) (*Booking, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT `+bookingColumns+` FROM bookings WHERE id = ?`, id)
 	return scanBooking(row)
@@ -544,8 +553,9 @@ func (s *Service) Reschedule(ctx context.Context, bookingID string, newStart, ne
 	if len(hostIDs) == 0 { // legacy booking with no booking_hosts rows
 		hostIDs = []string{b.HostID}
 	}
+	busyStart, busyEnd := reservedWindow(newStart, newEnd, b.ReservedBeforeMinutes, b.ReservedAfterMinutes)
 	for _, hid := range hostIDs {
-		busy, err := hostBusy(ctx, tx, hid, startStr, endStr, bookingID)
+		busy, err := hostBusy(ctx, tx, hid, busyStart, busyEnd, bookingID)
 		if err != nil {
 			return nil, fmt.Errorf("booking: reschedule overlap: %w", err)
 		}
@@ -599,11 +609,9 @@ func (s *Service) ReassignHost(ctx context.Context, bookingID, newHostID string)
 		return b, nil // already this host — nothing to do
 	}
 
-	startStr := b.StartAt.UTC().Format(time.RFC3339Nano)
-	endStr := b.EndAt.UTC().Format(time.RFC3339Nano)
-
 	// The new host must be free at this time across everything they attend.
-	busy, err := hostBusy(ctx, tx, newHostID, startStr, endStr, bookingID)
+	busyStart, busyEnd := reservedWindow(b.StartAt, b.EndAt, b.ReservedBeforeMinutes, b.ReservedAfterMinutes)
+	busy, err := hostBusy(ctx, tx, newHostID, busyStart, busyEnd, bookingID)
 	if err != nil {
 		return nil, fmt.Errorf("booking: reassign overlap: %w", err)
 	}
@@ -735,7 +743,7 @@ func scanBooking(s scanner) (*Booking, error) {
 		&b.CancellationReason, &b.LocationValue,
 		&createdStr, &updatedStr,
 		&b.PaymentStatus, &b.AmountPaidCents, &b.AmountPaidCurrency, &b.LocationType,
-		&confirmFailed, &b.InviteDelivery, &b.PhysicalLocation,
+		&confirmFailed, &b.InviteDelivery, &b.PhysicalLocation, &b.ReservedBeforeMinutes, &b.ReservedAfterMinutes,
 	)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound

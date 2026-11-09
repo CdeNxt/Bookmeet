@@ -263,6 +263,9 @@ body {
 
   const TOKEN       = {{.Token}};
   const SLUG        = {{.EventTypeSlug}};
+  // An in-person booking reserves travel and extra buffer time, so rescheduling it must be
+  // offered the same in-person set of times the booking page used.
+  const IN_PERSON_QS = {{if .PhysicalLocation}}'&in_person=1'{{else}}''{{end}};
   const MAX_DAYS    = {{.MaxFutureDays}};
   const CURRENT_ISO = {{.CurrentStartISO}};
   const ORG_TZ      = {{.OrganizerTZ}};
@@ -338,7 +341,7 @@ body {
     const lastDay = new Date(y, m + 1, 0).getDate();
     const to = toDateStr(y, m, lastDay);
     try {
-      const r = await fetch(`/v1/event-types/${SLUG}/slots?from=${from}&to=${to}&tz=${encodeURIComponent(TZ)}`);
+      const r = await fetch(`/v1/event-types/${SLUG}/slots?from=${from}&to=${to}&tz=${encodeURIComponent(TZ)}${IN_PERSON_QS}`);
       if (!r.ok) throw new Error(r.status);
       const data = await r.json();
       // Cache the month's slots grouped by the SELECTED-timezone day (BookingLogic — tested,
@@ -515,7 +518,7 @@ body {
     // Fallback (clicked before the month load finished): fetch just this day.
     list.innerHTML = `<p class="hint">${t('loading')}</p>`;
     try {
-      const r = await fetch(`/v1/event-types/${SLUG}/slots?from=${ds}&to=${ds}&tz=${encodeURIComponent(TZ)}`);
+      const r = await fetch(`/v1/event-types/${SLUG}/slots?from=${ds}&to=${ds}&tz=${encodeURIComponent(TZ)}${IN_PERSON_QS}`);
       if (!r.ok) throw new Error(r.status);
       const data = await r.json();
       ((data.min_notice && data.min_notice.dates) || []).forEach(k => noticeDates.add(k));
