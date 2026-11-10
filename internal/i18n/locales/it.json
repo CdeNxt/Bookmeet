@@ -32,6 +32,7 @@
   "min_notice_hint": "Le prenotazioni devono essere effettuate almeno %s in anticipo.",
   "could_not_load_times": "Impossibile caricare gli orari. Riprovi.",
   "in_person_times_changed": "Questo orario non lascia abbastanza tempo per gli spostamenti per un incontro di persona. Scegline un altro.",
+  "travel_checking": "Calcolo del tempo di viaggio… un momento, stiamo verificando la disponibilità.",
   "times_shown_in": "Orari mostrati in ",
   "payment_received": "Pagamento ricevuto",
   "payment_confirmed_sub": "La sua prenotazione è confermata; a breve riceverà un'email di conferma.",

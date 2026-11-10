@@ -37,7 +37,7 @@ func TestHostAvailability_includesAdjacentUTCDayBooking(t *testing.T) {
 
 	// The booker requests slots for local day 18 Jun → UTC-midnight window.
 	dateFrom := time.Date(2027, 6, 18, 0, 0, 0, 0, time.UTC)
-	ha, degraded, err := h.hostAvailability(context.Background(), "u1", "et1", dateFrom, dateFrom)
+	ha, degraded, err := h.hostAvailability(context.Background(), "u1", "et1", dateFrom, dateFrom, nil)
 	if err != nil {
 		t.Fatalf("hostAvailability: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestHostAvailability_includesNonPrimaryGroupSeat(t *testing.T) {
 	database.Exec(`INSERT INTO booking_hosts (id,booking_id,user_id,is_primary) VALUES ('bh-s','b2','u1',0)`)
 
 	dateFrom := time.Date(2027, 6, 18, 0, 0, 0, 0, time.UTC)
-	ha, degraded, err := h.hostAvailability(context.Background(), "u1", "et1", dateFrom, dateFrom)
+	ha, degraded, err := h.hostAvailability(context.Background(), "u1", "et1", dateFrom, dateFrom, nil)
 	if err != nil {
 		t.Fatalf("hostAvailability: %v", err)
 	}

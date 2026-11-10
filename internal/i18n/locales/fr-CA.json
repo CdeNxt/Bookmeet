@@ -32,6 +32,7 @@
   "min_notice_hint": "Les réservations doivent être effectuées au moins %s à l'avance.",
   "could_not_load_times": "Impossible de charger les créneaux. Veuillez réessayer.",
   "in_person_times_changed": "Cet horaire ne laisse pas assez de temps de déplacement pour une rencontre en personne. Veuillez en choisir un autre.",
+  "travel_checking": "Prise en compte du temps de déplacement… un instant, nous vérifions les disponibilités.",
   "times_shown_in": "Horaires affichés en ",
   "payment_received": "Paiement reçu",
   "payment_confirmed_sub": "Votre réservation est confirmée; un courriel de confirmation va vous parvenir.",

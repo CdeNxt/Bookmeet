@@ -502,22 +502,27 @@ type bookableEventType struct {
 	InPersonBeforeMinutes int
 	InPersonAfterMinutes  int
 	FixedDriveMinutes     int
-	ID                    string
-	UserID                string
-	Name                  string
-	DurationMinutes       int
-	SlotIntervalMinutes   int
-	LocationType          string
-	LocationValue         *string
-	RoutingMode           string
-	RRStrategy            string
-	BufferBeforeMinutes   int
-	BufferAfterMinutes    int
-	MinNoticeMinutes      int
-	MaxFutureDays         int
-	MaxActiveBookings     int
-	PriceCents            int
-	Currency              string
+	// TravelMode is 'fixed' or 'google'. TravelDestination is set per request, never stored:
+	// the address the guest chose, once known, which switches Google mode from the fixed
+	// estimate to per-meeting drive times.
+	TravelMode          string
+	TravelDestination   string
+	ID                  string
+	UserID              string
+	Name                string
+	DurationMinutes     int
+	SlotIntervalMinutes int
+	LocationType        string
+	LocationValue       *string
+	RoutingMode         string
+	RRStrategy          string
+	BufferBeforeMinutes int
+	BufferAfterMinutes  int
+	MinNoticeMinutes    int
+	MaxFutureDays       int
+	MaxActiveBookings   int
+	PriceCents          int
+	Currency            string
 	// ShowTakenSlots opts this event type into returning the starts a booking removed,
 	// so the page can grey them out. Read by the public slots endpoint only: the MCP
 	// tool and the booking assistant must keep seeing bookable times and nothing else.
@@ -538,13 +543,13 @@ func (h *Handler) loadBookableEventType(ctx context.Context, slug string) (*book
 	err := h.db.QueryRowContext(ctx, `
 		SELECT id, user_id, name, duration_minutes, slot_interval_minutes,
 		       location_type, location_value, allow_phone_call, allow_in_person, in_person_video, routing_mode, rr_strategy,
-		       buffer_before_minutes, buffer_after_minutes, in_person_before_minutes, in_person_after_minutes, fixed_drive_minutes, min_notice_minutes, max_future_days,
+		       buffer_before_minutes, buffer_after_minutes, in_person_before_minutes, in_person_after_minutes, fixed_drive_minutes, travel_mode, min_notice_minutes, max_future_days,
 		       is_active, is_public, show_taken_slots, max_active_bookings, price_cents, currency,
 		       invite_delivery
 		FROM event_types WHERE slug = ?`, slug).
 		Scan(&et.ID, &et.UserID, &et.Name, &et.DurationMinutes, &et.SlotIntervalMinutes,
 			&et.LocationType, &et.LocationValue, &et.AllowPhoneCall, &et.AllowInPerson, &et.InPersonVideo, &et.RoutingMode, &et.RRStrategy,
-			&et.BufferBeforeMinutes, &et.BufferAfterMinutes, &et.InPersonBeforeMinutes, &et.InPersonAfterMinutes, &et.FixedDriveMinutes, &et.MinNoticeMinutes, &et.MaxFutureDays,
+			&et.BufferBeforeMinutes, &et.BufferAfterMinutes, &et.InPersonBeforeMinutes, &et.InPersonAfterMinutes, &et.FixedDriveMinutes, &et.TravelMode, &et.MinNoticeMinutes, &et.MaxFutureDays,
 			&isActive, &isPublic, &showTaken, &et.MaxActiveBookings, &et.PriceCents, &et.Currency,
 			&et.InviteDelivery)
 	if err != nil || isActive == 0 || isPublic == 0 {
@@ -957,8 +962,22 @@ func (h *Handler) CreateBooking(w http.ResponseWriter, r *http.Request) {
 
 	var reservedBefore, reservedAfter int
 	if req.PhysicalLocation != "" {
+		if et.TravelMode == travelModeGoogle {
+			et.TravelDestination = req.PhysicalLocation
+		}
 		reservedBefore, reservedAfter = et.inPersonReservation()
-		et.useInPersonBuffers()
+		if et.googleTravel() {
+			// Drive from where the host will be (their previous in-person meeting, else home)
+			// to this address, and on to the next in-person meeting. The same lookups, cache
+			// and fixed fallback as the slot list, so a time offered is a time that books.
+			origin, next := h.travelNeighbours(r.Context(), candidates[0], startAt, endAt)
+			tq := &travelQuery{Dest: req.PhysicalLocation, Fallback: et.FixedDriveMinutes}
+			reservedBefore += tq.minutes(r.Context(), h, origin)
+			if next != "" {
+				reservedAfter += tq.minutes(r.Context(), h, next)
+			}
+		}
+		et.applyReservation(reservedBefore, reservedAfter)
 	}
 	candidates, optional, err = h.calendarFreeHosts(r.Context(), et, candidates, required, optional, startAt.UTC(), endAt)
 	if err != nil {

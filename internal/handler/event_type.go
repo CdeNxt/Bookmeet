@@ -22,6 +22,7 @@ const (
 type eventTypeJSON struct {
 	AllowInPerson         bool    `json:"allow_in_person"`
 	InPersonVideo         bool    `json:"in_person_video"`
+	TravelMode            string  `json:"travel_mode"`
 	InPersonBeforeMinutes int     `json:"in_person_before_minutes"`
 	InPersonAfterMinutes  int     `json:"in_person_after_minutes"`
 	FixedDriveMinutes     int     `json:"fixed_drive_minutes"`
@@ -118,7 +119,7 @@ func scanEventTypeRow(s rowScanner, trailing ...any) (*eventTypeJSON, error) {
 		&et.DurationMinutes, &et.SlotIntervalMinutes,
 		&et.LocationType, &locVal, &et.AllowPhoneCall, &et.AllowInPerson, &et.InPersonVideo,
 		&et.RoutingMode, &et.RRStrategy,
-		&et.BufferBeforeMinutes, &et.BufferAfterMinutes, &et.InPersonBeforeMinutes, &et.InPersonAfterMinutes, &et.FixedDriveMinutes,
+		&et.BufferBeforeMinutes, &et.BufferAfterMinutes, &et.InPersonBeforeMinutes, &et.InPersonAfterMinutes, &et.FixedDriveMinutes, &et.TravelMode,
 		&et.MinNoticeMinutes, &et.MaxFutureDays, &et.MaxActiveBookings,
 		&isActive, &isPublic, &showTaken, &et.CreatedAt,
 		&msgConf, &msgCancel, &msgResched, &msgRemind, &msgGreeting,
@@ -177,7 +178,7 @@ const etColumns = `id, slug, name, description,
 	duration_minutes, slot_interval_minutes,
 	location_type, location_value, allow_phone_call, allow_in_person, in_person_video,
 	routing_mode, rr_strategy,
-	buffer_before_minutes, buffer_after_minutes, in_person_before_minutes, in_person_after_minutes, fixed_drive_minutes,
+	buffer_before_minutes, buffer_after_minutes, in_person_before_minutes, in_person_after_minutes, fixed_drive_minutes, travel_mode,
 	min_notice_minutes, max_future_days, max_active_bookings,
 	is_active, is_public, show_taken_slots, created_at,
 	msg_confirmation, msg_cancellation, msg_reschedule, msg_reminder, msg_greeting,
@@ -287,6 +288,7 @@ func (h *Handler) CreateEventType(w http.ResponseWriter, r *http.Request) {
 		MaxActiveBookings     *int    `json:"max_active_bookings"`
 		AllowInPerson         *bool   `json:"allow_in_person"`
 		InPersonVideo         *bool   `json:"in_person_video"`
+		TravelMode            *string `json:"travel_mode"`
 		InPersonBeforeMinutes *int    `json:"in_person_before_minutes"`
 		InPersonAfterMinutes  *int    `json:"in_person_after_minutes"`
 		FixedDriveMinutes     *int    `json:"fixed_drive_minutes"`
@@ -308,6 +310,10 @@ func (h *Handler) CreateEventType(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.DurationMinutes <= 0 {
 		h.writeError(w, http.StatusBadRequest, "duration_minutes must be positive")
+		return
+	}
+	if req.TravelMode != nil && *req.TravelMode != travelModeFixed && *req.TravelMode != travelModeGoogle {
+		h.writeError(w, http.StatusBadRequest, "travel_mode must be 'fixed' or 'google'")
 		return
 	}
 
@@ -396,12 +402,12 @@ func (h *Handler) CreateEventType(w http.ResponseWriter, r *http.Request) {
 		   slot_interval_minutes, location_type, location_value, allow_phone_call, allow_in_person, in_person_video,
 		   routing_mode, buffer_before_minutes, buffer_after_minutes,
 		   min_notice_minutes, max_future_days, max_active_bookings, show_taken_slots, invite_delivery,
-		   msg_confirmation, msg_cancellation, msg_reschedule, msg_reminder, display_order, in_person_before_minutes, in_person_after_minutes, fixed_drive_minutes)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?,0), COALESCE(?,0), COALESCE(?,0))`,
+		   msg_confirmation, msg_cancellation, msg_reschedule, msg_reminder, display_order, in_person_before_minutes, in_person_after_minutes, fixed_drive_minutes, travel_mode)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?,0), COALESCE(?,0), COALESCE(?,0), COALESCE(?,'fixed'))`,
 		id, user.ID, req.Slug, req.Name, req.Description,
 		req.DurationMinutes, slotInterval, locType, req.LocationValue, req.AllowPhoneCall != nil && *req.AllowPhoneCall, req.AllowInPerson != nil && *req.AllowInPerson, req.InPersonVideo != nil && *req.InPersonVideo,
 		routingMode, bufBefore, bufAfter, minNotice, maxFuture, maxActive, showTaken, inviteDelivery,
-		defaultMsgConfirmation, defaultMsgCancellation, defaultMsgReschedule, defaultMsgReminder, req.DisplayOrder, req.InPersonBeforeMinutes, req.InPersonAfterMinutes, req.FixedDriveMinutes)
+		defaultMsgConfirmation, defaultMsgCancellation, defaultMsgReschedule, defaultMsgReminder, req.DisplayOrder, req.InPersonBeforeMinutes, req.InPersonAfterMinutes, req.FixedDriveMinutes, req.TravelMode)
 	if err != nil {
 		if db.IsUniqueViolation(err) {
 			h.writeError(w, http.StatusConflict, "slug already in use")
@@ -530,6 +536,7 @@ func (h *Handler) PatchEventType(w http.ResponseWriter, r *http.Request) {
 		IsPublic              *bool   `json:"is_public"`
 		AllowInPerson         *bool   `json:"allow_in_person"`
 		InPersonVideo         *bool   `json:"in_person_video"`
+		TravelMode            *string `json:"travel_mode"`
 		InPersonBeforeMinutes *int    `json:"in_person_before_minutes"`
 		InPersonAfterMinutes  *int    `json:"in_person_after_minutes"`
 		FixedDriveMinutes     *int    `json:"fixed_drive_minutes"`
@@ -641,6 +648,13 @@ func (h *Handler) PatchEventType(w http.ResponseWriter, r *http.Request) {
 			}
 			set(name, *value)
 		}
+	}
+	if req.TravelMode != nil {
+		if *req.TravelMode != travelModeFixed && *req.TravelMode != travelModeGoogle {
+			h.writeError(w, http.StatusBadRequest, "travel_mode must be 'fixed' or 'google'")
+			return
+		}
+		set("travel_mode", *req.TravelMode)
 	}
 	if req.BufferBeforeMinutes != nil {
 		set("buffer_before_minutes", *req.BufferBeforeMinutes)

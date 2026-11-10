@@ -82,6 +82,7 @@
 		location_type: 'link', location_value: '',
 		buffer_before_minutes: 0, buffer_after_minutes: 0,
 		in_person_before_minutes: 0, in_person_after_minutes: 0, fixed_drive_minutes: 0,
+		travel_mode: 'fixed' as 'fixed' | 'google',
 		min_notice_minutes: 0, max_future_days: 60,
 		max_active_bookings: 1,
 		price_cents: 0, currency: 'usd',
@@ -309,10 +310,14 @@
 	let testSent    = $state<Partial<Record<MsgKey, boolean>>>({});
 	let testError   = $state<Partial<Record<MsgKey, string>>>({});
 
+	const TRAVEL_MODES = [
+		{ value: 'fixed', label: 'Fixed drive time' },
+		{ value: 'google', label: 'Estimate with Google Maps' }
+	] as const;
 	let allowInPerson = $state(false);
 	const basicBefore = $derived(Number(form.buffer_before_minutes) || 0);
 	const basicAfter = $derived(Number(form.buffer_after_minutes) || 0);
-	const ipBefore = $derived(basicBefore + (Number(form.in_person_before_minutes) || 0) + (Number(form.fixed_drive_minutes) || 0));
+	const ipBefore = $derived(basicBefore + (Number(form.in_person_before_minutes) || 0) + (form.travel_mode === 'fixed' ? Number(form.fixed_drive_minutes) || 0 : 0));
 	const ipAfter = $derived(basicAfter + (Number(form.in_person_after_minutes) || 0));
 	let inPersonVideo = $state(false);
 	const hasVideo = $derived(["google_meet", "teams", "zoom", "livekit", "custom_video"].includes(form.location_type));
@@ -344,6 +349,7 @@
 				in_person_before_minutes: et.in_person_before_minutes ?? 0,
 				in_person_after_minutes: et.in_person_after_minutes ?? 0,
 				fixed_drive_minutes: et.fixed_drive_minutes ?? 0,
+				travel_mode: et.travel_mode ?? 'fixed',
 				min_notice_minutes: et.min_notice_minutes,
 				max_future_days: et.max_future_days,
 				max_active_bookings: et.max_active_bookings,
@@ -411,6 +417,7 @@
 				in_person_before_minutes: Number(form.in_person_before_minutes) || 0,
 				in_person_after_minutes: Number(form.in_person_after_minutes) || 0,
 				fixed_drive_minutes: Number(form.fixed_drive_minutes) || 0,
+				travel_mode: form.travel_mode,
 				min_notice_minutes: Number(form.min_notice_minutes),
 				max_future_days: Number(form.max_future_days),
 				max_active_bookings: Number(form.max_active_bookings),
@@ -891,9 +898,30 @@
 						<p class="text-xs text-muted-foreground">
 							Added to the basic buffers above, only when a guest chooses an in-person location.
 						</p>
+						<div class="space-y-1.5">
+							<Label for="et-ip-travel">Drive time</Label>
+							<Select.Root type="single" value={form.travel_mode} onValueChange={(v) => { if (v) form.travel_mode = v as 'fixed' | 'google'; }}>
+								<Select.Trigger id="et-ip-travel" class="w-full">
+									{TRAVEL_MODES.find((o) => o.value === form.travel_mode)?.label ?? 'Select…'}
+								</Select.Trigger>
+								<Select.Content>
+									{#each TRAVEL_MODES as o}
+										<Select.Item value={o.value} label={o.label}>{o.label}</Select.Item>
+									{/each}
+								</Select.Content>
+							</Select.Root>
+							<p class="text-xs text-muted-foreground">
+								{#if form.travel_mode === 'google'}
+									Once a guest picks an address, each time is checked against the drive from your previous in-person meeting
+									(or your home address in Settings → Profile). If Google can't work it out, the fixed minutes below are used instead.
+								{:else}
+									The same drive time is held before every in-person meeting.
+								{/if}
+							</p>
+						</div>
 						<div class="grid grid-cols-3 gap-3">
 							<div class="space-y-1.5">
-								<Label for="et-ip-drive">Drive time (min)</Label>
+								<Label for="et-ip-drive">{form.travel_mode === 'google' ? 'Fallback drive (min)' : 'Drive time (min)'}</Label>
 								<Input id="et-ip-drive" type="number" min="0" max="360" step="5" bind:value={form.fixed_drive_minutes} />
 								<p class="text-xs text-muted-foreground">Fixed travel before</p>
 							</div>
@@ -909,8 +937,8 @@
 							</div>
 						</div>
 						<p class="text-xs text-muted-foreground" data-testid="in-person-breakdown">
-							Reserved for an in-person meeting: <strong>{ipBefore} min before</strong>
-							({basicBefore} basic + {Number(form.in_person_before_minutes) || 0} extra + {Number(form.fixed_drive_minutes) || 0} drive)
+							Reserved for an in-person meeting: <strong>{ipBefore}{form.travel_mode === 'google' ? ' min + Google drive time' : ' min'} before</strong>
+							({basicBefore} basic + {Number(form.in_person_before_minutes) || 0} extra + {form.travel_mode === 'google' ? 'the drive to the guest\'s address' : (Number(form.fixed_drive_minutes) || 0) + ' drive'})
 							and <strong>{ipAfter} min after</strong>
 							({basicAfter} basic + {Number(form.in_person_after_minutes) || 0} extra).
 						</p>

@@ -43,8 +43,16 @@ Keep `upstream` pointed to Calnode/calnode. Merge each selected upstream release
 
 Keep the detailed machine-specific deployment runbook in the ignored `local/` folder. The public repository intentionally excludes live configuration, secrets, and booking tokens. Upstream license and notices are retained.
 
-## In-person travel (in progress)
+## In-person travel
 
-Shipped: per-event-type extra in-person before/after buffers and a fixed drive time (migration 00078; reserved minutes are stored on the booking and honoured by overlap checks, slots, reschedule and reassign; `GET /slots?in_person=1`; the booking page re-requests times when "In person" is ticked) and a per-user private home address (migration 00079, Settings → Profile). Basic buffers stay separate and apply to every meeting; the in-person extras are additive.
+Shipped: per-event-type extra in-person before/after buffers and drive time (migrations 00078, 00080); a per-user private home address (00079, Settings -> Profile); and Google-estimated drive time.
 
-Not built yet: Google-estimated drive time (Routes API with a server-side key; origin = previous same-day physical meeting's location, else the home address; extra manual in-person buffer still applies; "Checking travel time…" state; fall back to the fixed drive time if lookup fails or quota is hit; also check travel to the next known destination; never show the home address to guests). Embed widget has no in-person option and needs no change today.
+- **Basic buffers apply to every meeting; the in-person extras are additive.** Reserved minutes are stored on the booking (`reserved_before/after_minutes`) and honoured by overlap checks, slots, reschedule and reassign. `GET /slots?in_person=1&location=<address>` returns the in-person set; the booking page re-requests it when "In person" is ticked or the address changes and shows "Factoring in drive time...". If the already-picked time no longer fits, the guest is sent back to choose.
+- **Drive time modes (`event_types.travel_mode`):** `fixed` holds `fixed_drive_minutes` before every in-person meeting. `google` asks the Routes API (`internal/handler/travel.go`): each of the host's other meetings is widened by the drive between its address (or the host's home address when it has none) and the guest's address; at booking the same lookups set the reserved time (previous in-person meeting or home -> guest address, and guest address -> next in-person meeting). Until an address is known, `fixed_drive_minutes` stands in.
+- **Fallbacks and limits:** any lookup failure (no key, daily cap of 400 lookups, Google error, unroutable address) uses `fixed_drive_minutes`; one failure stops further Google calls for that request; answers are cached 12 h. The home address and other meetings' addresses are only sent to Google as route endpoints, never returned to guests.
+- **Key:** `BOOKMEET_GOOGLE_ROUTES_KEY`, else the existing `BOOKMEET_GOOGLE_PLACES_KEY` (set in the app's env file). The Routes API must be enabled on that Google Cloud project. `BOOKMEET_ROUTES_URL` redirects the endpoint for tests only.
+- **Known gaps:** only Bookmeet bookings supply neighbouring meeting addresses; events that exist only on the host's Google Calendar are not read for locations. Rescheduling re-offers times with Google drive times, but the final overlap check uses the allowance the booking already holds. The embed widget has no in-person option.
+
+## Build version on public pages
+
+The public skin shows the build version (`packaging/home-assistant/version.txt`, stamped into the binary by CI) in small type at the foot of every public page. Bump `version.txt` for every release so the number changes with each push that gets deployed.

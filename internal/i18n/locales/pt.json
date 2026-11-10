@@ -32,6 +32,7 @@
   "min_notice_hint": "As reservas devem ser feitas com pelo menos %s de antecedência.",
   "could_not_load_times": "Não foi possível carregar os horários. Tente novamente.",
   "in_person_times_changed": "Esse horário não deixa tempo suficiente de deslocamento para uma reunião presencial. Escolha outro.",
+  "travel_checking": "A calcular o tempo de deslocação… um momento enquanto verificamos a disponibilidade.",
   "times_shown_in": "Horários apresentados em ",
   "payment_received": "Pagamento recebido",
   "payment_confirmed_sub": "A sua marcação está confirmada; vai receber um e-mail de confirmação.",

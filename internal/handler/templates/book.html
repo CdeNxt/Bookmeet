@@ -150,6 +150,7 @@ body {
             <div class="venue-attribution" translate="no">Google Maps</div>
           </div>{{end}}
         </div>
+        <p id="travel-status" class="hint" role="status" aria-live="polite" hidden></p>
         {{if .MapsEmbedKey}}<iframe id="venue-map" title="Meeting location on Google Maps" referrerpolicy="strict-origin-when-cross-origin" loading="lazy" allowfullscreen hidden></iframe>{{end}}
       </div>
     </div></div>
@@ -420,6 +421,7 @@ body {
   function chooseVenue(place) {
     venueAddress.value = place;
     closeVenueResults();
+    refreshTimesForVenue();
     refreshVenueMap();
     venueAddress.focus();
   }
@@ -437,26 +439,49 @@ body {
   });
   // In-person bookings reserve travel and extra buffer time, so the server offers a
   // different set of times for them. Ask for that set whenever the box is ticked.
-  function inPersonQS() { return venueToggle?.checked ? '&in_person=1' : ''; }
-  venueToggle?.addEventListener('change', async () => {
+  function inPersonQS() {
+    if (!venueToggle?.checked) return '';
+    const where = venueAddress.value.trim();
+    // The address lets the server work out the drive from each neighbouring meeting.
+    return '&in_person=1' + (where ? '&location=' + encodeURIComponent(where.slice(0, 500)) : '');
+  }
+  // Reload the times for the in-person choice and address, and if the time already picked no
+  // longer leaves room to get there, send the guest back to choose again. The status line is
+  // what they see while the server works out the drive.
+  let venueRefresh = 0, venueRefreshedFor = '';
+  async function refreshTimesForVenue() {
+    const status = $('travel-status');
+    const wanted = inPersonQS();
+    if (wanted === venueRefreshedFor) return;
+    venueRefreshedFor = wanted;
+    const mine = ++venueRefresh;
+    const picked = pickedSlot && pickedSlot.start;
+    const looksUp = venueToggle.checked && venueAddress.value.trim() !== '';
+    if (looksUp && status) { status.textContent = t('travel_checking'); status.hidden = false; }
+    await loadMonthAvailability(navYear, navMonth);
+    if (mine !== venueRefresh) return; // a newer choice is already being checked
+    if (status) status.hidden = true;
+    if (pickedDate) {
+      const ds = toDateStr(pickedDate.getFullYear(), pickedDate.getMonth(), pickedDate.getDate());
+      slotsCache = slotsByDay[ds] || [];
+      if (picked && !slotsCache.some(sl => !sl.taken && sl.start === picked)) {
+        pickedSlot = null;
+        fillSlots($('slots-list'), ds);
+        showView('slots-view');
+        $('slots-list').insertAdjacentHTML('afterbegin', `<p class="hint" role="alert">${esc(t('in_person_times_changed'))}</p>`);
+      } else if (!picked && !$('slots-view').classList.contains('hidden')) {
+        fillSlots($('slots-list'), ds);
+      }
+    }
+  }
+  venueToggle?.addEventListener('change', () => {
     $('venue-fields').hidden = !venueToggle.checked;
     venueAddress.disabled = !venueToggle.checked;
     closeVenueResults();
     refreshVenueMap();
-    // The time was picked before this choice. Reload what is on offer and, if the
-    // picked time no longer fits with the in-person allowance, send them back to pick again.
-    const picked = pickedSlot && pickedSlot.start;
-    await loadMonthAvailability(navYear, navMonth);
-    if (!picked || !pickedDate) return;
-    const ds = toDateStr(pickedDate.getFullYear(), pickedDate.getMonth(), pickedDate.getDate());
-    const stillOffered = (slotsByDay[ds] || []).some(s => !s.taken && s.start === picked);
-    if (stillOffered) return;
-    pickedSlot = null;
-    slotsCache = slotsByDay[ds] || [];
-    fillSlots($('slots-list'), ds);
-    showView('slots-view');
-    $('slots-list').insertAdjacentHTML('afterbegin', `<p class="hint" role="alert">${esc(t('in_person_times_changed'))}</p>`);
+    refreshTimesForVenue();
   });
+  venueAddress?.addEventListener('change', refreshTimesForVenue);
   venueAddress?.addEventListener('blur', closeVenueResults);
   venueOptions?.addEventListener('mousedown', event => event.preventDefault());
   venueAddress?.addEventListener('keydown', event => {

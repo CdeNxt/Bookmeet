@@ -68,7 +68,7 @@ func (h *Handler) GetSlots(w http.ResponseWriter, r *http.Request) {
 	// when the event type opted in; computeSlots enforces the second half.
 	res, err := h.computeSlots(r.Context(), slug, tzName,
 		r.URL.Query().Get("from"), r.URL.Query().Get("to"),
-		slotsWanted{Taken: true, NoticeGap: true, InPerson: r.URL.Query().Get("in_person") == "1"})
+		slotsWanted{Taken: true, NoticeGap: true, InPerson: r.URL.Query().Get("in_person") == "1", Location: strings.TrimSpace(r.URL.Query().Get("location"))})
 	switch {
 	case errors.Is(err, errEventTypeNotFound):
 		h.writeError(w, http.StatusNotFound, "event type not found")
@@ -149,6 +149,10 @@ func (h *Handler) GetSlots(w http.ResponseWriter, r *http.Request) {
 // nothing to explain.
 type slotsWanted struct {
 	InPerson bool
+	// Location is the address the guest chose for an in-person meeting. In Google drive-time
+	// mode it is what each neighbouring meeting's drive is measured to. Optional: without it
+	// the fixed drive time stands in.
+	Location string
 	// Taken asks for the starts a booking or calendar conflict removed. Still subject
 	// to the event type's own show_taken_slots opt-in.
 	Taken bool
@@ -167,7 +171,12 @@ func (h *Handler) computeSlots(ctx context.Context, slug, tzName, fromStr, toStr
 		return slotsResult{}, err
 	}
 
+	var travel *travelQuery
 	if want.InPerson && et.AllowInPerson {
+		if et.TravelMode == travelModeGoogle && want.Location != "" && len(want.Location) <= 500 {
+			et.TravelDestination = want.Location
+			travel = &travelQuery{Dest: want.Location, Fallback: et.FixedDriveMinutes}
+		}
 		et.useInPersonBuffers()
 	}
 	if tzName == "" {
@@ -228,7 +237,7 @@ func (h *Handler) computeSlots(ctx context.Context, slug, tzName, fromStr, toStr
 		wg.Add(1)
 		go func(i int, ph poolHost) {
 			defer wg.Done()
-			ha, degraded, err := h.hostAvailability(ctx, ph.id, et.ID, dateFrom, dateTo)
+			ha, degraded, err := h.hostAvailability(ctx, ph.id, et.ID, dateFrom, dateTo, travel)
 			if err != nil {
 				errsByHost[i] = err
 				return
@@ -436,7 +445,7 @@ func (h *Handler) loadHostSchedule(ctx context.Context, userID, eventTypeID stri
 	return hostLoc, rules, overrides, nil
 }
 
-func (h *Handler) hostAvailability(ctx context.Context, userID, eventTypeID string, dateFrom, dateTo time.Time) (slots.HostAvailability, bool, error) {
+func (h *Handler) hostAvailability(ctx context.Context, userID, eventTypeID string, dateFrom, dateTo time.Time, travel *travelQuery) (slots.HostAvailability, bool, error) {
 	hostLoc, rules, overrides, err := h.loadHostSchedule(ctx, userID, eventTypeID)
 	if err != nil {
 		return slots.HostAvailability{}, false, err
@@ -454,7 +463,7 @@ func (h *Handler) hostAvailability(ctx context.Context, userID, eventTypeID stri
 	// busy — join booking_hosts rather than matching bookings.host_id, so a host on
 	// a multi-host call isn't offered an overlapping slot on another event.
 	busyRows, err := h.db.QueryContext(ctx, `
-		SELECT b.start_at, b.end_at, b.reserved_before_minutes, b.reserved_after_minutes FROM bookings b
+		SELECT b.start_at, b.end_at, b.reserved_before_minutes, b.reserved_after_minutes, COALESCE(b.physical_location, '') FROM bookings b
 		JOIN booking_hosts bh ON bh.booking_id = b.id
 		WHERE bh.user_id = ? AND b.status != 'cancelled'
 		  AND b.start_at >= ? AND b.start_at < ?`,
@@ -462,23 +471,56 @@ func (h *Handler) hostAvailability(ctx context.Context, userID, eventTypeID stri
 	if err != nil {
 		return slots.HostAvailability{}, false, err
 	}
-	defer busyRows.Close()
-	var busy []slots.Interval
+	// Read every row before doing anything else: the database has a single connection, so a
+	// lookup made while this cursor is open (the home address, the Routes quota counter)
+	// would wait on the connection this loop is holding.
+	type busyRow struct {
+		start, end    string
+		before, after int
+		location      string
+	}
+	var rows []busyRow
 	for busyRows.Next() {
-		var startStr, endStr string
-		var before, after int
-		if err := busyRows.Scan(&startStr, &endStr, &before, &after); err != nil {
+		var r busyRow
+		if err := busyRows.Scan(&r.start, &r.end, &r.before, &r.after, &r.location); err != nil {
+			busyRows.Close()
 			return slots.HostAvailability{}, false, err
 		}
-		s, err1 := time.Parse(time.RFC3339Nano, startStr)
-		e, err2 := time.Parse(time.RFC3339Nano, endStr)
+		rows = append(rows, r)
+	}
+	if err := busyRows.Err(); err != nil {
+		busyRows.Close()
+		return slots.HostAvailability{}, false, err
+	}
+	busyRows.Close()
+
+	var busy []slots.Interval
+	var homeAddr string
+	homeLoaded := false
+	home := func() string {
+		if !homeLoaded {
+			homeAddr, homeLoaded = h.hostHomeAddress(ctx, userID), true
+		}
+		return homeAddr
+	}
+	for _, r := range rows {
+		s, err1 := time.Parse(time.RFC3339Nano, r.start)
+		e, err2 := time.Parse(time.RFC3339Nano, r.end)
 		if err1 != nil || err2 != nil {
 			continue
 		}
-		busy = append(busy, slots.Interval{Start: s.Add(-time.Duration(before) * time.Minute), End: e.Add(time.Duration(after) * time.Minute)})
-	}
-	if err := busyRows.Err(); err != nil {
-		return slots.HostAvailability{}, false, err
+		// Google drive time: the host has to get from this meeting to the guest's address
+		// afterwards and from there to the next meeting, so this meeting's busy time is
+		// widened by the drive between its place (or home, when it has none) and the new one.
+		drive := 0
+		if travel != nil {
+			where := r.location
+			if where == "" {
+				where = home()
+			}
+			drive = travel.minutes(ctx, h, where)
+		}
+		busy = append(busy, slots.Interval{Start: s.Add(-time.Duration(r.before+drive) * time.Minute), End: e.Add(time.Duration(r.after+drive) * time.Minute)})
 	}
 
 	// Calnode's own events on this host's calendar also show up in Google free/busy,

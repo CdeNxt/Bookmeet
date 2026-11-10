@@ -265,7 +265,7 @@ body {
   const SLUG        = {{.EventTypeSlug}};
   // An in-person booking reserves travel and extra buffer time, so rescheduling it must be
   // offered the same in-person set of times the booking page used.
-  const IN_PERSON_QS = {{if .PhysicalLocation}}'&in_person=1'{{else}}''{{end}};
+  const IN_PERSON_QS = {{if .PhysicalLocation}}'&in_person=1&location=' + encodeURIComponent({{.PhysicalLocation}}){{else}}''{{end}};
   const MAX_DAYS    = {{.MaxFutureDays}};
   const CURRENT_ISO = {{.CurrentStartISO}};
   const ORG_TZ      = {{.OrganizerTZ}};

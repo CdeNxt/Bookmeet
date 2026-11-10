@@ -32,6 +32,7 @@
   "min_notice_hint": "Buchungen müssen mindestens %s im Voraus erfolgen.",
   "could_not_load_times": "Termine konnten nicht geladen werden. Bitte versuchen Sie es erneut.",
   "in_person_times_changed": "Zu dieser Zeit bleibt nicht genug Fahrzeit für ein persönliches Treffen. Bitte wähle eine andere.",
+  "travel_checking": "Fahrzeit wird berücksichtigt … einen Moment, wir prüfen die Verfügbarkeit.",
   "times_shown_in": "Zeiten angezeigt in ",
   "payment_received": "Zahlung erhalten",
   "payment_confirmed_sub": "Ihre Buchung ist bestätigt – eine Bestätigungs-E-Mail ist unterwegs.",

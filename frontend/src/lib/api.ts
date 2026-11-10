@@ -60,6 +60,8 @@ export type EventType = {
 	in_person_after_minutes: number;
 	/** Fixed travel time to the venue, added before an in-person meeting. */
 	fixed_drive_minutes: number;
+	/** 'fixed' uses fixed_drive_minutes; 'google' estimates each trip with Google Maps and uses fixed_drive_minutes as the fallback. */
+	travel_mode: 'fixed' | 'google';
 	min_notice_minutes: number;
 	max_future_days: number;
 	max_active_bookings: number;
