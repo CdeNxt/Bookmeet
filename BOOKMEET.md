@@ -37,8 +37,14 @@ CI also runs the upstream visual and full Go suites and produces a checksummed A
 
 ## Updates and Pi packaging
 
-Keep `upstream` pointed to Calnode/calnode. Merge each selected upstream release into an upgrade branch and open a PR to `bookmeet`. Resolve the custom migrations (currently 00072–00076) explicitly if upstream uses those numbers. Test a copy of the database and smoke-test booking, invitation links, rescheduling, cancellation, appearance, and saved copy before deployment.
+Keep `upstream` pointed to Calnode/calnode. Merge each selected upstream release into an upgrade branch and open a PR to `bookmeet`. Resolve the custom migrations (currently 00072–00079) explicitly if upstream uses those numbers. Test a copy of the database and smoke-test booking, invitation links, rescheduling, cancellation, appearance, and saved copy before deployment.
 
-`packaging/home-assistant/package.py` exports the code patch relative to the pinned base and packages a supplied ARM64 binary with the Home Assistant Dockerfile. The Pi's existing updater can reapply this exported patch and run tests during an upstream update. A patch, migration, or test conflict stops that build. CI artifacts do not automatically deploy to the Pi.
+`packaging/home-assistant/package.py` exports the code patch relative to the pinned base and packages a supplied ARM64 binary with the Home Assistant Dockerfile. The Pi's existing updater can reapply this exported patch and run tests during an upstream update. A patch, migration, or test conflict stops that build. CI artifacts do not automatically deploy to the Pi: `packaging/home-assistant/deploy.sh` deploys the CI-built binary over SSH with checksums, a recovery copy and automatic rollback (see `packaging/home-assistant/README.md`).
 
 Keep the detailed machine-specific deployment runbook in the ignored `local/` folder. The public repository intentionally excludes live configuration, secrets, and booking tokens. Upstream license and notices are retained.
+
+## In-person travel (in progress)
+
+Shipped: per-event-type extra in-person before/after buffers and a fixed drive time (migration 00078; reserved minutes are stored on the booking and honoured by overlap checks, slots, reschedule and reassign; `GET /slots?in_person=1`; the booking page re-requests times when "In person" is ticked) and a per-user private home address (migration 00079, Settings → Profile). Basic buffers stay separate and apply to every meeting; the in-person extras are additive.
+
+Not built yet: Google-estimated drive time (Routes API with a server-side key; origin = previous same-day physical meeting's location, else the home address; extra manual in-person buffer still applies; "Checking travel time…" state; fall back to the fixed drive time if lookup fails or quota is hit; also check travel to the next known destination; never show the home address to guests). Embed widget has no in-person option and needs no change today.
