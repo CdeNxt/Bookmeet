@@ -36,6 +36,9 @@ running the script. The key is not in the repo. If it is missing, see "Access" b
 - To create a new key pair: `ssh-keygen -t ed25519 -N "" -f ~/.ssh/bookmeet_ha_ed25519`, then the
   owner adds the `.pub` line to the app's `authorized_keys` (use the app's "Edit in YAML"; the list
   field has failed to save).
+- Use one key per agent so each can be revoked alone (for example `~/.ssh/bookmeet_ha_ed25519` and
+  `~/.ssh/bookmeet_ha_codex_ed25519`); select it with `HA_KEY=... packaging/home-assistant/deploy.sh`.
+  A sandboxed agent needs permission to read that key and to make the SSH connection.
 - Home Assistant cannot reach the developer's Mac over the network, so always push from the
   workstation (`scp`/`ssh`). Do not plan on Home Assistant pulling from it.
 
