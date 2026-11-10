@@ -16,6 +16,7 @@
 html{background:#15161e;scroll-behavior:smooth;scroll-padding-top:28px}
 html body.bm-scene{color-scheme:dark;background:#15161e;color:#f2f2f7;padding:0 24px 36px;gap:0;min-height:100svh;overflow-x:hidden;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;--booking-accent:#5965e9!important;--booking-accent-text:#fff!important}
 .bm-scene #bm-field{position:fixed;inset:-20px;width:calc(100% + 40px);height:calc(100% + 40px);z-index:0;pointer-events:none;opacity:.82}
+@media(max-width:700px){.bm-scene #bm-field{height:calc(100lvh + 40px)}}
 .bm-scene .brand-banner,.bm-scene .bm-motion-surface{display:none!important}
 .bm-scene .bm-nav{position:relative;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:24px;width:100%;max-width:1120px!important;padding:28px 0!important;margin:0!important;border-bottom:1px solid #ffffff14;text-align:left!important}
 .bm-scene .bm-nav img{filter:grayscale(1) invert(1) brightness(1.7);height:34px!important;width:auto!important;max-width:190px!important;opacity:1!important}
@@ -268,21 +269,21 @@ html body.bm-scene .card:has(#venue-results:not([hidden])){overflow:visible}
 #venue-map{width:100%;height:210px;border:0;border-radius:8px}
 .directory-back{display:inline-block;margin-top:12px}
 .venue-address{overflow-wrap:anywhere}
-@keyframes bm-page-in{from{opacity:0;transform:translateY(8px)}}
-@keyframes bm-vt-out{to{opacity:0;transform:translateY(-6px)}}
-@keyframes bm-vt-in{from{opacity:0;transform:translateY(10px)}}
+@keyframes bm-panel-in{from{transform:translateY(4px)}}
+@keyframes bm-card-out{to{opacity:0}}
+@keyframes bm-card-in{from{opacity:0;transform:translateY(4px)}}
 .bm-ver{margin:20px auto 0;text-align:center;font:400 10px/1.2 Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:.05em;color:#ffffff66;user-select:text}
 html[data-bm-theme="light"] .bm-ver{color:#00000070}
 @media(prefers-reduced-motion:no-preference){
- /* Browsers with cross-document view transitions crossfade the whole page: the old page lifts
-    away while the new one rises in. The background is the same on both sides, so nothing flashes. */
  @view-transition{navigation:auto}
- ::view-transition-group(root){animation-duration:300ms}
- ::view-transition-old(root){animation:bm-vt-out 300ms cubic-bezier(.4,0,.2,1) both}
- ::view-transition-new(root){animation:bm-vt-in 300ms cubic-bezier(.2,0,0,1) both}
- /* Everywhere else (Firefox, older Safari) the card simply fades in on arrival. */
- html.bm-no-vt body.bm-scene :is(.card,.dir-card){animation:bm-page-in 260ms cubic-bezier(.2,0,0,1) both}
- .bm-scene :is(#slots-view,#form-view,#confirm-view,#reschedule-view,#confirm-reschedule-view,#cancel-confirm-view,#success-reschedule-view,#success-cancel-view):not(.hidden){animation:bm-page-in 240ms cubic-bezier(.2,0,0,1) both}
+ .bm-scene :is(.card,.dir-card){view-transition-name:bm-booking}
+ :root{view-transition-name:none}
+ ::view-transition{pointer-events:none}
+ ::view-transition-group(bm-booking){animation-duration:180ms}
+ ::view-transition-old(bm-booking){animation:bm-card-out 140ms ease-out both}
+ ::view-transition-new(bm-booking){animation:bm-card-in 180ms ease-out both}
+ html.bm-no-vt body.bm-scene :is(.card,.dir-card){animation:bm-panel-in 180ms ease-out both}
+ .bm-scene :is(#slots-view,#form-view,#confirm-view,#reschedule-view,#confirm-reschedule-view,#cancel-confirm-view,#success-reschedule-view,#success-cancel-view):not(.hidden){animation:bm-panel-in 180ms ease-out both}
 }
 </style>
 <script>
@@ -323,9 +324,20 @@ html[data-bm-theme="light"] .bm-ver{color:#00000070}
   const canvas=document.createElement('canvas');canvas.id='bm-field';canvas.setAttribute('aria-hidden','true');document.body.prepend(canvas);
   const ctx=canvas.getContext('2d');if(!ctx)return;
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');
-  let width=innerWidth+40,height=innerHeight+40,raf=0,last=0,start=performance.now(),px=0,py=0,tx=0,ty=0,pointerX=-1000,pointerY=-1000;
+  let width=0,height=0,scale=0,raf=0,nextFrame=0,px=0,py=0,tx=0,ty=0,pointerX=-1000,pointerY=-1000;
   const stars=Array.from({length:520},(_,i)=>({x:((i*7919)%997)/997,y:((i*6271)%991)/991,a:.08+((i*13)%13)/100}));
-  function resize(){width=innerWidth+40;height=innerHeight+40;const d=Math.min(devicePixelRatio||1,1.5);canvas.width=Math.round(width*d);canvas.height=Math.round(height*d);ctx.setTransform(d,0,0,d,0,0);if(reduced.matches)paint(0)}
+  const phoneStars=stars.slice(0,200);
+  const frameInterval=1000/30;
+  // An absolute phase lets the incoming page draw the same field during navigation.
+  const phase=now=>((performance.timeOrigin+now)*.00012)%(50*Math.PI);
+  function resize(){
+   const w=canvas.clientWidth,h=canvas.clientHeight,d=Math.min(devicePixelRatio||1,1.5);
+   if(w===width&&h===height&&d===scale)return;
+   width=w;height=h;scale=d;
+   canvas.width=Math.round(width*scale);canvas.height=Math.round(height*scale);
+   ctx.setTransform(scale,0,0,scale,0,0);
+   paint(reduced.matches?0:phase(performance.now()));
+  }
   function paint(time){
    px+=(tx-px)*.055;py+=(ty-py)*.055;
    canvas.style.transform='translate3d('+(-px*10).toFixed(2)+'px,'+(-py*7).toFixed(2)+'px,0)';
@@ -334,16 +346,21 @@ html[data-bm-theme="light"] .bm-ver{color:#00000070}
    const mobile=width<741;
    const themeGain=document.documentElement.dataset.bmTheme==='light'?1.25:1.15;
    const particleGain=themeGain*(mobile?1.18:1);
-   for(const s of stars){ctx.fillStyle='rgba(188,195,220,'+(s.a*particleGain)+')';ctx.fillRect(s.x*width+px*9,s.y*height+py*6,1,1)}
-   const planes=mobile?30:48,half=Math.max(width*.43,mobile?260:440),depth=half*.33;
+   for(const s of mobile?phoneStars:stars){ctx.fillStyle='rgba(188,195,220,'+(s.a*particleGain)+')';ctx.fillRect(s.x*width+px*9,s.y*height+py*6,1,1)}
+   const planes=mobile?18:48,half=mobile?width*.48:Math.max(width*.43,440),depth=half*.33;
    for(let j=0;j<planes;j++){
     const z=(j/(planes-1)-.5)*2,angle=z*.64+.28*Math.sin(z*2.1+time)+time*.08+px*.22;
     const span=half*(1+.14*Math.abs(z)),cy=height*.48+z*height*.70+py*20;
     const corners=[[-span,-depth],[span,-depth],[span,depth],[-span,depth]].map(([x,y])=>[width*.5+x*Math.cos(angle)-y*Math.sin(angle)+px*45,cy+(x*Math.sin(angle)+y*Math.cos(angle))*(.47+py*.025)]);
     for(let k=0;k<4;k++){
-     const a=corners[k],b=corners[(k+1)%4],n=Math.min(mobile?78:125,Math.max(10,Math.floor(Math.hypot(b[0]-a[0],b[1]-a[1])/4)));
+     const a=corners[k],b=corners[(k+1)%4];
+     // Sample the unprojected edges, so dots keep their position as a plane rotates.
+     const edge=k%2===0?span:depth;
+     const n=Math.min(mobile?52:125,Math.max(10,Math.round(edge/(k%2===0?(mobile?3:2):(mobile?3:4)))));
+     const edgeX=b[0]-a[0],edgeY=b[1]-a[1];
      for(let q=0;q<n;q++){
-      const f=q/n;let x=a[0]+(b[0]-a[0])*f,y=a[1]+(b[1]-a[1])*f;
+      const f=q/n;let x=a[0]+edgeX*f,y=a[1]+edgeY*f;
+      if(x < -16 || x > width+16 || y < -16 || y > height+16)continue;
       const dx=x-pointerX,dy=y-pointerY,dist=Math.hypot(dx,dy),near=Math.max(0,1-dist/200);
       if(dist>1&&near>0){x+=dx/dist*near*14;y+=dy/dist*near*14}
       const quiet=Math.min(1,.48+Math.abs(x-width*.5)/(width*.38));
@@ -354,15 +371,23 @@ html[data-bm-theme="light"] .bm-ver{color:#00000070}
    }
    const shade=ctx.createRadialGradient(width*.5,height*.34,0,width*.5,height*.34,width*.54);shade.addColorStop(0,'rgba(21,22,30,.34)');shade.addColorStop(1,'rgba(21,22,30,0)');ctx.fillStyle=shade;ctx.fillRect(0,0,width,height);
   }
-  function frame(now){raf=0;if(document.hidden||reduced.matches)return;if(now-last>40){last=now;paint((now-start)*.00012)}raf=requestAnimationFrame(frame)}
+  function frame(now){
+   raf=0;
+   if(document.hidden||reduced.matches)return;
+   if(now+1>=nextFrame){
+    nextFrame=now-nextFrame>=frameInterval?now+frameInterval:nextFrame+frameInterval;
+    paint(phase(now));
+   }
+   raf=requestAnimationFrame(frame);
+  }
   function resume(){if(!document.hidden&&!reduced.matches&&!raf)raf=requestAnimationFrame(frame)}
   addEventListener('resize',resize,{passive:true});
   addEventListener('pointermove',e=>{if(reduced.matches||e.pointerType==='touch')return;tx=(e.clientX/innerWidth-.5)*2;ty=(e.clientY/innerHeight-.5)*2;pointerX=e.clientX+20;pointerY=e.clientY+20},{passive:true});
   document.addEventListener('pointerleave',()=>{tx=0;ty=0;pointerX=-1000;pointerY=-1000});
   document.addEventListener('visibilitychange',()=>{if(document.hidden&&raf){cancelAnimationFrame(raf);raf=0}else resume()});
-  reduced.addEventListener('change',()=>{if(raf){cancelAnimationFrame(raf);raf=0}tx=ty=px=py=0;pointerX=pointerY=-1000;paint(0);resume()});
-  document.addEventListener('bookmeet:theme',()=>paint((performance.now()-start)*.00012));
-  resize();paint(0);resume();
+  reduced.addEventListener('change',()=>{if(raf){cancelAnimationFrame(raf);raf=0}tx=ty=px=py=0;pointerX=pointerY=-1000;paint(reduced.matches?0:phase(performance.now()));resume()});
+  document.addEventListener('bookmeet:theme',()=>paint(reduced.matches?0:phase(performance.now())));
+  resize();resume();
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{capture:true,once:true});else init();
 })();
