@@ -270,8 +270,7 @@ html body.bm-scene .card:has(#venue-results:not([hidden])){overflow:visible}
 .directory-back{display:inline-block;margin-top:12px}
 .venue-address{overflow-wrap:anywhere}
 @keyframes bm-panel-in{from{transform:translateY(4px)}}
-@keyframes bm-card-out{to{opacity:0}}
-@keyframes bm-card-in{from{opacity:0;transform:translateY(4px)}}
+@keyframes bm-card-in{from{opacity:.88;transform:translateY(4px)}}
 .bm-ver{margin:20px auto 0;text-align:center;font:400 10px/1.2 Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:.05em;color:#ffffff66;user-select:text}
 html[data-bm-theme="light"] .bm-ver{color:#00000070}
 @media(prefers-reduced-motion:no-preference){
@@ -280,7 +279,7 @@ html[data-bm-theme="light"] .bm-ver{color:#00000070}
  :root{view-transition-name:none}
  ::view-transition{pointer-events:none}
  ::view-transition-group(bm-booking){animation-duration:180ms}
- ::view-transition-old(bm-booking){animation:bm-card-out 140ms ease-out both}
+ ::view-transition-old(bm-booking){display:none}
  ::view-transition-new(bm-booking){animation:bm-card-in 180ms ease-out both}
  html.bm-no-vt body.bm-scene :is(.card,.dir-card){animation:bm-panel-in 180ms ease-out both}
  .bm-scene :is(#slots-view,#form-view,#confirm-view,#reschedule-view,#confirm-reschedule-view,#cancel-confirm-view,#success-reschedule-view,#success-cancel-view):not(.hidden){animation:bm-panel-in 180ms ease-out both}
