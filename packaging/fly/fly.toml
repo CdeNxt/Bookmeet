@@ -1,4 +1,5 @@
-# Bookmeet on Fly.io (app "bookmeet", organization tokamak-labs). Deploy with packaging/fly/deploy.sh.
+# Bookmeet production on Fly.io (app "bookmeet", organization tokamak-labs).
+# Deploy with: packaging/fly/deploy.sh production (after the same commit was checked on staging).
 # One always-on machine: reminders and calendar sync run in the background, so the machine
 # must not stop when idle (the upstream fly.toml at the repo root lets it stop).
 # Secrets live in Fly (fly secrets list --app bookmeet), never here: CALNODE_ENCRYPTION_KEY,
@@ -15,6 +16,10 @@ primary_region = 'iad'
   DATABASE_URL = 'sqlite:///data/calnode.db'
   LITESTREAM_ENDPOINT = 'https://s3.us-west-004.backblazeb2.com'
   LITESTREAM_REGION = 'us-west-004'
+  # Requests arrive from Fly's proxy on a private 172.16.0.0/12 address. Trusting it lets the
+  # per-visitor rate limits use the visitor's own address from X-Forwarded-For; without this
+  # every visitor shares one rate-limit bucket.
+  TRUSTED_PROXY_CIDRS = '172.16.0.0/12'
 
 [[mounts]]
   source = 'data'

@@ -59,7 +59,7 @@ The public skin shows the build version in small type at the foot of every publi
 
 ## Hosting
 
-Bookmeet runs on Fly.io as one always-on machine with its SQLite database on a volume and continuous Litestream backup to object storage. `packaging/fly/fly.toml` is the configuration and `packaging/fly/deploy.sh` deploys the pushed commit and checks that the live site reports it. Secrets are Fly secrets, never files in this repository. Logo, banner and avatar files live on the volume beside the database and are not part of the Litestream backup; Fly's volume snapshots cover them.
+Bookmeet runs on Fly.io as one always-on machine with its SQLite database on a volume and continuous Litestream backup to object storage. `packaging/fly/fly.toml` is the production configuration and `packaging/fly/fly.staging.toml` the staging one (app `bookmeet-staging`, https://staging.bookmeet.date, test data only, machine stops when idle). `packaging/fly/deploy.sh staging` then `packaging/fly/deploy.sh production` deploys the pushed commit and checks that the app reports it; production only takes a commit that staging is running. Secrets are Fly secrets, never files in this repository. Logo, banner and avatar files live on the volume beside the database and are not part of the Litestream backup; Fly's volume snapshots cover them.
 
 ## Week start on public pages
 

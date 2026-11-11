@@ -1,0 +1,31 @@
+# Bookmeet staging on Fly.io (app "bookmeet-staging"): test data only, never a copy of production.
+# The machine stops when idle and starts on the next request, which is also how customer
+# copies are meant to run, so staging is where that behaviour is checked.
+# Its own secrets (fly secrets list --app bookmeet-staging); nothing secret belongs here.
+# Deploy with: packaging/fly/deploy.sh staging
+
+app = 'bookmeet-staging'
+primary_region = 'iad'
+
+[build]
+
+[env]
+  BASE_URL = 'https://staging.bookmeet.date'
+  DATABASE_URL = 'sqlite:///data/calnode.db'
+  TRUSTED_PROXY_CIDRS = '172.16.0.0/12'
+
+[[mounts]]
+  source = 'data'
+  destination = '/data'
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  memory = '256mb'
+  cpu_kind = 'shared'
+  cpus = 1
