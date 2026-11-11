@@ -12,7 +12,10 @@ primary_region = 'iad'
 [env]
   BASE_URL = 'https://staging.bookmeet.date'
   DATABASE_URL = 'sqlite:///data/calnode.db'
-  TRUSTED_PROXY_CIDRS = '172.16.0.0/12'
+  # Fly's private proxy range plus this app's own public addresses (fly ips list --app
+  # bookmeet-staging); see the note in fly.toml. Through Cloudflare the visible hop is
+  # Cloudflare's edge, which is fine for a staging copy.
+  TRUSTED_PROXY_CIDRS = '172.16.0.0/12,66.241.125.42,2a09:8280:1::1f8:8856:0'
 
 [[mounts]]
   source = 'data'
