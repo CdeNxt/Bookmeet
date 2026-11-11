@@ -388,6 +388,9 @@ html[data-bm-theme="light"] .bm-ver{color:#00000070}
   document.addEventListener('bookmeet:theme',()=>paint(reduced.matches?0:phase(performance.now())));
   resize();resume();
  }
+ // Pages call this from the end of <body> (publicSkinReady) so the skin is on before the
+ // first paint; DOMContentLoaded stays as the fallback. init() is safe to call twice.
+ window.BookMeetSkinInit=init;
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{capture:true,once:true});else init();
 })();
 </script>

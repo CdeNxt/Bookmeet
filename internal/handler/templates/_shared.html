@@ -2,8 +2,21 @@
 {{define "publicSkinHead"}}
 <meta name="bookmeet-theme" content="{{.PublicTheme}}">
 <meta name="bookmeet-copy" content="{{.PublicCopyJSON}}">
+<link rel="expect" href="#bm-ready" blocking="render">
 {{.PublicSkinHTML}}
 {{end}}
+
+{{/*
+  publicSkinReady goes last in <body>. The skin dresses the page from script (it adds
+  body.bm-scene, which also names the card for the page-to-page fade), and it used to do
+  that at DOMContentLoaded. Over a real network the document arrives in several pieces and
+  the browser paints the first ones before that event: the page showed undressed, the fade
+  had no named card to animate, and the skin then snapped in. Running the skin here and
+  holding the first paint until #bm-ready has been parsed (the rel="expect" link in
+  publicSkinHead) makes the first frame the dressed one. Browsers without rel="expect"
+  ignore the link and behave as before.
+*/}}
+{{define "publicSkinReady"}}<script>window.BookMeetSkinInit&&window.BookMeetSkinInit()</script><span id="bm-ready" hidden></span>{{end}}
 
 {{/*
   Partials SHARED by the book, manage and directory public pages — parsed into all

@@ -385,3 +385,36 @@ func TestBookPage_usesHostWeekStart(t *testing.T) {
 		t.Errorf("WEEK_START = %s; want 0 after the host chose Sunday", got)
 	}
 }
+
+// The skin must be applied before the first paint, or the page shows undressed and the
+// page-to-page fade has nothing to animate: the head holds rendering for #bm-ready, and
+// the page ends by running the skin and then emitting that marker.
+func TestBookPage_skinIsReadyBeforeFirstPaint(t *testing.T) {
+	h, apiKey, _ := setupWorkspace(t)
+	slug, _ := seedEventTypeHTTP(t, h, apiKey)
+
+	req := httptest.NewRequest(http.MethodGet, "/book/"+slug, nil)
+	req.SetPathValue("slug", slug)
+	rec := httptest.NewRecorder()
+	h.BookPage(rec, req)
+	body := rec.Body.String()
+
+	head, rest, ok := strings.Cut(body, "</head>")
+	if !ok {
+		t.Fatal("no </head> in the booking page")
+	}
+	if !strings.Contains(head, `<link rel="expect" href="#bm-ready" blocking="render">`) {
+		t.Error("head does not hold the first paint for #bm-ready")
+	}
+	run := strings.LastIndex(rest, "window.BookMeetSkinInit&&window.BookMeetSkinInit()")
+	marker := strings.LastIndex(rest, `<span id="bm-ready" hidden></span>`)
+	if run < 0 || marker < run {
+		t.Errorf("skin must run before the #bm-ready marker (run at %d, marker at %d)", run, marker)
+	}
+	if strings.Count(body, `id="bm-ready"`) != 1 {
+		t.Errorf("want exactly one #bm-ready marker, got %d", strings.Count(body, `id="bm-ready"`))
+	}
+	if tail := rest[marker:]; strings.Contains(tail, "<script") {
+		t.Error("no script may follow the #bm-ready marker")
+	}
+}
