@@ -30,6 +30,24 @@ test('dowIndex is Monday-first (0=Mon … 6=Sun)', () => {
   assert.equal(B.dowIndex(new Date(2026, 5, 21)), 6); // Sunday
 });
 
+test('dowIndex and dowLabels follow the host week start (0 = Sunday)', () => {
+  assert.equal(B.dowIndex(new Date(2026, 5, 21), 0), 0); // Sunday is the first column
+  assert.equal(B.dowIndex(new Date(2026, 5, 15), 0), 1); // Monday is the second
+  assert.equal(B.dowIndex(new Date(2026, 5, 20), 0), 6); // Saturday is the last
+  assert.deepEqual(B.dowLabels('en', 0), ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']);
+  assert.deepEqual(B.dowLabels('en', 6), ['Sa', 'Su', 'Mo', 'Tu', 'We', 'Th', 'Fr']);
+  // November 2026 starts on a Sunday: no leading blanks Sunday-first, six Monday-first.
+  assert.equal(B.dowIndex(new Date(2026, 10, 1), 0), 0);
+  assert.equal(B.dowIndex(new Date(2026, 10, 1), 1), 6);
+});
+
+test('an absent or invalid week start means Monday', () => {
+  for (const ws of [undefined, null, '', 7, -1, 1.5, 'x']) {
+    assert.equal(B.dowIndex(new Date(2026, 5, 15), ws), 0);
+    assert.deepEqual(B.dowLabels('en', ws), ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']);
+  }
+});
+
 test('dowLabels is Monday-first and locale-aware', () => {
   assert.deepEqual(B.dowLabels('en'), ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']);
   assert.deepEqual(B.dowLabels('es'), ['lu', 'ma', 'mi', 'ju', 'vi', 'sá', 'do']);

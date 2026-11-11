@@ -82,19 +82,30 @@
     }).format(new Date(iso));
   }
 
-  // dowIndex — Monday-first weekday index (0=Mon … 6=Sun) for the calendar grid offset.
-  function dowIndex(date) { return (date.getDay() + 6) % 7; }
+  // weekStartDay — the host's first day of the week as a JS weekday (0=Sun … 6=Sat), from
+  // Settings -> Profile (users.week_start). Anything else, including a missing value,
+  // means Monday, which is what these pages always used before the setting reached them.
+  function weekStartDay(weekStart) {
+    var n = Number(weekStart);
+    return (weekStart === undefined || weekStart === null || weekStart === '' || n !== Math.floor(n) || n < 0 || n > 6) ? 1 : n;
+  }
 
-  // dowLabels — Monday-first weekday header labels (2-char abbreviations), via Intl for
+  // dowIndex — weekday index counted from the first day of the week (0 = that day), for
+  // the calendar grid offset. Monday-first unless weekStart says otherwise.
+  function dowIndex(date, weekStart) { return (date.getDay() - weekStartDay(weekStart) + 7) % 7; }
+
+  // dowLabels — weekday header labels (2-char abbreviations) starting on the first day of
+  // the week (Monday unless weekStart says otherwise), via Intl for
   // the given locale rather than a hardcoded English array. Replaces the old
   // ['Mo','Tu',…] literal that was duplicated (in English, regardless of visitor
   // language) across book.html/manage.html. 2024-01-01 is an arbitrary fixed Monday
   // anchor — only its weekday matters, not the actual date.
-  function dowLabels(locale) {
+  function dowLabels(locale, weekStart) {
     var labels = [];
     var monday = new Date(Date.UTC(2024, 0, 1));
+    var shift = weekStartDay(weekStart) - 1;
     for (var i = 0; i < 7; i++) {
-      var d = new Date(monday.getTime() + i * 86400000);
+      var d = new Date(monday.getTime() + (i + shift) * 86400000);
       var full = new Intl.DateTimeFormat(locale || [], { weekday: 'short', timeZone: 'UTC' }).format(d);
       labels.push(full.slice(0, 2));
     }
@@ -146,6 +157,7 @@
     fmt: fmt,
     formatTime: formatTime,
     formatDay: formatDay,
+    weekStartDay: weekStartDay,
     dowIndex: dowIndex,
     dowLabels: dowLabels,
     startOfMonth: startOfMonth,

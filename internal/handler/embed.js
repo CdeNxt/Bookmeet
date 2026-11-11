@@ -54,15 +54,23 @@
       return value === undefined || value === null ? '' : String(value);
     });
   }
-  // dowLabels: Monday-first weekday header labels via Intl, matching
+  // weekStartDay: the host's first day of the week (0=Sun … 6=Sat) from /public's
+  // week_start; Monday when absent or invalid. Mirrors BookingLogic.weekStartDay.
+  function weekStartDay(weekStart) {
+    var n = Number(weekStart);
+    return (weekStart === undefined || weekStart === null || weekStart === '' || n !== Math.floor(n) || n < 0 || n > 6) ? 1 : n;
+  }
+  // dowLabels: weekday header labels via Intl, starting on the host's first day of the
+  // week, matching
   // BookingLogic.dowLabels in booking-logic.js (not literally shared code — this widget
   // doesn't import that module — but the same approach, replacing what used to be a
   // hardcoded English DOW array).
-  function dowLabels(locale) {
+  function dowLabels(locale, weekStart) {
     var out = [];
     var monday = new Date(Date.UTC(2024, 0, 1));
+    var shift = weekStartDay(weekStart) - 1;
     for (var i = 0; i < 7; i++) {
-      var day = new Date(monday.getTime() + i * 86400000);
+      var day = new Date(monday.getTime() + (i + shift) * 86400000);
       out.push(new Intl.DateTimeFormat(locale || [], { weekday: 'short', timeZone: 'UTC' }).format(day).slice(0, 2));
     }
     return out;
@@ -100,7 +108,7 @@
   function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
   function endOfMonth(d) { return new Date(d.getFullYear(), d.getMonth() + 1, 0); }
   function addMonths(d, n) { return new Date(d.getFullYear(), d.getMonth() + n, 1); }
-  function mondayIndex(d) { return (d.getDay() + 6) % 7; }
+  function dowIndex(d, weekStart) { return (d.getDay() - weekStartDay(weekStart) + 7) % 7; }
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   // Group host label: "Alex", "Alex & Sam", "Alex, Sam & Jo", "A, B, C & 2 others" — or
   // "Alex, Sam y 2 más" in Spanish. Separator and conjunction come from the locale, not
@@ -227,7 +235,7 @@
         this.style.setProperty('--booking-accent-text', this.info.booking_accent_foreground || '#ffffff');
         this.locale = this.info.locale || '';
         this.i18n = this.info.i18n || {};
-        this.dow = dowLabels(this.locale);
+        this.dow = dowLabels(this.locale, this.info.week_start);
         this.setAttribute('lang', this.locale || 'en'); // accessibility: announce the resolved language
         this.questions = (r[1] && r[1].items) || [];
         this.ensureAsstDrawer();
@@ -452,7 +460,7 @@
       var self = this, st = this.state, first = st.month;
       var grid = el('div', { class: 'cal-grid' });
       this.dow.forEach(function (d) { grid.appendChild(el('div', { class: 'ch', text: d })); });
-      for (var i = 0; i < mondayIndex(first); i++) grid.appendChild(el('div', { class: 'cd', text: '' }));
+      for (var i = 0; i < dowIndex(first, this.info.week_start); i++) grid.appendChild(el('div', { class: 'cd', text: '' }));
       var days = endOfMonth(first).getDate(), todayKey = ymd(new Date());
       for (var d = 1; d <= days; d++) {
         var key = ymd(new Date(first.getFullYear(), first.getMonth(), d));

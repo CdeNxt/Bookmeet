@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -349,5 +350,38 @@ func TestBookPage_maxFutureDays0(t *testing.T) {
 	}
 	if maxDaysGot != "0" {
 		t.Errorf("want MAX_DAYS = 0 in page body; got MAX_DAYS = %s", maxDaysGot)
+	}
+}
+
+// The host's "First day of week" (Settings -> Profile) reaches the public booking page.
+// The page used to draw a Monday-first calendar whatever the setting said.
+func TestBookPage_usesHostWeekStart(t *testing.T) {
+	h, apiKey, _ := setupWorkspace(t)
+	slug, _ := seedEventTypeHTTP(t, h, apiKey)
+
+	weekStart := func() string {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/book/"+slug, nil)
+		req.SetPathValue("slug", slug)
+		rec := httptest.NewRecorder()
+		h.BookPage(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d; want 200", rec.Code)
+		}
+		m := regexp.MustCompile(`const WEEK_START\s*=\s*(\d)\s*;`).FindStringSubmatch(rec.Body.String())
+		if m == nil {
+			t.Fatal("booking page does not set WEEK_START")
+		}
+		return m[1]
+	}
+
+	if got := weekStart(); got != "1" {
+		t.Errorf("WEEK_START = %s; want 1 (Monday default)", got)
+	}
+	if rec := patchMe(t, h, `{"week_start":0}`, apiKey); rec.Code != http.StatusOK {
+		t.Fatalf("PATCH /v1/users/me status = %d", rec.Code)
+	}
+	if got := weekStart(); got != "0" {
+		t.Errorf("WEEK_START = %s; want 0 after the host chose Sunday", got)
 	}
 }

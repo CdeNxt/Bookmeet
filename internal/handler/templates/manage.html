@@ -274,6 +274,7 @@ body {
   const SOLE_HOST        = {{.SoleHostName}};
   const MIN_NOTICE_LABEL = {{.MinNoticeLabel}};
   const LOCALE      = "{{.Locale}}";
+  const WEEK_START  = {{.WeekStart}}; // host's first day of the week: 0=Sunday, 1=Monday
   const I18N        = window.__CALNODE_I18N || {};
   function t(key) { return I18N[key] || key; } // key itself as a last-resort fallback, matching Locale.T server-side
 
@@ -329,8 +330,8 @@ body {
 
   // ── Calendar ────────────────────────────────────────────────────────────────
   // Locale-aware via Intl (BookingLogic.dowLabels), not a hardcoded English array.
-  const DOW_LABELS = BookingLogic.dowLabels(LOCALE);
-  function dowIndex(date) { return BookingLogic.dowIndex(date); } // 0 = Monday
+  const DOW_LABELS = BookingLogic.dowLabels(LOCALE, WEEK_START);
+  function dowIndex(date) { return BookingLogic.dowIndex(date, WEEK_START); } // 0 = first day of the week
 
   async function loadMonthAvailability(y, m) {
     // Render immediately, treating every in-window day as available, so the

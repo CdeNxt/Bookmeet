@@ -106,6 +106,9 @@ type bookPageData struct {
 	Locale   string
 	T        func(string) string
 	I18NJSON template.JS
+	// WeekStart is the event-type owner's first day of the week (0=Sunday, 1=Monday), from
+	// Settings -> Profile, so the public calendar matches the one the host sees in the admin.
+	WeekStart int
 	// Tracking
 	HeadHTML         template.HTML // operator-configured <head> code injection (trusted)
 	GTMContainerID   string        // native GTM container (validated GTM-XXXX); "" = off
@@ -364,16 +367,17 @@ func (h *Handler) PublicEventType(w http.ResponseWriter, r *http.Request) {
 		msgGreeting                                sql.NullString
 		allowPhoneCall                             bool
 		accentColor                                string
+		weekStart                                  int
 	)
 	err := h.db.QueryRowContext(r.Context(), `
 		SELECT et.id, et.name, COALESCE(et.description, ''),
 		       et.duration_minutes, et.location_type, COALESCE(et.location_value, ''),
 		       et.max_future_days, et.min_notice_minutes, et.routing_mode, u.name, COALESCE(u.avatar_url, ''),
-		       et.price_cents, et.currency, et.msg_greeting, et.allow_phone_call, u.booking_accent
+		       et.price_cents, et.currency, et.msg_greeting, et.allow_phone_call, u.booking_accent, u.week_start
 		FROM event_types et
 		JOIN users u ON u.id = et.user_id
 		WHERE et.slug = ? AND et.is_active = 1 AND et.is_public = 1`,
-		slug).Scan(&etID, &name, &description, &durMins, &locType, &locValue, &maxDays, &minNotice, &routingMode, &hostName, &avatarURL, &priceCents, &currency, &msgGreeting, &allowPhoneCall, &accentColor)
+		slug).Scan(&etID, &name, &description, &durMins, &locType, &locValue, &maxDays, &minNotice, &routingMode, &hostName, &avatarURL, &priceCents, &currency, &msgGreeting, &allowPhoneCall, &accentColor, &weekStart)
 	if errors.Is(err, sql.ErrNoRows) {
 		h.writeError(w, http.StatusNotFound, "event type not found")
 		return
@@ -438,8 +442,11 @@ func (h *Handler) PublicEventType(w http.ResponseWriter, r *http.Request) {
 		"allow_phone_call":          allowPhoneCall && onlineMeetingLocation(locType),
 		"booking_accent":            accentColor,
 		"booking_accent_foreground": accentForeground(accentColor),
-		"location_label":            locationLabel(locType, locValue, loc),
-		"max_future_days":           maxDays,
+		// week_start is the owner's first day of the week (0=Sunday, 1=Monday), so the
+		// widget's calendar grid matches book.html.
+		"week_start":      weekStart,
+		"location_label":  locationLabel(locType, locValue, loc),
+		"max_future_days": maxDays,
 		// min_notice_label is the translated minimum-notice duration ("4 hours"), empty
 		// when the event type sets none. The widget needs it here because the /slots call
 		// it makes later carries no language of its own, and min_notice_minutes alone
@@ -483,16 +490,17 @@ func (h *Handler) BookPage(w http.ResponseWriter, r *http.Request) {
 		allowInPerson  bool
 		ownerHandle    string
 		accentColor    string
+		weekStart      int
 	)
 	err := h.db.QueryRowContext(r.Context(), `
 		SELECT et.id, et.name, COALESCE(et.description, ''),
 		       et.duration_minutes, et.location_type, COALESCE(et.location_value, ''),
 		       et.max_future_days, et.min_notice_minutes, et.routing_mode, u.name, COALESCE(u.avatar_url, ''),
-		       et.price_cents, et.currency, et.msg_greeting, et.allow_phone_call, u.booking_accent, et.allow_in_person, COALESCE(u.handle, '')
+		       et.price_cents, et.currency, et.msg_greeting, et.allow_phone_call, u.booking_accent, et.allow_in_person, COALESCE(u.handle, ''), u.week_start
 		FROM event_types et
 		JOIN users u ON u.id = et.user_id
 		WHERE et.slug = ? AND et.is_active = 1 AND et.is_public = 1`,
-		slug).Scan(&etID, &name, &description, &durMins, &locType, &locValue, &maxDays, &minNotice, &routingMode, &hostName, &avatarURL, &priceCents, &currency, &msgGreeting, &allowPhoneCall, &accentColor, &allowInPerson, &ownerHandle)
+		slug).Scan(&etID, &name, &description, &durMins, &locType, &locValue, &maxDays, &minNotice, &routingMode, &hostName, &avatarURL, &priceCents, &currency, &msgGreeting, &allowPhoneCall, &accentColor, &allowInPerson, &ownerHandle, &weekStart)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "Page not found", http.StatusNotFound)
@@ -578,6 +586,7 @@ func (h *Handler) BookPage(w http.ResponseWriter, r *http.Request) {
 		LocationLabel:       locationLabel(locType, locValue, loc),
 		PriceLabel:          formatPrice(priceCents, currency),
 		Locale:              loc.Code,
+		WeekStart:           weekStart,
 		T:                   loc.T,
 		I18NJSON:            template.JS(i18nJSON), // #nosec G203 -- json.Marshal output, which escapes <,>,& by default; safe for embedding in a <script> block
 		PriceCents:          priceCents,
