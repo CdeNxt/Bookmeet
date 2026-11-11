@@ -44,11 +44,11 @@ export type EventType = {
 	 *  booked hours visible to anyone with the link. */
 	show_taken_slots: boolean;
 	/** Who sends the booker's calendar invite. 'calendar': each host's connected calendar,
-	 *  from the host's own address. 'calnode': Calnode's own invite, from the email sender
+	 *  from the host's own address. 'calnode': Bookmeet's own invite, from the email sender
 	 *  in Settings → Email, so no host's personal address reaches the booker. 'none': no
 	 *  invite from either; the hosts' events are guestless, for integrations that send their own. */
 	invite_delivery: 'calendar' | 'calnode' | 'none';
-	/** Whether Calnode can currently send invites (a sender and working email). Only
+	/** Whether Bookmeet can currently send invites (a sender and working email). Only
 	 *  returned on the single event type GET. */
 	invite_sender_ready?: boolean;
 	location_type: string;
@@ -129,7 +129,7 @@ export type Booking = {
 	payment_status?: 'pending' | 'paid' | 'refunded';
 	amount_paid_cents?: number;
 	amount_paid_currency?: string;
-	/** The booker's RSVP to a Calnode-sent invite; absent until an answer arrives. */
+	/** The booker's RSVP to a Bookmeet-sent invite; absent until an answer arrives. */
 	rsvp_status?: 'accepted' | 'declined' | 'tentative';
 	/** Who sent the booker's calendar invite, fixed when the booking was made. */
 	invite_delivery?: 'calendar' | 'calnode' | 'none';
@@ -194,7 +194,7 @@ export type CalendarStatus = {
 	provider?: string;    // destination provider name, when connected
 	providers?: string[]; // configured providers available to connect
 	connections?: CalendarConnection[]; // all connected calendars (many checked, one destination)
-	unconfigured_providers?: string[]; // providers Calnode supports but this instance has no credentials for
+	unconfigured_providers?: string[]; // providers Bookmeet supports but this instance has no credentials for
 };
 
 export type EmailSettings = {
@@ -211,7 +211,7 @@ export type EmailSettings = {
 	// being delivered over SMTP" can differ, so the server reports the live answer.
 	transport: 'none' | 'smtp' | 'resend_api';
 	enabled: boolean;
-	/** RSVP tracking for invites Calnode sends: the Resend inbound address RSVPs are routed
+	/** RSVP tracking for invites Bookmeet sends: the Resend inbound address RSVPs are routed
 	 *  through (e.g. rsvp@reply.example.com). */
 	rsvp_address: string;
 	resend_webhook_secret_set: boolean; // never returned directly

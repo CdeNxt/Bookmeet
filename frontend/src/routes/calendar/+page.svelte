@@ -15,14 +15,14 @@
 		caldav: 'CalDAV (Apple iCloud, Fastmail, Nextcloud)'
 	};
 
-	// Where to send an admin for each provider Calnode supports but this instance hasn't
+	// Where to send an admin for each provider Bookmeet supports but this instance hasn't
 	// been given credentials for. Google is self-serve (a settings page); Microsoft is
 	// currently env-var-only, so it points at the docs instead of a form.
 	const UNCONFIGURED_SETUP: Record<string, { text: string; href: string; external?: boolean }> = {
 		google: { text: 'Set up in Settings → Google OAuth', href: '/admin/settings/google' },
 		microsoft: {
 			text: 'See setup docs',
-			href: 'https://github.com/Calnode/calnode/blob/main/.env.example',
+			href: 'https://github.com/CdeNxt/Bookmeet/blob/bookmeet/.env.example',
 			external: true
 		}
 	};
@@ -247,7 +247,7 @@
 <ConfirmDialog
 	bind:open={disconnectOpen}
 	title="Disconnect this calendar?"
-	description="Calnode will stop checking it for conflicts. If it was your booking calendar, another connected calendar is promoted automatically."
+	description="Bookmeet will stop checking it for conflicts. If it was your booking calendar, another connected calendar is promoted automatically."
 	confirmText="Disconnect"
 	destructive
 	onConfirm={doDisconnect}
@@ -262,7 +262,7 @@
 	onConfirm={doZoomDisconnect}
 />
 
-<svelte:head><title>Calendar — Calnode</title></svelte:head>
+<svelte:head><title>Calendar — Bookmeet</title></svelte:head>
 
 <div class="mb-8">
 	<h1 class="text-2xl font-semibold tracking-tight">Calendar</h1>

@@ -245,7 +245,7 @@
 			<div class="mt-4 space-y-1.5">
 				<Label for="business-name">Business name</Label>
 				<Input id="business-name" bind:value={businessName} placeholder="Orchestratr" maxlength={200} />
-				<p class="text-xs text-muted-foreground">Used where there's no logo. Falls back to “Calnode” if left blank.</p>
+				<p class="text-xs text-muted-foreground">Used where there's no logo. Falls back to “Bookmeet” if left blank.</p>
 			</div>
 
 			<div class="mt-5 space-y-3">
@@ -412,7 +412,7 @@
             <h2 class="text-sm font-semibold">Public attribution</h2>
             <label class="mt-4 flex items-center gap-3 text-sm" for="hide-attribution">
                 <input id="hide-attribution" type="checkbox" bind:checked={hideAttribution} />
-                Hide Calnode branding and links on public booking pages
+                Hide Bookmeet branding and links on public booking pages
             </label>
             <p class="mt-2 text-xs text-muted-foreground">Keeps your own legal links, language selector, and cookie controls available.</p>
         </div>
@@ -421,7 +421,7 @@
 			<p class="mt-0.5 text-xs text-muted-foreground">
 				Links to your own privacy policy and terms. They appear in your public booking page footer, and
 				your privacy policy is linked from the cookie-consent banner. You're the data controller for
-				bookings made through your Calnode — these just point visitors to your policies.
+				bookings made through your Bookmeet — these just point visitors to your policies.
 			</p>
 
 			<div class="mt-4 space-y-1.5">

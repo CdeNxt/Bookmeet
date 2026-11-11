@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AuthShell from '$lib/components/auth-shell.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { Button } from '$lib/components/ui/button';
@@ -51,10 +52,9 @@
 	}
 </script>
 
-<svelte:head><title>Set a new password — Calnode</title></svelte:head>
+<svelte:head><title>Set a new password — Bookmeet</title></svelte:head>
 
-<div class="flex min-h-screen items-center justify-center bg-muted/30 p-6">
-	<div class="w-full max-w-sm">
+<AuthShell>
 		<div class="mb-8 text-center">
 			<h1 class="text-xl font-semibold tracking-tight">Set a new password</h1>
 			<p class="mt-2 text-sm text-muted-foreground">Choose a password of at least 8 characters.</p>
@@ -97,5 +97,4 @@
 				</Button>
 			</form>
 		{/if}
-	</div>
-</div>
+</AuthShell>

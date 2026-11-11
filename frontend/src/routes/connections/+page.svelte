@@ -84,7 +84,7 @@
 	onConfirm={doRevoke}
 />
 
-<svelte:head><title>Connected apps — Calnode</title></svelte:head>
+<svelte:head><title>Connected apps — Bookmeet</title></svelte:head>
 
 <div class="mb-8">
 	<h1 class="text-2xl font-semibold tracking-tight">Connected apps</h1>
@@ -119,7 +119,7 @@
 
 	<p class="mt-3 text-xs text-muted-foreground">
 		In Claude: <span class="font-medium">Settings → Connectors → Add custom connector</span>,
-		paste the URL, then sign in with your Calnode account to authorize it. Access is scoped to
+		paste the URL, then sign in with your Bookmeet account to authorize it. Access is scoped to
 		your own role, and you can revoke it here at any time.
 	</p>
 </div>
@@ -130,7 +130,7 @@
 	<div class="rounded-lg border border-dashed bg-card p-12 text-center">
 		<p class="text-sm font-medium">No connected apps</p>
 		<p class="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-			Use the URL above to add Calnode to an MCP-capable app. Once you approve it, it shows up here.
+			Use the URL above to add Bookmeet to an MCP-capable app. Once you approve it, it shows up here.
 		</p>
 	</div>
 {:else}

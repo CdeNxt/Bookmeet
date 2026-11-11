@@ -54,7 +54,7 @@ type BookingData struct {
 	// host's personal account - the very thing Calnode-sent invites avoid.
 	ICSWithoutAttendee bool
 	// Branding — instance-wide, threaded in by the handler. BrandName is the
-	// wordmark/footer name (falls back to "Calnode" when empty); LogoURL is an
+	// wordmark/footer name (falls back to "Bookmeet" when empty); LogoURL is an
 	// optional absolute https image shown in the HTML email header.
 	BrandName     string
 	LogoURL       string
@@ -102,7 +102,7 @@ func (d BookingData) Brand() string {
 	if d.BrandName != "" {
 		return d.BrandName
 	}
-	return "Calnode"
+	return "Bookmeet"
 }
 
 // LogoPx is the email logo height in px, defaulting to 28 when unset.

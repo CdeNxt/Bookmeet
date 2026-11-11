@@ -174,11 +174,11 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 func resetPasswordMessage(to, link string) mailer.Message {
 	return mailer.Message{
 		To:      []string{to},
-		Subject: "Reset your Calnode password",
-		Text: "Click the link below to set a new Calnode password. It expires in 1 hour and can be used once.\n\n" +
+		Subject: "Reset your Bookmeet password",
+		Text: "Click the link below to set a new Bookmeet password. It expires in 1 hour and can be used once.\n\n" +
 			link + "\n\nIf you didn't request this, you can ignore this email — your password stays unchanged.",
 		HTML: fmt.Sprintf(`<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#111827;line-height:1.5">`+
-			`<p>Click the button below to set a new Calnode password. It expires in 1 hour and can be used once.</p>`+
+			`<p>Click the button below to set a new Bookmeet password. It expires in 1 hour and can be used once.</p>`+
 			`<p style="margin:24px 0"><a href="%s" style="background:#111827;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;display:inline-block;font-weight:600">Set a new password</a></p>`+
 			`<p style="font-size:13px;color:#6b7280">Or paste this link into your browser:<br><a href="%s">%s</a></p>`+
 			`<p style="font-size:13px;color:#6b7280">If you didn't request this, you can ignore this email — your password stays unchanged.</p></div>`,

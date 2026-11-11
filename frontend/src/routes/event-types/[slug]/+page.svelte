@@ -25,7 +25,7 @@
 		{ value: 'zoom',         label: 'Zoom' },
 		{ value: 'teams',        label: 'Microsoft Teams' },
 		{ value: 'google_meet',  label: 'Google Meet' },
-		{ value: 'livekit',      label: 'Calnode Video (LiveKit)' },
+		{ value: 'livekit',      label: 'Bookmeet Video (LiveKit)' },
 		{ value: 'phone',        label: 'Phone call' },
 		{ value: 'link',         label: 'Video link' },
 		{ value: 'in_person',    label: 'In person' },
@@ -43,7 +43,7 @@
 
 	const INVITE_DELIVERY = [
 		{ value: 'calendar', label: "The host's calendar" },
-		{ value: 'calnode',  label: 'Calnode, from your workspace' },
+		{ value: 'calnode',  label: 'Bookmeet, from your workspace' },
 		{ value: 'none',     label: 'Your own system' },
 	];
 
@@ -88,7 +88,7 @@
 		price_cents: 0, currency: 'usd',
 	});
 
-	// "Your own system" means Calnode sends the booker nothing at all. When email is not
+	// "Your own system" means Bookmeet sends the booker nothing at all. When email is not
 	// configured that is easy to pick by accident and impossible to notice later, so it is
 	// confirmed once rather than applied silently.
 	let confirmNoneOpen = $state(false);
@@ -510,13 +510,13 @@
 
 		switch (type) {
 			case 'confirmation':
-				return `Hi Alex Johnson,\n\nYour booking has been confirmed.\n\nEvent:    ${name}\nWith:     ${et?.name ?? 'Host'}\nStart:    ${start}\nEnd:      ${end}${loc}\n\nBooking reference: preview-test\n\nTo cancel, visit:\n[booking page]${noteBlk}\n— Calnode`;
+				return `Hi Alex Johnson,\n\nYour booking has been confirmed.\n\nEvent:    ${name}\nWith:     ${et?.name ?? 'Host'}\nStart:    ${start}\nEnd:      ${end}${loc}\n\nBooking reference: preview-test\n\nTo cancel, visit:\n[booking page]${noteBlk}\n— Bookmeet`;
 			case 'cancellation':
-				return `Hi Alex Johnson,\n\nYour booking has been cancelled.\n\nEvent:    ${name}\nWith:     ${et?.name ?? 'Host'}\nStart:    ${start}\nEnd:      ${end}\n\nTo rebook, visit:\n[booking page]${noteBlk}\n— Calnode`;
+				return `Hi Alex Johnson,\n\nYour booking has been cancelled.\n\nEvent:    ${name}\nWith:     ${et?.name ?? 'Host'}\nStart:    ${start}\nEnd:      ${end}\n\nTo rebook, visit:\n[booking page]${noteBlk}\n— Bookmeet`;
 			case 'reschedule':
-				return `Hi Alex Johnson,\n\nYour booking has been rescheduled.\n\nEvent:    ${name}\nWith:     ${et?.name ?? 'Host'}\nWas:      ${prev}\nNow:      ${start}\nEnd:      ${end}${loc}\n\nBooking reference: preview-test${noteBlk}\n— Calnode`;
+				return `Hi Alex Johnson,\n\nYour booking has been rescheduled.\n\nEvent:    ${name}\nWith:     ${et?.name ?? 'Host'}\nWas:      ${prev}\nNow:      ${start}\nEnd:      ${end}${loc}\n\nBooking reference: preview-test${noteBlk}\n— Bookmeet`;
 			case 'reminder':
-				return `Hi Alex Johnson,\n\nThis is a reminder that your booking is coming up.\n\nEvent:    ${name}\nWith:     ${et?.name ?? 'Host'}\nStart:    ${start}\nEnd:      ${end}${loc}\n\nBooking reference: preview-test${noteBlk}\n— Calnode`;
+				return `Hi Alex Johnson,\n\nThis is a reminder that your booking is coming up.\n\nEvent:    ${name}\nWith:     ${et?.name ?? 'Host'}\nStart:    ${start}\nEnd:      ${end}${loc}\n\nBooking reference: preview-test${noteBlk}\n— Bookmeet`;
 		}
 	}
 
@@ -574,7 +574,7 @@
 	</div>
 {/snippet}
 
-<svelte:head><title>{et?.name ?? slug} — Event Type — Calnode</title></svelte:head>
+<svelte:head><title>{et?.name ?? slug} — Event Type — Bookmeet</title></svelte:head>
 <svelte:window onkeydown={saveOnCmdS(saveET, () => !etSaving)} />
 
 <div class="mb-8">
@@ -833,11 +833,11 @@
 						(<a href="{base}/settings/email" class="underline">Settings → Email</a>), never from a host's
 						own address. Hosts still see the meeting on their own calendar, with the meeting link.
 					{:else if form.invite_delivery === 'none'}
-						Neither the host's calendar nor Calnode sends the booker an invite, for when your own
+						Neither the host's calendar nor Bookmeet sends the booker an invite, for when your own
 						system does. Hosts still see the meeting on their own calendar, with the meeting link.
 					{:else}
 						The host's connected calendar invites the booker, so the invite shows the host's own
-						email address. Choose Calnode to keep hosts' addresses private or to book as a team.
+						email address. Choose Bookmeet to keep hosts' addresses private or to book as a team.
 					{/if}
 				</p>
 			</div>
@@ -852,7 +852,7 @@
 			{/if}
 			{#if form.invite_delivery === 'none' && isOnlineLocation(form.location_type)}
 				<p class="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-					This event type books an online meeting, so every booking has a join link, and Calnode will
+					This event type books an online meeting, so every booking has a join link, and Bookmeet will
 					not send it to the booker. Pass its <code class="font-mono">location_value</code> from the
 					<code class="font-mono">booking.created</code> webhook in your own confirmation.
 				</p>
@@ -1317,7 +1317,7 @@
 	<ConfirmDialog
 		bind:open={confirmNoneOpen}
 		title="Send the booker no invite at all?"
-		description="Email is not set up in this workspace, so Calnode will not email the booker anything for this event type, and the host's calendar will not invite them either. The booker only hears from you if your own system sends the confirmation."
+		description="Email is not set up in this workspace, so Bookmeet will not email the booker anything for this event type, and the host's calendar will not invite them either. The booker only hears from you if your own system sends the confirmation."
 		confirmText="Use my own system"
 		cancelText="Cancel"
 		onConfirm={() => { form.invite_delivery = 'none'; noneAcknowledged = true; }}

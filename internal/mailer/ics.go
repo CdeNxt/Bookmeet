@@ -27,7 +27,7 @@ func BuildICS(d BookingData, method string) []byte {
 	var b strings.Builder
 	writeICSLine(&b, "BEGIN:VCALENDAR")
 	writeICSLine(&b, "VERSION:2.0")
-	writeICSLine(&b, "PRODID:-//Calnode//Booking//EN")
+	writeICSLine(&b, "PRODID:-//Bookmeet//Booking//EN")
 	writeICSLine(&b, "CALSCALE:GREGORIAN")
 	writeICSLine(&b, "METHOD:"+method)
 	writeICSLine(&b, "BEGIN:VEVENT")

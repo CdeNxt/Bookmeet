@@ -30,7 +30,7 @@ import (
 // its invite actually went out on.
 
 var errInviteSenderMissing = errors.New(
-	"set up email in Settings → Email before letting Calnode send invites: the invite is delivered by email, from that sender")
+	"set up email in Settings → Email before letting Bookmeet send invites: the invite is delivered by email, from that sender")
 
 // normalizeInviteDelivery maps the API value to a stored mode. Empty means the default,
 // matching booking.CreateParams; anything else unknown is rejected.

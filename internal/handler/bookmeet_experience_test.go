@@ -34,14 +34,14 @@ func TestBookMeetExperiencePersistsAndRenders(t *testing.T) {
 	// Updating an unrelated field must preserve the experience settings.
 	patch(`{"business_name":"BookMeet"}`, 200)
 	body := page()
-	if !strings.Contains(body, `data-booked="unicorns" data-cancelled="off"`) || strings.Contains(body, `href="https://calnode.com"`) {
+	if !strings.Contains(body, `data-booked="unicorns" data-cancelled="off"`) || strings.Contains(body, `href="https://bookmeet.date"`) {
 		t.Fatal("experience not persisted in rendered page")
 	}
 	patch(`{"booking_effect":"<script>bad</script>"}`, 400)
 	patch(`{"cancel_effect":"unicorns"}`, 400)
 	patch(`{"booking_effect":"off","cancel_effect":"sad","hide_attribution":false}`, 200)
 	body = page()
-	if !strings.Contains(body, `data-booked="off" data-cancelled="sad"`) || !strings.Contains(body, `href="https://calnode.com"`) {
+	if !strings.Contains(body, `data-booked="off" data-cancelled="sad"`) || !strings.Contains(body, `href="https://bookmeet.date"`) {
 		t.Fatal("experience switches did not update rendered page")
 	}
 }

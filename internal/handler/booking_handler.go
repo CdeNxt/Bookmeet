@@ -680,7 +680,7 @@ type bookingJSON struct {
 	// "calendar" (the host's calendar invited the booker), "calnode" (Calnode's .ics) or
 	// "none" (nobody; the integration sends its own). Always present, so an integration
 	// can tell whether the booker already holds an invite.
-	InviteDelivery string `json:"invite_delivery" jsonschema:"who sent the booker's calendar invite: calendar (the host's calendar), calnode (Calnode's own email), or none (no invite was sent)"`
+	InviteDelivery string `json:"invite_delivery" jsonschema:"who sent the booker's calendar invite: calendar (the host's calendar), calnode (Bookmeet's own email), or none (no invite was sent)"`
 	// RSVPStatus is the booker's answer to a Calnode-sent invite ("accepted", "declined",
 	// "tentative"), absent until one arrives. Admin list views only.
 	RSVPStatus string         `json:"rsvp_status,omitempty"`

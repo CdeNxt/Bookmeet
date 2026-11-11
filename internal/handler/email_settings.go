@@ -280,7 +280,7 @@ func (h *Handler) PatchEmailSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if req.EmailFromName == "" {
-		req.EmailFromName = "Calnode"
+		req.EmailFromName = "Bookmeet"
 	}
 	if req.RSVPAddress != nil {
 		*req.RSVPAddress = strings.TrimSpace(*req.RSVPAddress)
@@ -470,8 +470,8 @@ func (h *Handler) TestEmailConnection(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.mailer.Send(ctx, mailer.Message{
 		To:      []string{user.Email},
-		Subject: "[TEST] Calnode email configuration",
-		Text:    "This is a test email from Calnode. If you received this, your email settings are working correctly.",
+		Subject: "[TEST] Bookmeet email configuration",
+		Text:    "This is a test email from Bookmeet. If you received this, your email settings are working correctly.",
 	}); err != nil {
 		h.logger.ErrorContext(r.Context(), "email connection test: send",
 			"transport", string(transport), "error", err)

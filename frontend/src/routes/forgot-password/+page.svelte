@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AuthShell from '$lib/components/auth-shell.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
@@ -39,10 +40,9 @@
 	}
 </script>
 
-<svelte:head><title>Forgot password — Calnode</title></svelte:head>
+<svelte:head><title>Forgot password — Bookmeet</title></svelte:head>
 
-<div class="flex min-h-screen items-center justify-center bg-muted/30 p-6">
-	<div class="w-full max-w-sm">
+<AuthShell>
 		<div class="mb-8 text-center">
 			<h1 class="text-xl font-semibold tracking-tight">Forgot your password?</h1>
 			<p class="mt-2 text-sm text-muted-foreground">
@@ -81,5 +81,4 @@
 				<a href="/admin/login" class="text-muted-foreground hover:underline">Back to sign in</a>
 			</p>
 		{/if}
-	</div>
-</div>
+</AuthShell>

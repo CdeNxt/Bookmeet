@@ -167,7 +167,7 @@
 	onConfirm={doDelete}
 />
 
-<svelte:head><title>Webhooks — Calnode</title></svelte:head>
+<svelte:head><title>Webhooks — Bookmeet</title></svelte:head>
 
 <div class="mb-8 flex items-center justify-between">
 	<div>
@@ -190,7 +190,7 @@
 				id="wh-url"
 				type="url"
 				bind:value={form.url}
-				placeholder="https://your-server.com/hooks/calnode"
+				placeholder="https://your-server.com/hooks/bookmeet"
 			/>
 		</div>
 
