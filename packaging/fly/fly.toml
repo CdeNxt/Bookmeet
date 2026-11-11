@@ -1,0 +1,33 @@
+# Bookmeet on Fly.io (app "bookmeet", organization tokamak-labs). Deploy with packaging/fly/deploy.sh.
+# One always-on machine: reminders and calendar sync run in the background, so the machine
+# must not stop when idle (the upstream fly.toml at the repo root lets it stop).
+# Secrets live in Fly (fly secrets list --app bookmeet), never here: CALNODE_ENCRYPTION_KEY,
+# CALNODE_RECOVERY_SECRET, LITESTREAM_REPLICA_URL, LITESTREAM_ACCESS_KEY_ID,
+# LITESTREAM_SECRET_ACCESS_KEY and the optional BOOKMEET_GOOGLE_* keys.
+
+app = 'bookmeet'
+primary_region = 'iad'
+
+[build]
+
+[env]
+  BASE_URL = 'https://bookmeet.date'
+  DATABASE_URL = 'sqlite:///data/calnode.db'
+  LITESTREAM_ENDPOINT = 'https://s3.us-west-004.backblazeb2.com'
+  LITESTREAM_REGION = 'us-west-004'
+
+[[mounts]]
+  source = 'data'
+  destination = '/data'
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = 'off'
+  auto_start_machines = false
+  min_machines_running = 1
+
+[[vm]]
+  memory = '512mb'
+  cpu_kind = 'shared'
+  cpus = 1

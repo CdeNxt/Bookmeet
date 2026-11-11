@@ -55,4 +55,12 @@ Shipped: per-event-type extra in-person before/after buffers and drive time (mig
 
 ## Build version on public pages
 
-The public skin shows the build version (`packaging/home-assistant/version.txt`, stamped into the binary by CI) in small type at the foot of every public page. Bump `version.txt` for every release so the number changes with each push that gets deployed.
+The public skin shows the build version in small type at the foot of every public page. The number lives in `VERSION` at the repository root as `1.N` (1.16 was the last Raspberry Pi build, `0.13.0+bookmeet.16`) and is stamped into the binary at deploy time. Bump it for every release so the number changes with each push that gets deployed. The upstream Calnode release the fork is based on is tracked separately in `packaging/home-assistant/upstream-base.txt`.
+
+## Hosting
+
+Bookmeet runs on Fly.io as one always-on machine with its SQLite database on a volume and continuous Litestream backup to object storage. `packaging/fly/fly.toml` is the configuration and `packaging/fly/deploy.sh` deploys the pushed commit and checks that the live site reports it. Secrets are Fly secrets, never files in this repository. Logo, banner and avatar files live on the volume beside the database and are not part of the Litestream backup; Fly's volume snapshots cover them.
+
+## Week start on public pages
+
+The host's "First day of week" (Settings -> Profile) sets the first column of the calendar on the booking page, the manage page and the embed widget. It used to apply only inside the admin; public calendars were always Monday-first.
