@@ -7,7 +7,8 @@
 # Needs: flyctl signed in (fly auth login) and a clean checkout. Bump VERSION (1.N) in the push.
 # Ask the owner before a production deploy: it replaces the live app.
 # After a production deploy it adds a release line to the venture's LOG.md in the owner's
-# Obsidian vault (BOOKMEET_VAULT, default below). No vault on this machine: it says so, and the
+# Obsidian vault (BOOKMEET_VAULT, else the iMac or laptop location below). No vault on this
+# machine: it says so, and the
 # line must be added by hand.
 set -eu
 cd "$(dirname "$0")/../.."
@@ -17,7 +18,13 @@ case "$target" in
   production) app=bookmeet;         config=packaging/fly/fly.toml ;;
   *) echo "Usage: packaging/fly/deploy.sh staging|production" >&2; exit 2 ;;
 esac
-vault=${BOOKMEET_VAULT:-/Users/Shared/ObsidianVault/10 Ventures/bookmeet}
+# The vault syncs between machines but sits in a different place on each: shared on the iMac,
+# in Documents on a laptop. BOOKMEET_VAULT overrides both.
+vault=${BOOKMEET_VAULT:-}
+if [ -z "$vault" ]; then
+  vault="/Users/Shared/ObsidianVault/10 Ventures/bookmeet"
+  [ -d "$vault" ] || vault="$HOME/Documents/Obsidian Vault/10 Ventures/bookmeet"
+fi
 version=$(tr -d '[:space:]' < VERSION)
 commit=$(git rev-parse HEAD)
 
