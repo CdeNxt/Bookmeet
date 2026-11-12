@@ -250,6 +250,36 @@ webhooks and reminders are updated.
   would undo the reschedule.
 - Any new place that writes `external_event_id` must also call `stampEventAccount`.
 
+## Personal booking links (Bookmeet; the personal booking assistant's foundation)
+
+A personal link is made by an owner for one named guest, limited to windows the owner chose
+(each day its own), usable once. Data layer: `internal/personallink` (tables `personal_links`,
+`personal_link_windows`, migration 00083). Where it meets the shared cores:
+`internal/handler/personal_link.go`. The assistant, Telegram and the guest chat page are not
+built yet; the agreed design is in the owner's vault, `Feature Requests/personal-booking-assistant.md`.
+The naming is "personal link" throughout because `invites.go` already means calendar invites.
+
+- **The windows are a filter on what the engine found, never a second source of availability.**
+  `personalLinkSlots` calls `computeSlots` and drops what the windows do not cover;
+  `bookPersonalLink` calls the booking core. Do not compute free time for a link anywhere else.
+  It asks `computeSlots` for no optional outputs, like the other agent-facing callers.
+- **Single use is `Claim`, not a status check.** Claim is one guarded UPDATE that succeeds for
+  exactly one caller; `bookPersonalLink` claims before it books, releases if the booking fails
+  and marks booked when it succeeds. Reading the status first and booking second is the race
+  this exists to prevent. A claim older than two minutes is treated as a dead attempt.
+- **`outsideWindows` skips the window check and nothing else.** It is for a time the guest
+  suggested and the owner approved. The time must still be bookable. Booking over a calendar
+  clash on the owner's say-so is a later step and needs its own path.
+- **Expiry is applied on read** (`load`), and not to a link in `proposed`: suggested times can
+  fall after the offered windows, and the owner's answer must still be able to book.
+- **The URL token is stored twice on purpose:** `token_hash` to find the link, `token_enc` so
+  the owner can be shown the same link again when a guest loses it.
+- **In person:** the link's confirmed address goes through `createBookingForSlugWith`, which
+  follows `CreateBooking`'s in-person handling step for step. Keep the two in step. It needs
+  an event type with `allow_in_person`.
+- Not handled yet: event types with required intake questions (the link books with no
+  answers), and private or inactive event types (`loadBookableEventType` refuses them).
+
 ## Conventions
 
 - `pnpm` (not npm). Use `pnpm exec <tool>` for local binaries.

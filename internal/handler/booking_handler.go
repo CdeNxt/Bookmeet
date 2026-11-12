@@ -567,6 +567,24 @@ func (h *Handler) loadBookableEventType(ctx context.Context, slug string) (*book
 // booking.ErrDoubleBooked, booking.ErrBookingLimitReached, errNoHostAvailable) for callers to
 // map to their own protocol.
 func (h *Handler) createBookingForSlug(ctx context.Context, slug string, startAt time.Time, organizer booking.Attendee, rawAnswers []booking.Answer) (*booking.Booking, error) {
+	return h.createBookingForSlugWith(ctx, slug, startAt, organizer, rawAnswers, bookingExtras{})
+}
+
+// errInvalidInPersonLocation mirrors the REST handler's "invalid in-person location".
+var errInvalidInPersonLocation = errors.New("invalid in-person location")
+
+// bookingExtras are the parts of a booking that only some callers of the shared core set.
+type bookingExtras struct {
+	// PhysicalLocation is the address of an in-person meeting. The REST handler takes it
+	// from the booker; a personal link takes it from the place its owner confirmed.
+	PhysicalLocation string
+}
+
+// createBookingForSlugWith is createBookingForSlug plus the optional parts in bookingExtras.
+// The in-person handling follows CreateBooking's step for step - same validation, same
+// location switch, same reserved travel time - so a time the slot list offered for an
+// address is a time that books for it.
+func (h *Handler) createBookingForSlugWith(ctx context.Context, slug string, startAt time.Time, organizer booking.Attendee, rawAnswers []booking.Answer, extras bookingExtras) (*booking.Booking, error) {
 	// Both callers take the address from something they do not control — an LLM's
 	// extraction from booker chat, or an MCP client's tool arguments — so it is checked
 	// here, once, rather than in each of them. (The REST handler does not come through
@@ -597,6 +615,16 @@ func (h *Handler) createBookingForSlug(ctx context.Context, slug string, startAt
 	if et.LocationValue != nil {
 		locValue = *et.LocationValue
 	}
+	physical := strings.TrimSpace(extras.PhysicalLocation)
+	if physical != "" {
+		if !et.AllowInPerson || len(physical) > 500 || strings.ContainsAny(physical, "\r\n\x00") {
+			return nil, errInvalidInPersonLocation
+		}
+		if !et.InPersonVideo || !videoMeetingLocation(et.LocationType) {
+			et.LocationType = "in_person"
+			locValue = physical
+		}
+	}
 	hosts, err := h.resolveEventTypeHosts(ctx, et.ID)
 	if err != nil {
 		return nil, fmt.Errorf("resolve event-type hosts: %w", err)
@@ -611,6 +639,22 @@ func (h *Handler) createBookingForSlug(ctx context.Context, slug string, startAt
 	if candidates, err = h.filterAvailableHosts(ctx, et, candidates, startAt.UTC(), endAt); err != nil {
 		return nil, err
 	}
+	var reservedBefore, reservedAfter int
+	if physical != "" {
+		if et.TravelMode == travelModeGoogle {
+			et.TravelDestination = physical
+		}
+		reservedBefore, reservedAfter = et.inPersonReservation()
+		if et.googleTravel() {
+			origin, next := h.travelNeighbours(ctx, candidates[0], startAt, endAt)
+			tq := &travelQuery{Dest: physical, Fallback: et.FixedDriveMinutes}
+			reservedBefore += tq.minutes(ctx, h, origin)
+			if next != "" {
+				reservedAfter += tq.minutes(ctx, h, next)
+			}
+		}
+		et.applyReservation(reservedBefore, reservedAfter)
+	}
 	candidates, optional, err = h.calendarFreeHosts(ctx, et, candidates, required, optional, startAt.UTC(), endAt)
 	if err != nil {
 		if !errors.Is(err, errSlotUnavailable) {
@@ -619,21 +663,24 @@ func (h *Handler) createBookingForSlug(ctx context.Context, slug string, startAt
 		return nil, err
 	}
 	b, err := h.bookingSvc.Create(ctx, booking.CreateParams{
-		EventTypeID:         et.ID,
-		HostIDs:             candidates,
-		RoutingMode:         et.RoutingMode,
-		RRStrategy:          et.RRStrategy,
-		RequiredHosts:       required,
-		OptionalHosts:       optional,
-		StartAt:             startAt.UTC(),
-		EndAt:               endAt,
-		LocationValue:       locValue,
-		LocationType:        et.LocationType,
-		Organizer:           organizer,
-		Answers:             answers,
-		MaxActivePerInvitee: et.MaxActiveBookings,
-		MaxBookingsPerHour:  maxBookingsPerEmailPerHour,
-		InviteDelivery:      et.InviteDelivery,
+		EventTypeID:           et.ID,
+		HostIDs:               candidates,
+		RoutingMode:           et.RoutingMode,
+		RRStrategy:            et.RRStrategy,
+		RequiredHosts:         required,
+		OptionalHosts:         optional,
+		StartAt:               startAt.UTC(),
+		EndAt:                 endAt,
+		LocationValue:         locValue,
+		PhysicalLocation:      physical,
+		ReservedBeforeMinutes: reservedBefore,
+		ReservedAfterMinutes:  reservedAfter,
+		LocationType:          et.LocationType,
+		Organizer:             organizer,
+		Answers:               answers,
+		MaxActivePerInvitee:   et.MaxActiveBookings,
+		MaxBookingsPerHour:    maxBookingsPerEmailPerHour,
+		InviteDelivery:        et.InviteDelivery,
 	})
 	if err != nil {
 		return nil, err
