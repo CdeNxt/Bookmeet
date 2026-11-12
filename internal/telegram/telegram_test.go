@@ -46,6 +46,10 @@ func TestClient_callsTheBotAPI(t *testing.T) {
 			_, _ = w.Write([]byte(`{"ok":true,"result":{"id":1,"username":"bookmeet_test_bot"}}`))
 			return
 		}
+		if strings.HasSuffix(r.URL.Path, "/sendMessage") {
+			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":7}}`))
+			return
+		}
 		_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
 	}))
 	defer srv.Close()

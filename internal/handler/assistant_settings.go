@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
 	"strings"
 	"time"
@@ -21,8 +22,8 @@ import (
 
 // The personal booking assistant's settings, and the Telegram bot its owner reaches it
 // through. This file is the connection only: the switch, the bot's key, tying a Telegram
-// chat to an account, and receiving messages. What the assistant does with a message is
-// ownerMessage, which is a placeholder until the assistant itself lands.
+// chat to an account, and receiving messages. What the assistant does with a message or a
+// button tap is in assistant_owner.go.
 //
 // Two rules hold everything here together:
 //
@@ -422,6 +423,19 @@ func (h *Handler) TelegramWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 
+	// A tap on a button under one of the bot's messages.
+	if cq := update.CallbackQuery; cq != nil {
+		if cq.Message == nil || cq.Message.Chat.Type != "private" {
+			return
+		}
+		userID, linked := h.telegramLinkedUser(r.Context(), cq.Message.Chat.ID)
+		if !linked || !h.assistantActive(r.Context()) {
+			return
+		}
+		h.assistantRun(userID, func(ctx context.Context) { h.ownerHandleCallback(ctx, bot, userID, cq) })
+		return
+	}
+
 	msg := update.Message
 	// Private chats only. In a group the bot would be answering people who never linked.
 	if msg == nil || msg.Chat.Type != "private" {
@@ -451,20 +465,50 @@ func (h *Handler) TelegramWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var userID string
-	if err := h.db.QueryRowContext(ctx, `SELECT user_id FROM telegram_links WHERE chat_id = ?`, msg.Chat.ID).Scan(&userID); err != nil {
+	userID, linked := h.telegramLinkedUser(ctx, msg.Chat.ID)
+	if !linked {
 		return // a stranger: no answer, not even a refusal
 	}
 	if !h.assistantActive(ctx) {
 		return // switched off means quiet
 	}
-	say(h.ownerMessage(ctx, userID, text))
+	if text == "" {
+		return // a photo, a sticker, a voice note: nothing the assistant reads yet
+	}
+	chatID := msg.Chat.ID
+	h.assistantRun(userID, func(ctx context.Context) { h.ownerHandleMessage(ctx, bot, userID, chatID, text) })
 }
 
-// ownerMessage is where the assistant will answer its owner. Until it exists, a linked chat
-// gets a plain acknowledgement, which is also the proof that the connection works end to end.
-func (h *Handler) ownerMessage(_ context.Context, _ string, _ string) string {
-	return "You're connected. I can't take booking requests yet; that arrives with the next update."
+// telegramLinkedUser returns the account a chat is linked to. Every path that answers a
+// chat goes through this first: an unlinked chat is a stranger.
+func (h *Handler) telegramLinkedUser(ctx context.Context, chatID int64) (string, bool) {
+	var userID string
+	if err := h.db.QueryRowContext(ctx, `SELECT user_id FROM telegram_links WHERE chat_id = ?`, chatID).Scan(&userID); err != nil {
+		return "", false
+	}
+	return userID, true
+}
+
+// PersonalLinkPage handles GET /i/{token}: where a guest lands from a personal link. The
+// booking chat that belongs here is the next piece of work; until then the page confirms the
+// link is real and records that it was opened.
+func (h *Handler) PersonalLinkPage(w http.ResponseWriter, r *http.Request) {
+	l, err := h.personalLinks().ByToken(r.Context(), r.PathValue("token"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	_ = h.personalLinks().MarkOpened(r.Context(), l.ID)
+	owner := h.personalLinkOwnerName(r.Context(), l.UserID)
+	line := "The booking chat for this link opens here soon. " + owner + " will be in touch if you need a time before then."
+	if !l.Active() {
+		line = "This link is no longer active. Ask " + owner + " for a new one."
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+	fmt.Fprintf(w, `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Booking with %s</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 1.25rem;color:#252735}h1{font-weight:300;font-size:1.6rem}</style></head><body><h1>Hi %s</h1><p>%s</p></body></html>`,
+		html.EscapeString(owner), html.EscapeString(firstName(l.GuestName)), html.EscapeString(line))
 }
 
 var errTelegramLinkCode = errors.New("telegram link code is not valid")

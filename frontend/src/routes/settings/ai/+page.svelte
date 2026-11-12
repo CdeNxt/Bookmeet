@@ -29,6 +29,14 @@
 	let assistant = $state<AssistantSettings | null>(null);
 	let botKey = $state('');
 	let connectUrl = $state('');
+	let connectExpiresAt = $state(0); // ms since epoch; 0 = no link
+	let secondsLeft = $state(0);
+	let linkCopied = $state(false);
+	let countdown: ReturnType<typeof setInterval> | undefined;
+	const linkExpired = $derived(connectUrl !== '' && secondsLeft <= 0);
+	const timeLeft = $derived(
+		`${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`
+	);
 	let confirmOpen = $state(false);
 	let confirmTitle = $state('');
 	let confirmDescription = $state('');
@@ -39,6 +47,30 @@
 	function stopLinkPoll() {
 		if (linkPoll) clearInterval(linkPoll);
 		linkPoll = undefined;
+		if (countdown) clearInterval(countdown);
+		countdown = undefined;
+	}
+
+	// Counts the one-time link down to its expiry so it is obvious when it has to be remade.
+	function startCountdown(minutes: number) {
+		connectExpiresAt = Date.now() + minutes * 60_000;
+		const tick = () => {
+			secondsLeft = Math.max(0, Math.round((connectExpiresAt - Date.now()) / 1000));
+			if (secondsLeft === 0) stopLinkPoll();
+		};
+		tick();
+		countdown = setInterval(tick, 1000);
+	}
+
+	async function copyConnectLink() {
+		try {
+			await navigator.clipboard.writeText(connectUrl);
+			linkCopied = true;
+			toast.success('Link copied. Open it on your phone before it expires.');
+			setTimeout(() => (linkCopied = false), 2500);
+		} catch {
+			toast.error('Could not copy. Select the link and copy it by hand.');
+		}
 	}
 	onDestroy(stopLinkPoll);
 
@@ -78,8 +110,10 @@
 			const res = await api.post<{ url: string; expires_minutes: number }>(
 				'/v1/settings/assistant/telegram/link'
 			);
-			connectUrl = res.url;
 			stopLinkPoll();
+			connectUrl = res.url;
+			linkCopied = false;
+			startCountdown(res.expires_minutes);
 			let checks = 0;
 			linkPoll = setInterval(async () => {
 				checks += 1;
@@ -94,7 +128,7 @@
 				} catch {
 					// A failed check is not worth a message; the next one may succeed.
 				}
-				if (checks >= 60) stopLinkPoll();
+				if (checks >= 400) stopLinkPoll();
 			}, 3000);
 		}, 'Could not make a connect link');
 	}
@@ -275,10 +309,24 @@
 								<Button size="sm" onclick={connectMyTelegram} disabled={assistantFlag.active}>
 									{connectUrl ? 'Make a new link' : 'Connect my Telegram'}
 								</Button>
-								{#if connectUrl}
+								{#if connectUrl && !linkExpired}
+									<div class="flex flex-wrap items-center gap-2 pt-1">
+										<Button size="sm" variant="outline" onclick={copyConnectLink}>
+											{linkCopied ? 'Copied' : 'Copy secret link'}
+										</Button>
+										<span class="text-xs font-medium tabular-nums text-amber-700" aria-live="off">
+											Expires in {timeLeft}
+										</span>
+									</div>
 									<p class="text-xs text-muted-foreground">
-										<a class="font-medium text-foreground underline" href={connectUrl} target="_blank" rel="noopener noreferrer">Open the bot in Telegram</a>
-										and press Start. The link works once and expires in 15 minutes. This page updates when it's done.
+										Send the link to your phone, or
+										<a class="font-medium text-foreground underline" href={connectUrl} target="_blank" rel="noopener noreferrer">open the bot here</a>,
+										then press Start in Telegram. It works once. Don't share it: whoever opens it is linked to your account.
+										This page updates when it's done.
+									</p>
+								{:else if linkExpired}
+									<p class="text-xs font-medium text-red-700">
+										That link has expired. Make a new one.
 									</p>
 								{/if}
 							{/if}

@@ -47,6 +47,7 @@ const (
 	maxWindows  = 31
 	maxNameLen  = 200
 	maxPlaceLen = 500 // the same ceiling the booking path puts on an in-person location
+	maxTopicLen = 200
 	// A claim older than this belongs to a booking attempt that died mid-flight (a crash
 	// between claiming and finishing). Booking takes seconds, so two minutes is generous.
 	staleClaim = 2 * time.Minute
@@ -67,6 +68,7 @@ type Link struct {
 	GuestPhone   string
 	PlaceName    string
 	PlaceAddress string
+	Topic        string // what the meeting is about, in the owner's words
 	Status       string
 	BookingID    string
 	ReplacesID   string
@@ -113,6 +115,7 @@ type CreateParams struct {
 	GuestPhone   string
 	PlaceName    string
 	PlaceAddress string
+	Topic        string
 	Windows      []Window
 }
 
@@ -189,6 +192,8 @@ func (s *Service) insert(ctx context.Context, tx *sql.Tx, p CreateParams, replac
 		return nil, "", fmt.Errorf("%w: guest name", ErrInvalid)
 	case len(p.PlaceName) > maxPlaceLen || len(p.PlaceAddress) > maxPlaceLen || hasControl(p.PlaceName) || hasControl(p.PlaceAddress):
 		return nil, "", fmt.Errorf("%w: place", ErrInvalid)
+	case len(p.Topic) > maxTopicLen || hasControl(p.Topic):
+		return nil, "", fmt.Errorf("%w: topic", ErrInvalid)
 	case p.PlaceName != "" && p.PlaceAddress == "":
 		// A place is only usable with an address the owner confirmed.
 		return nil, "", fmt.Errorf("%w: place has no address", ErrInvalid)
@@ -218,6 +223,7 @@ func (s *Service) insert(ctx context.Context, tx *sql.Tx, p CreateParams, replac
 		ID: uid.New(), UserID: p.UserID, EventTypeID: p.EventTypeID,
 		GuestName: name, GuestEmail: strings.TrimSpace(p.GuestEmail), GuestPhone: strings.TrimSpace(p.GuestPhone),
 		PlaceName: strings.TrimSpace(p.PlaceName), PlaceAddress: strings.TrimSpace(p.PlaceAddress),
+		Topic:  strings.TrimSpace(p.Topic),
 		Status: StatusOpen, ReplacesID: replacesID,
 		ExpiresAt: windows[len(windows)-1].End, CreatedAt: now, UpdatedAt: now, Windows: windows,
 	}
@@ -229,10 +235,10 @@ func (s *Service) insert(ctx context.Context, tx *sql.Tx, p CreateParams, replac
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO personal_links
 		  (id, user_id, event_type_id, token_hash, token_enc, guest_name, guest_email, guest_phone,
-		   place_name, place_address, status, replaces_id, expires_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		   place_name, place_address, topic, status, replaces_id, expires_at, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		l.ID, l.UserID, l.EventTypeID, hashToken(token), enc, l.GuestName, l.GuestEmail, l.GuestPhone,
-		l.PlaceName, l.PlaceAddress, l.Status, nullable(replacesID), stamp(l.ExpiresAt), stamp(now), stamp(now)); err != nil {
+		l.PlaceName, l.PlaceAddress, l.Topic, l.Status, nullable(replacesID), stamp(l.ExpiresAt), stamp(now), stamp(now)); err != nil {
 		return nil, "", fmt.Errorf("personal link: insert: %w", err)
 	}
 	for _, w := range windows {
@@ -276,7 +282,7 @@ func normalizeWindows(in []Window, now time.Time) ([]Window, error) {
 	return out, nil
 }
 
-const linkColumns = `id, user_id, event_type_id, guest_name, guest_email, guest_phone, place_name, place_address,
+const linkColumns = `id, user_id, event_type_id, guest_name, guest_email, guest_phone, place_name, place_address, topic,
 	status, COALESCE(booking_id, ''), COALESCE(replaces_id, ''), expires_at, COALESCE(last_opened_at, ''), created_at, updated_at`
 
 // ByToken finds the link a URL token belongs to. An unknown token and a malformed one are
@@ -296,7 +302,7 @@ func (s *Service) Get(ctx context.Context, userID, id string) (*Link, error) {
 // List returns the owner's links, newest first: the log a lost link is resent from.
 func (s *Service) List(ctx context.Context, userID string) ([]*Link, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id FROM personal_links WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 200`, userID)
+		`SELECT id FROM personal_links WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 200`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("personal link: list: %w", err)
 	}
@@ -328,7 +334,7 @@ func (s *Service) load(ctx context.Context, query string, args ...any) (*Link, e
 	var l Link
 	var expires, opened, created, updated string
 	err := s.db.QueryRowContext(ctx, query, args...).Scan(
-		&l.ID, &l.UserID, &l.EventTypeID, &l.GuestName, &l.GuestEmail, &l.GuestPhone, &l.PlaceName, &l.PlaceAddress,
+		&l.ID, &l.UserID, &l.EventTypeID, &l.GuestName, &l.GuestEmail, &l.GuestPhone, &l.PlaceName, &l.PlaceAddress, &l.Topic,
 		&l.Status, &l.BookingID, &l.ReplacesID, &expires, &opened, &created, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound

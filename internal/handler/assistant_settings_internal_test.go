@@ -21,6 +21,7 @@ type fakeTelegram struct {
 	srv      *httptest.Server
 	username string
 	reject   bool // answer every call the way Telegram answers a bad key
+	nextID   int64
 	calls    []fakeTelegramCall
 }
 
@@ -47,6 +48,12 @@ func newFakeTelegram(t *testing.T) *fakeTelegram {
 			_, _ = w.Write([]byte(`{"ok":false,"error_code":401,"description":"Unauthorized"}`))
 		case method == "getMe":
 			fmt.Fprintf(w, `{"ok":true,"result":{"id":1,"username":%q}}`, username)
+		case method == "sendMessage":
+			ft.mu.Lock()
+			ft.nextID++
+			id := ft.nextID
+			ft.mu.Unlock()
+			fmt.Fprintf(w, `{"ok":true,"result":{"message_id":%d}}`, id)
 		default:
 			_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
 		}
@@ -87,6 +94,7 @@ func newAssistantFixture(t *testing.T) *assistantFixture {
 	t.Helper()
 	f := &assistantFixture{inviteFixture: newInviteFixture(t, false), tg: newFakeTelegram(t)}
 	f.h.telegramAPIBase = f.tg.srv.URL
+	f.h.assistantInline = true
 	return f
 }
 

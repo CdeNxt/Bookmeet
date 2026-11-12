@@ -283,8 +283,8 @@ The naming is "personal link" throughout because `invites.go` already means cale
 ## Personal booking assistant: switch and Telegram connection (Bookmeet)
 
 Settings → AI has a second card for the assistant. Server side: `assistant_settings.go` and
-`internal/telegram` (a hand-rolled Bot API client). The assistant itself is not built yet:
-`ownerMessage` is the placeholder a linked chat gets.
+`internal/telegram` (a hand-rolled Bot API client). What the assistant does with a message
+or a button tap is the next section.
 
 - **The bot answers only linked chats.** A chat is linked by spending a one-time code made in
   Settings (`/start <code>`). Strangers, groups and unlinked chats get no reply at all, not
@@ -306,6 +306,36 @@ Settings → AI has a second card for the assistant. Server side: `assistant_set
 - v0 uses one dedicated bot per copy. Opening this to customers needs one shared bot plus a
   relay (owner's vault, DECISIONS 2026-11-11); keep Telegram behind `getTelegram()` so that
   swap stays a plumbing change.
+
+## Personal booking assistant: the owner's side on Telegram (Bookmeet)
+
+`assistant_owner.go`. The owner messages the bot; the model works out a guest, a meeting
+type, days and times; the owner confirms on a details panel. The guest's chat page is not
+built yet (`GET /i/{token}` is a placeholder).
+
+- **The model's only way to act is `show_details`, which shows a panel. Creating a link and
+  booking happen on a button tap, never from model output.** A tap is callback data handled
+  by `tapDraft`; no model reads it. Do not add a tool that creates, books or cancels by
+  itself: `cancel_link` only asks, and the tap cancels.
+- **Everything the model hands over is validated in `toolShowDetails` before the owner sees
+  it,** and a refusal is returned to the model as "error: ... ask the owner ...", so it asks
+  instead of showing a broken panel.
+- **Dates come from a calendar table in the prompt, and times stay in the owner's zone on
+  the draft** (`draftWindow`: a date plus minutes). They become instants once, in
+  `createLink`. Do not have the model compute dates or offsets.
+- **One exact time:** with the guest's email it is a direct booking (`bookDirect`, through
+  `createBookingForSlugWith`, no personal link); without one it becomes a link whose single
+  window is exactly the meeting's length. The owner gets the booking's manage link.
+- **Places:** the model passes `place_query`; `searchPlaces` (Google, the same key as the
+  booking page) returns options and the owner taps one. The model never writes an address.
+  Without a Places key the place is taken as typed and the panel says it is unchecked.
+- **One live panel per owner.** A new panel strips the buttons from the old one; a tap on a
+  closed panel answers "no longer active". Work for one owner is serialised (`ownerLocks`).
+- **Assistant work runs off the webhook request** (`assistantRun`), so Telegram is answered
+  at once. Tests set `assistantInline`.
+- The prompt (`ownerAssistantRules`) is code-owned, like `assistantBaseRules`.
+- Not built: a meeting topic on a direct booking (bookings have nowhere to keep one), and
+  per-meeting length or location.
 
 ## Conventions
 

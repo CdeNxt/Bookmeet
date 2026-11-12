@@ -61,8 +61,46 @@ func (e *APIError) Error() string {
 
 // Update is the part of an incoming webhook delivery the assistant reads.
 type Update struct {
-	UpdateID int64    `json:"update_id"`
-	Message  *Message `json:"message"`
+	UpdateID      int64          `json:"update_id"`
+	Message       *Message       `json:"message"`
+	CallbackQuery *CallbackQuery `json:"callback_query"`
+}
+
+// CallbackQuery is a tap on a button under one of the bot's messages.
+type CallbackQuery struct {
+	ID      string   `json:"id"`
+	From    *User    `json:"from"`
+	Message *Message `json:"message"` // the message the button sits under
+	Data    string   `json:"data"`
+}
+
+// Button is one button under a message. Data comes back in a CallbackQuery when it is
+// tapped (64 bytes at most, Telegram's limit); URL makes it open a link instead.
+type Button struct {
+	Text string
+	Data string
+	URL  string
+}
+
+// Markup is the rows of buttons under a message. Nil means none.
+type Markup [][]Button
+
+func (m Markup) wire() map[string]any {
+	rows := make([][]map[string]string, 0, len(m))
+	for _, row := range m {
+		out := make([]map[string]string, 0, len(row))
+		for _, b := range row {
+			btn := map[string]string{"text": b.Text}
+			if b.URL != "" {
+				btn["url"] = b.URL
+			} else {
+				btn["callback_data"] = b.Data
+			}
+			out = append(out, btn)
+		}
+		rows = append(rows, out)
+	}
+	return map[string]any{"inline_keyboard": rows}
 }
 
 type Message struct {
@@ -124,7 +162,65 @@ func (c *Client) DeleteWebhook(ctx context.Context) error {
 
 // SendMessage sends plain text to a chat.
 func (c *Client) SendMessage(ctx context.Context, chatID int64, text string) error {
-	return c.call(ctx, "sendMessage", map[string]any{"chat_id": chatID, "text": text}, nil)
+	_, err := c.Send(ctx, chatID, text, nil)
+	return err
+}
+
+// Send sends plain text with optional buttons and returns the new message's id, which is
+// what Edit needs to rewrite it later. Link previews are off: the assistant's messages carry
+// booking links, and a preview card would bury the text around them.
+func (c *Client) Send(ctx context.Context, chatID int64, text string, markup Markup) (int64, error) {
+	params := map[string]any{
+		"chat_id":              chatID,
+		"text":                 text,
+		"link_preview_options": map[string]any{"is_disabled": true},
+	}
+	if markup != nil {
+		params["reply_markup"] = markup.wire()
+	}
+	var out struct {
+		MessageID int64 `json:"message_id"`
+	}
+	if err := c.call(ctx, "sendMessage", params, &out); err != nil {
+		return 0, err
+	}
+	return out.MessageID, nil
+}
+
+// Edit rewrites a message the bot sent, text and buttons both. Telegram refuses an edit that
+// changes nothing; that is not a failure here.
+func (c *Client) Edit(ctx context.Context, chatID, messageID int64, text string, markup Markup) error {
+	params := map[string]any{
+		"chat_id":              chatID,
+		"message_id":           messageID,
+		"text":                 text,
+		"link_preview_options": map[string]any{"is_disabled": true},
+		"reply_markup":         Markup{}.wire(),
+	}
+	if markup != nil {
+		params["reply_markup"] = markup.wire()
+	}
+	err := c.call(ctx, "editMessageText", params, nil)
+	var apiErr *APIError
+	if errors.As(err, &apiErr) && strings.Contains(apiErr.Description, "message is not modified") {
+		return nil
+	}
+	return err
+}
+
+// AnswerCallback acknowledges a button tap, which stops the button's loading spinner. text,
+// if any, shows briefly at the top of the chat.
+func (c *Client) AnswerCallback(ctx context.Context, callbackID, text string) error {
+	params := map[string]any{"callback_query_id": callbackID}
+	if text != "" {
+		params["text"] = text
+	}
+	return c.call(ctx, "answerCallbackQuery", params, nil)
+}
+
+// Typing shows "typing…" in the chat for a few seconds.
+func (c *Client) Typing(ctx context.Context, chatID int64) error {
+	return c.call(ctx, "sendChatAction", map[string]any{"chat_id": chatID, "action": "typing"}, nil)
 }
 
 // call runs one Bot API method. Errors never contain the request URL, and so never the token.
