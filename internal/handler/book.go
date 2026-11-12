@@ -563,7 +563,7 @@ func (h *Handler) BookPage(w http.ResponseWriter, r *http.Request) {
 	i18nJSON, _ := loc.JSON()
 
 	data := bookPageData{
-		GroupTimes: brand.GroupTimes, PublicTheme: brand.PublicTheme, PublicCopyJSON: brand.PublicCopyJSON(), PublicSkinHTML: template.HTML(bookmeetSkinHTML),
+		GroupTimes: brand.GroupTimes, PublicTheme: brand.PublicTheme, PublicCopyJSON: brand.PublicCopyJSON(), PublicSkinHTML: h.publicHeadHTML(),
 		BookingEffect: brand.BookingEffect, CancelEffect: brand.CancelEffect, HideAttribution: brand.HideAttribution, ExperienceJS: template.JS(bookmeetEffectsJS),
 		InPersonChoice:      allowInPerson,
 		PlacesSearch:        allowInPerson && strings.TrimSpace(os.Getenv("BOOKMEET_GOOGLE_PLACES_KEY")) != "",

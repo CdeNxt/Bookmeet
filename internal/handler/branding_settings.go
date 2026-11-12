@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"image/png"
 	"net/http"
 	"net/url"
@@ -35,6 +36,36 @@ func (h *Handler) ServeBookmeetEmailHeader(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	http.ServeContent(w, r, "bookmeet-email-header.png", time.Time{}, bytes.NewReader(bookmeetEmailHeader))
+}
+
+// The image a link preview shows (Messages, Slack, social cards): the white wordmark on the
+// dark dot field, 1200x630.
+//
+//go:embed assets/bookmeet-share.png
+var bookmeetShareImage []byte
+
+const shareImagePath = "/branding/bookmeet-share.png"
+
+func (h *Handler) ServeBookmeetShareImage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	http.ServeContent(w, r, "bookmeet-share.png", time.Time{}, bytes.NewReader(bookmeetShareImage))
+}
+
+// publicHeadHTML is what every public page puts in its <head>: the link-preview tags, then
+// the skin. Preview readers need an absolute image address, hence the public base URL.
+func (h *Handler) publicHeadHTML() template.HTML {
+	img := template.HTMLEscapeString(strings.TrimRight(h.publicURL(), "/") + shareImagePath)
+	return template.HTML(`<meta property="og:type" content="website">
+<meta property="og:site_name" content="Bookmeet">
+<meta property="og:image" content="` + img + `">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Bookmeet">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="` + img + `">
+` + bookmeetSkinHTML)
 }
 
 // brandingSettings is the instance-wide brand identity. The definition lives in

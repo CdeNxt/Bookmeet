@@ -202,7 +202,7 @@ func (h *Handler) renderManage(w http.ResponseWriter, r *http.Request, data mana
 	data.PublicTheme = brand.PublicTheme
 	data.GroupTimes = brand.GroupTimes
 	data.PublicCopyJSON = brand.PublicCopyJSON()
-	data.PublicSkinHTML = template.HTML(bookmeetSkinHTML)
+	data.PublicSkinHTML = h.publicHeadHTML()
 	data.BusinessName = brand.BusinessName
 	data.LogoURL = brand.LogoURL
 	data.LogoHeight = pageLogoHeight(brand.LogoHeight)

@@ -388,6 +388,7 @@ func New(ctx context.Context, cfg *config.Config, db *sql.DB, logger *slog.Logge
 	mux.HandleFunc("GET /branding/logo", h.ServeBrandingLogo)
 	mux.HandleFunc("GET /branding/banner", h.ServeBrandingBanner)
 	mux.HandleFunc("GET /branding/bookmeet-email-header.png", h.ServeBookmeetEmailHeader)
+	mux.HandleFunc("GET /branding/bookmeet-share.png", h.ServeBookmeetShareImage)
 
 	// Server settings — email (SMTP) and Google OAuth
 	settingsRL := RateLimit(20, time.Minute)

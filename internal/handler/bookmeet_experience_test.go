@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -131,5 +132,25 @@ func TestBookMeetTimeGroupingSetting(t *testing.T) {
 		if info["group_times"] != want {
 			t.Fatal("embed lost grouping preference")
 		}
+	}
+}
+
+// A shared link shows the Bookmeet image: public pages name it with an absolute address
+// (preview readers do not resolve relative ones) and the image itself is served.
+func TestSharePreviewImage(t *testing.T) {
+	h, key, _ := setupWorkspace(t)
+	h.SetPublicBaseURL("https://book.example/")
+	slug, _ := seedEventTypeHTTP(t, h, key)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/book/"+slug, nil)
+	req.SetPathValue("slug", slug)
+	h.BookPage(rec, req)
+	if !regexp.MustCompile(`<meta property="og:image" content="https?://[^"/]+/branding/bookmeet-share\.png">`).MatchString(rec.Body.String()) {
+		t.Fatalf("booking page has no absolute og:image: %q", regexp.MustCompile(`[^\n]*og:image"[^\n]*`).FindString(rec.Body.String()))
+	}
+	rec = httptest.NewRecorder()
+	h.ServeBookmeetShareImage(rec, httptest.NewRequest(http.MethodGet, "/branding/bookmeet-share.png", nil))
+	if rec.Code != 200 || rec.Header().Get("Content-Type") != "image/png" || !strings.HasPrefix(rec.Body.String(), "\x89PNG") {
+		t.Fatalf("share image not served as PNG: %d %s", rec.Code, rec.Header().Get("Content-Type"))
 	}
 }
