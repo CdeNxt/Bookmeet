@@ -11,6 +11,8 @@ primary_region = 'iad'
 
 [env]
   BASE_URL = 'https://staging.bookmeet.date'
+  # staging.bookmeet.date sits behind a Cloudflare Access login, which Telegram cannot pass.
+  TELEGRAM_WEBHOOK_BASE_URL = 'https://bookmeet-staging.fly.dev'
   DATABASE_URL = 'sqlite:///data/calnode.db'
   # Fly's private proxy range plus this app's own public addresses (fly ips list --app
   # bookmeet-staging); see the note in fly.toml. Through Cloudflare the visible hop is

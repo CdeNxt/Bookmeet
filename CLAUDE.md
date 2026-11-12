@@ -280,6 +280,33 @@ The naming is "personal link" throughout because `invites.go` already means cale
 - Not handled yet: event types with required intake questions (the link books with no
   answers), and private or inactive event types (`loadBookableEventType` refuses them).
 
+## Personal booking assistant: switch and Telegram connection (Bookmeet)
+
+Settings → AI has a second card for the assistant. Server side: `assistant_settings.go` and
+`internal/telegram` (a hand-rolled Bot API client). The assistant itself is not built yet:
+`ownerMessage` is the placeholder a linked chat gets.
+
+- **The bot answers only linked chats.** A chat is linked by spending a one-time code made in
+  Settings (`/start <code>`). Strangers, groups and unlinked chats get no reply at all, not
+  even a refusal. Never add a reply path that runs before the `telegram_links` lookup.
+- **A delivery is Telegram's only if it carries the registered secret**
+  (`X-Telegram-Bot-Api-Secret-Token`, compared in constant time). Without it the webhook
+  answers 404; with it, always 200, because Telegram re-sends what it is not thanked for.
+- **The bot token is in every Bot API URL, and Go's transport errors quote the URL.**
+  `telegram.Client.call` strips it; do not log or return a raw error from a new call site
+  that bypasses it (`TestClient_errorsNeverCarryTheToken`).
+- **A key is stored only after Telegram accepted it and the webhook was registered**
+  (`connectTelegram`). The JSON field is a pointer: omitted keeps the key, `""` disconnects.
+- **"Enabled" is not "active".** `assistantActive` also needs a connected bot and a live AI
+  model, either of which can go away after the switch was flipped. Switching on is validated
+  on change, not on mention, so re-saving an already-on switch is never blocked.
+- **`TELEGRAM_WEBHOOK_BASE_URL`** names the address Telegram delivers to when the public one
+  is behind a login Telegram cannot pass. Staging needs it: `staging.bookmeet.date` sits
+  behind Cloudflare Access, so point it at the `fly.dev` address.
+- v0 uses one dedicated bot per copy. Opening this to customers needs one shared bot plus a
+  relay (owner's vault, DECISIONS 2026-11-11); keep Telegram behind `getTelegram()` so that
+  swap stays a plumbing change.
+
 ## Conventions
 
 - `pnpm` (not npm). Use `pnpm exec <tool>` for local binaries.

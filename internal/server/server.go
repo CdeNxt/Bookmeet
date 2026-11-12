@@ -19,6 +19,7 @@ import (
 	"github.com/calnode/calnode/internal/llm"
 	"github.com/calnode/calnode/internal/mailer"
 	"github.com/calnode/calnode/internal/secret"
+	"github.com/calnode/calnode/internal/telegram"
 
 	"github.com/calnode/calnode/internal/stripe"
 	"github.com/calnode/calnode/internal/webhook"
@@ -62,6 +63,7 @@ func BuildHandler(ctx context.Context, cfg *config.Config, db *sql.DB, logger *s
 	h := handler.New(db, logger)
 	h.SetBaseURL(cfg.BaseURL)
 	h.SetPublicBaseURL(cfg.PublicBaseURL)
+	h.SetTelegramWebhookBase(cfg.TelegramWebhookBaseURL)
 	// DATA_DIR, defaulting to the relative "data" every deployment has always used.
 	// The fallback is repeated here because tests build a Config literal that skips
 	// Load, and an empty dir would put uploads beside the binary.
@@ -231,6 +233,14 @@ func BuildHandler(ctx context.Context, cfg *config.Config, db *sql.DB, logger *s
 		logger.Info("LLM layer enabled", "endpoint", llmCfg.Endpoint, "model", llmCfg.Model)
 	} else {
 		logger.Info("LLM layer not enabled — configure it in Settings → AI")
+	}
+
+	// Personal booking assistant: the owner's Telegram bot, when one is connected.
+	if tg, err := handler.LoadTelegramFromDB(db, encKey); err != nil {
+		logger.Warn("telegram: could not load the bot connection", "error", err)
+	} else if tg != nil {
+		h.SetTelegram(telegram.New(tg.Token), tg.WebhookSecret)
+		logger.Info("Telegram bot connected", "bot", tg.Username)
 	}
 
 	// Optional Zoom integration — each host connects their own Zoom account to
@@ -416,6 +426,14 @@ func New(ctx context.Context, cfg *config.Config, db *sql.DB, logger *slog.Logge
 	mux.HandleFunc("GET /v1/settings/llm", h.RequireAuth(h.GetLLMSettings))
 	mux.HandleFunc("PATCH /v1/settings/llm", settingsRL(h.RequireAuth(h.PatchLLMSettings)))
 	mux.HandleFunc("POST /v1/settings/llm/test", settingsRL(h.RequireAuth(h.TestLLMSettings)))
+	mux.HandleFunc("GET /v1/settings/assistant", h.RequireAuth(h.GetAssistantSettings))
+	mux.HandleFunc("PATCH /v1/settings/assistant", settingsRL(h.RequireAuth(h.PatchAssistantSettings)))
+	mux.HandleFunc("POST /v1/settings/assistant/telegram/link", settingsRL(h.RequireAuth(h.CreateTelegramLinkCode)))
+	mux.HandleFunc("DELETE /v1/settings/assistant/telegram/link", settingsRL(h.RequireAuth(h.DeleteTelegramLink)))
+	// Telegram delivers the assistant bot's messages here. Public by necessity; the secret
+	// header Telegram was given at registration is what authenticates a delivery. All of
+	// Telegram's traffic comes from a handful of addresses, so the limit is per-source generous.
+	mux.HandleFunc("POST /v1/telegram/webhook", RateLimit(600, time.Minute)(h.TelegramWebhook))
 	mux.HandleFunc("GET /v1/settings/branding", h.RequireAuth(h.GetBranding))
 	mux.HandleFunc("PATCH /v1/settings/branding", settingsRL(h.RequireAuth(h.PatchBranding)))
 	mux.HandleFunc("POST /v1/settings/branding/logo", settingsRL(h.RequireAuth(h.UploadBrandingLogo)))
