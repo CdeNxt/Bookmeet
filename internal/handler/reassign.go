@@ -187,6 +187,7 @@ func (h *Handler) ReassignBooking(w http.ResponseWriter, r *http.Request) {
 					newEventID, newCalID, newProvider, bCopy.ID); err != nil {
 					h.logger.Error("reassign: persist host event id", "error", err, "booking_id", bCopy.ID)
 				}
+				h.stampEventAccount(ctx, bCopy.ID, newHostID, newProvider)
 			}
 		}
 

@@ -231,3 +231,56 @@ func (c *Client) CancelEvent(ctx context.Context, userID, calendarID, eventID st
 	}
 	return nil
 }
+
+// ReadEvent reads an event back so a move or deletion made in Google Calendar can be applied
+// to the booking. Google keeps a deleted event readable by id with status "cancelled", which
+// is the reliable deletion signal; a 404 or 410 is reported as EventMissing for the caller to
+// weigh, because an event in another account answers the same way.
+func (c *Client) ReadEvent(ctx context.Context, userID, calendarID, eventID string) (calendar.EventSnapshot, error) {
+	if eventID == "" {
+		return calendar.EventSnapshot{}, nil
+	}
+	hc, calID, err := c.DestinationClient(ctx, userID)
+	if err != nil || hc == nil {
+		return calendar.EventSnapshot{}, err
+	}
+	if calendarID != "" {
+		calID = calendarID
+	}
+	apiURL := c.apiBase + "/calendars/" + url.PathEscape(calID) + "/events/" + url.PathEscape(eventID) +
+		"?fields=status,start,end"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return calendar.EventSnapshot{}, fmt.Errorf("gcal: read event request: %w", err)
+	}
+	resp, err := hc.Do(req)
+	if err != nil {
+		return calendar.EventSnapshot{}, fmt.Errorf("gcal: read event call: %w", err)
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusNotFound, http.StatusGone:
+		return calendar.EventSnapshot{State: calendar.EventMissing}, nil
+	default:
+		return calendar.EventSnapshot{}, fmt.Errorf("gcal: read event status %d", resp.StatusCode)
+	}
+	var ev struct {
+		Status string           `json:"status"`
+		Start  calEventDateTime `json:"start"`
+		End    calEventDateTime `json:"end"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&ev); err != nil {
+		return calendar.EventSnapshot{}, fmt.Errorf("gcal: read event decode: %w", err)
+	}
+	if ev.Status == "cancelled" {
+		return calendar.EventSnapshot{State: calendar.EventCancelled}, nil
+	}
+	// An all-day event carries "date" instead of "dateTime": not a time Bookmeet can hold.
+	start, err1 := time.Parse(time.RFC3339, ev.Start.DateTime)
+	end, err2 := time.Parse(time.RFC3339, ev.End.DateTime)
+	if err1 != nil || err2 != nil || !end.After(start) {
+		return calendar.EventSnapshot{}, nil
+	}
+	return calendar.EventSnapshot{State: calendar.EventPresent, Start: start.UTC(), End: end.UTC()}, nil
+}

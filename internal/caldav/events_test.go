@@ -633,3 +633,38 @@ func TestRecognizesEvent(t *testing.T) {
 		}
 	}
 }
+
+// Reading an event back: the host moved it (the server returns its current time), or deleted
+// it (404 from the account that holds it, which calendar.Service counts as cancelled).
+func TestReadEvent_followsMoveAndDeletion(t *testing.T) {
+	c := newTestClient(t)
+	ctx := context.Background()
+	seedUser(t, c.db, "u1")
+	srvA := newDAVServer(t, "a@a.test", "pw-a")
+	if err := c.saveConnection(ctx, "u1", "a@a.test", "pw-a", srvA.URL+"/calendars/a/home/", ""); err != nil {
+		t.Fatal(err)
+	}
+	svc := newSvc(c)
+	eventID, calendarID := createOn(t, svc, "a@a.test")
+
+	snap, err := svc.ReadEvent(ctx, "u1", calendarID, eventID, "caldav", "")
+	if err != nil || snap.State != calendar.EventPresent {
+		t.Fatalf("ReadEvent: state %v err %v; want present", snap.State, err)
+	}
+	if want := time.Date(2026, 7, 1, 9, 0, 0, 0, time.UTC); !snap.Start.Equal(want) || !snap.End.Equal(want.Add(time.Hour)) {
+		t.Errorf("times = %v - %v; want the server's", snap.Start, snap.End)
+	}
+	srvA.onlyOwnCredentials(t, "A")
+
+	gone := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer gone.Close()
+	if err := c.saveConnection(ctx, "u1", "g@g.test", "pw-g", gone.URL+"/calendars/g/home/", ""); err != nil {
+		t.Fatal(err)
+	}
+	snap, err = svc.ReadEvent(ctx, "u1", gone.URL+"/calendars/g/home/", gone.URL+"/calendars/g/home/deleted.ics", "caldav", "")
+	if err != nil || snap.State != calendar.EventCancelled {
+		t.Errorf("deleted resource: state %v err %v; want cancelled", snap.State, err)
+	}
+}

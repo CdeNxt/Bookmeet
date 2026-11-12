@@ -1340,6 +1340,7 @@ func (h *Handler) createHostEvents(ctx context.Context, b *booking.Booking, in b
 			eventID, calID, provider, b.ID, host.UserID); err != nil {
 			h.logger.Error("save host gcal event id", "error", err, "booking_id", b.ID)
 		}
+		h.stampEventAccount(ctx, b.ID, host.UserID, provider)
 		if host.IsPrimary {
 			if _, err := h.db.ExecContext(ctx,
 				`UPDATE bookings SET external_event_id = ? WHERE id = ?`, eventID, b.ID); err != nil {

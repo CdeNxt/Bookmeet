@@ -14,6 +14,14 @@ All operator choices are in **Settings → Branding** and persist in SQLite. The
 
 The **Settings → Branding → Available times** switch controls Morning/Afternoon/Evening groups. Off (the default) shows every time in a single scrollable panel, including rescheduling and embeds.
 
+## Following the host's calendar
+
+A booking follows its event in the host's calendar (Google, Microsoft and CalDAV alike). If the host moves the event there, the booking takes the new start and end, so the manage link, reminders and the slot it holds all match; a move outside the host's availability is accepted as made. If the host cancels or deletes the event, the booking is cancelled. Bookmeet checks when a manage link is opened and about every ten minutes for upcoming bookings.
+
+- Bookmeet sends no email for either change: the calendar the host edited notifies the guests. Where the calendar does not invite guests (CalDAV, or an event type whose invites Bookmeet sends itself), nobody is told automatically.
+- Only time and cancellation are followed, not a changed title, location or guest list. Webhooks (`booking.rescheduled`, `booking.cancelled`) do fire. A paid booking cancelled this way is not refunded automatically.
+- "No such event" counts as deleted only when the account answering is the one that wrote the event (recorded per booking, migration 00082), so swapping calendar accounts cannot cancel bookings. For CalDAV, moving an event to a different calendar gives it a new address and reads as deleted.
+
 ## In-person meetings
 
 In an event type's Location settings, allow guests to choose an in-person location. Video event types can also include their usual video link for in-person bookings. The guest's address remains the calendar event location. With video enabled, the configured video provider supplies its usual join link.

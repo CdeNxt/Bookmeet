@@ -58,6 +58,7 @@ func (h *Handler) reconcileCalendar() {
 	h.reconcileCancellations(ctx, gc)
 	h.reconcileCreations(ctx, gc)
 	h.reconcileReschedules(ctx, gc)
+	h.followCalendarSweep(ctx)
 }
 
 // reconcileReschedules re-applies the calendar time for booking_hosts rows flagged
@@ -277,6 +278,7 @@ func (h *Handler) reconcileCreations(ctx context.Context, gc *calendar.Service) 
 			eventID, calID, provider, m.bookingID, m.userID); err != nil {
 			h.logger.Error("reconcile: save healed event id", "error", err, "booking_id", m.bookingID)
 		}
+		h.stampEventAccount(ctx, m.bookingID, m.userID, provider)
 		if m.isPrimary {
 			if _, err := h.db.ExecContext(ctx,
 				`UPDATE bookings SET external_event_id = ? WHERE id = ?`, eventID, m.bookingID); err != nil {

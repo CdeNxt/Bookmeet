@@ -204,3 +204,62 @@ func (c *Client) CancelEvent(ctx context.Context, userID, calendarID, eventID st
 	}
 	return nil
 }
+
+// ReadEvent reads an event back so a move or deletion made in Outlook can be applied to the
+// booking. Graph removes a deleted event outright, so deletion shows as a 404, reported as
+// EventMissing for the caller to weigh (an event in another mailbox answers the same way).
+// calendarID is unused, as for UpdateEvent.
+func (c *Client) ReadEvent(ctx context.Context, userID, calendarID, eventID string) (calendar.EventSnapshot, error) {
+	if eventID == "" {
+		return calendar.EventSnapshot{}, nil
+	}
+	hc, err := c.httpClient(ctx, userID, -1, 1)
+	if err != nil || hc == nil {
+		return calendar.EventSnapshot{}, err
+	}
+	apiURL := c.apiBase + "/me/events/" + url.PathEscape(eventID) + "?$select=start,end,isCancelled,isAllDay"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return calendar.EventSnapshot{}, fmt.Errorf("microsoft: read event request: %w", err)
+	}
+	// Without this Graph answers in the event's own time zone, named in a Windows format.
+	req.Header.Set("Prefer", `outlook.timezone="UTC"`)
+	resp, err := hc.Do(req)
+	if err != nil {
+		return calendar.EventSnapshot{}, fmt.Errorf("microsoft: read event call: %w", err)
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusNotFound:
+		return calendar.EventSnapshot{State: calendar.EventMissing}, nil
+	default:
+		return calendar.EventSnapshot{}, fmt.Errorf("microsoft: read event status %d", resp.StatusCode)
+	}
+	var ev struct {
+		Start       graphDateTime `json:"start"`
+		End         graphDateTime `json:"end"`
+		IsCancelled bool          `json:"isCancelled"`
+		IsAllDay    bool          `json:"isAllDay"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&ev); err != nil {
+		return calendar.EventSnapshot{}, fmt.Errorf("microsoft: read event decode: %w", err)
+	}
+	if ev.IsCancelled {
+		return calendar.EventSnapshot{State: calendar.EventCancelled}, nil
+	}
+	if ev.IsAllDay || !strings.EqualFold(ev.Start.TimeZone, "UTC") || !strings.EqualFold(ev.End.TimeZone, "UTC") {
+		return calendar.EventSnapshot{}, nil
+	}
+	start, err1 := parseGraphUTC(ev.Start.DateTime)
+	end, err2 := parseGraphUTC(ev.End.DateTime)
+	if err1 != nil || err2 != nil || !end.After(start) {
+		return calendar.EventSnapshot{}, nil
+	}
+	return calendar.EventSnapshot{State: calendar.EventPresent, Start: start, End: end}, nil
+}
+
+// parseGraphUTC parses Graph's zone-less wall clock ("2026-11-19T19:30:00.0000000") as UTC.
+func parseGraphUTC(v string) (time.Time, error) {
+	return time.ParseInLocation("2006-01-02T15:04:05.9999999", v, time.UTC)
+}

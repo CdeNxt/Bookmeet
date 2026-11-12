@@ -302,6 +302,37 @@ func (s *Service) CancelByID(ctx context.Context, id, reason string) error {
 	return nil
 }
 
+// FollowCalendarTime sets a confirmed booking's time to the one its calendar event now has,
+// after the host moved the event in their own calendar. Unlike Reschedule it does not check
+// availability or other bookings: the host made the change deliberately and the calendar is
+// already showing it, so the booking follows. Returns ErrNotFound for an unknown booking,
+// ErrAlreadyCancelled for a cancelled one, and ErrDoubleBooked when another booking of the
+// same host starts at exactly that time (the one clash the schema itself refuses).
+func (s *Service) FollowCalendarTime(ctx context.Context, id string, start, end time.Time) (*Booking, error) {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE bookings SET start_at = ?, end_at = ?, updated_at = ?
+		WHERE id = ? AND status = 'confirmed'`,
+		start.UTC().Format(time.RFC3339Nano), end.UTC().Format(time.RFC3339Nano), now, id)
+	if err != nil {
+		if db.IsUniqueViolation(err) {
+			return nil, ErrDoubleBooked
+		}
+		return nil, fmt.Errorf("booking: follow calendar time: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		b, err := s.Get(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if b.Status == "cancelled" {
+			return nil, ErrAlreadyCancelled
+		}
+		return nil, ErrNotFound
+	}
+	return s.Get(ctx, id)
+}
+
 // bookingColumns is the column list scanBooking expects, in order — shared by every
 // query that loads a full Booking, so a schema change (a column added/removed) is
 // one edit instead of five.

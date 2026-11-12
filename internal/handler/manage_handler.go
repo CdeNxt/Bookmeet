@@ -108,6 +108,9 @@ func (h *Handler) ManagePage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
+	// The host may have moved or deleted the event in their own calendar since: show the
+	// booking as it stands there, not as Bookmeet last wrote it.
+	b = h.followCalendarOnPage(r.Context(), b)
 
 	var etName, etSlug, locType, locValue string
 	var durMins, maxDays, minNotice int

@@ -2,6 +2,7 @@ package caldav
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -455,4 +456,44 @@ func foldLine(line string) string {
 		rest = rest[n:]
 	}
 	return b.String()
+}
+
+// ReadEvent reads an event back so a move or deletion made in the host's calendar app can be
+// applied to the booking. It authenticates as the account that holds the event (eventConn), so
+// a 404 here does mean the resource is gone from that account, and calendar.Service treats it
+// so. Moving the event to a different calendar gives it a new URL and reads as deleted too.
+func (c *Client) ReadEvent(ctx context.Context, userID, calendarID, eventID string) (calendar.EventSnapshot, error) {
+	if eventID == "" {
+		return calendar.EventSnapshot{}, nil
+	}
+	cn, ok, err := c.eventConn(ctx, userID, calendarID, eventID)
+	if err != nil || !ok {
+		if errors.Is(err, calendar.ErrEventUnreachable) {
+			return calendar.EventSnapshot{}, nil // no single account holds it: cannot say
+		}
+		return calendar.EventSnapshot{}, err
+	}
+	body, _, status, err := c.getICS(ctx, eventID, cn.username, cn.password)
+	if err != nil {
+		return calendar.EventSnapshot{}, err
+	}
+	switch status {
+	case http.StatusOK:
+	case http.StatusNotFound, http.StatusGone:
+		return calendar.EventSnapshot{State: calendar.EventMissing}, nil
+	default:
+		return calendar.EventSnapshot{}, fmt.Errorf("caldav: read event returned status %d", status)
+	}
+	events := parseVEvents(body)
+	if len(events) != 1 {
+		return calendar.EventSnapshot{}, nil // not the single event Bookmeet wrote
+	}
+	ev := events[0]
+	if ev.cancelled {
+		return calendar.EventSnapshot{State: calendar.EventCancelled}, nil
+	}
+	if ev.start.IsZero() || !ev.end.After(ev.start) || strings.Contains(strings.ToUpper(body), "VALUE=DATE:") {
+		return calendar.EventSnapshot{}, nil
+	}
+	return calendar.EventSnapshot{State: calendar.EventPresent, Start: ev.start.UTC(), End: ev.end.UTC()}, nil
 }

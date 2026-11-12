@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -31,6 +32,7 @@ type Handler struct {
 	encKey            [32]byte     // AES-256 key for encrypting secrets stored in the DB
 	calMu             sync.RWMutex
 	cal               *calendar.Service
+	calReadbackAt     atomic.Int64  // unix nanos of the last calendar read-back sweep
 	calNudge          chan struct{} // buffered(1): wakes the calendar reconciler after a failed inline op
 	webhookSvc        *webhook.Service
 	baseURL           string
