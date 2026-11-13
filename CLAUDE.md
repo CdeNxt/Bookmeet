@@ -250,6 +250,133 @@ webhooks and reminders are updated.
   would undo the reschedule.
 - Any new place that writes `external_event_id` must also call `stampEventAccount`.
 
+## Personal booking links (Bookmeet; the personal booking assistant's foundation)
+
+A personal link is made by an owner for one named guest, limited to windows the owner chose
+(each day its own), usable once. Data layer: `internal/personallink` (tables `personal_links`,
+`personal_link_windows`, migration 00083). Where it meets the shared cores:
+`internal/handler/personal_link.go`. The assistant, Telegram and the guest chat page are not
+built yet; the agreed design is in the owner's vault, `Feature Requests/personal-booking-assistant.md`.
+The naming is "personal link" throughout because `invites.go` already means calendar invites.
+
+- **The windows are a filter on what the engine found, never a second source of availability.**
+  `personalLinkSlots` calls `computeSlots` and drops what the windows do not cover;
+  `bookPersonalLink` calls the booking core. Do not compute free time for a link anywhere else.
+  It asks `computeSlots` for no optional outputs, like the other agent-facing callers.
+- **Single use is `Claim`, not a status check.** Claim is one guarded UPDATE that succeeds for
+  exactly one caller; `bookPersonalLink` claims before it books, releases if the booking fails
+  and marks booked when it succeeds. Reading the status first and booking second is the race
+  this exists to prevent. A claim older than two minutes is treated as a dead attempt.
+- **`outsideWindows` skips the window check and nothing else.** It is for a time the guest
+  suggested and the owner approved. The time must still be bookable. Booking over a calendar
+  clash on the owner's say-so is a later step and needs its own path.
+- **Expiry is applied on read** (`load`), and not to a link in `proposed`: suggested times can
+  fall after the offered windows, and the owner's answer must still be able to book.
+- **The URL token is stored twice on purpose:** `token_hash` to find the link, `token_enc` so
+  the owner can be shown the same link again when a guest loses it.
+- **In person:** the link's confirmed address goes through `createBookingForSlugWith`, which
+  follows `CreateBooking`'s in-person handling step for step. Keep the two in step. It needs
+  an event type with `allow_in_person`.
+- Not handled yet: event types with required intake questions (the link books with no
+  answers), and private or inactive event types (`loadBookableEventType` refuses them).
+
+## Personal booking assistant: switch and Telegram connection (Bookmeet)
+
+Settings → AI has a second card for the assistant. Server side: `assistant_settings.go` and
+`internal/telegram` (a hand-rolled Bot API client). What the assistant does with a message
+or a button tap is the next section.
+
+- **The bot answers only linked chats.** A chat is linked by spending a one-time code made in
+  Settings (`/start <code>`). Strangers, groups and unlinked chats get no reply at all, not
+  even a refusal. Never add a reply path that runs before the `telegram_links` lookup.
+- **A delivery is Telegram's only if it carries the registered secret**
+  (`X-Telegram-Bot-Api-Secret-Token`, compared in constant time). Without it the webhook
+  answers 404; with it, always 200, because Telegram re-sends what it is not thanked for.
+- **The bot token is in every Bot API URL, and Go's transport errors quote the URL.**
+  `telegram.Client.call` strips it; do not log or return a raw error from a new call site
+  that bypasses it (`TestClient_errorsNeverCarryTheToken`).
+- **A key is stored only after Telegram accepted it and the webhook was registered**
+  (`connectTelegram`). The JSON field is a pointer: omitted keeps the key, `""` disconnects.
+- **"Enabled" is not "active".** `assistantActive` also needs a connected bot and a live AI
+  model, either of which can go away after the switch was flipped. Switching on is validated
+  on change, not on mention, so re-saving an already-on switch is never blocked.
+- **`TELEGRAM_WEBHOOK_BASE_URL`** names the address Telegram delivers to when the public one
+  is behind a login Telegram cannot pass. Staging needs it: `staging.bookmeet.date` sits
+  behind Cloudflare Access, so point it at the `fly.dev` address.
+- v0 uses one dedicated bot per copy. Opening this to customers needs one shared bot plus a
+  relay (owner's vault, DECISIONS 2026-11-11); keep Telegram behind `getTelegram()` so that
+  swap stays a plumbing change.
+
+## Personal booking assistant: the owner's side on Telegram (Bookmeet)
+
+`assistant_owner.go`. The owner messages the bot; the model works out a guest, a meeting
+type, days and times; the owner confirms on a details panel. The guest's side is the next
+section.
+
+- **The model's only way to act is `show_details`, which shows a panel. Creating a link and
+  booking happen on a button tap, never from model output.** A tap is callback data handled
+  by `tapDraft`; no model reads it. Do not add a tool that creates, books or cancels by
+  itself: `cancel_link` only asks, and the tap cancels.
+- **Everything the model hands over is validated in `toolShowDetails` before the owner sees
+  it,** and a refusal is returned to the model as "error: ... ask the owner ...", so it asks
+  instead of showing a broken panel.
+- **Dates come from a calendar table in the prompt, and times stay in the owner's zone on
+  the draft** (`draftWindow`: a date plus minutes). They become instants once, in
+  `createLink`. Do not have the model compute dates or offsets.
+- **One exact time:** with the guest's email it is a direct booking (`bookDirect`, through
+  `createBookingForSlugWith`, no personal link); without one it becomes a link whose single
+  window is exactly the meeting's length. The owner gets the booking's manage link.
+- **Places:** the model passes `place_query`; `searchPlaces` (Google, the same key as the
+  booking page) returns options and the owner taps one. The model never writes an address.
+  Without a Places key the place is taken as typed and the panel says it is unchecked.
+- **One live panel per owner.** A new panel strips the buttons from the old one; a tap on a
+  closed panel answers "no longer active". Work for one owner is serialised (`ownerLocks`).
+- **Assistant work runs off the webhook request** (`assistantRun`), so Telegram is answered
+  at once. Tests set `assistantInline`.
+- The prompt (`ownerAssistantRules`) is code-owned, like `assistantBaseRules`.
+- Not built: a meeting topic on a direct booking (bookings have nowhere to keep one), and
+  per-meeting length or location.
+
+## Personal booking assistant: the guest's chat page (Bookmeet)
+
+`GET /i/{token}` (`templates/plink.html`) is a shell; the conversation comes from
+`POST /v1/links/{token}/chat` (`personal_link_chat.go`) and is saved on the link
+(`personal_link_messages`), so reloading continues it.
+
+- **The program owns the flow; the model fills the gaps.** The greeting, the order (email,
+  then phone, then times), the cards and every button are the program's. A button press
+  never reaches the model. A typed email or phone number is read by the program too
+  (`heard`), so the common path works with no model at all.
+- **The model gets tools for the current step only** (`tools`), and each ends in something
+  the program draws. `pick_time` shows a confirm card; only the guest's Confirm books, through
+  `bookPersonalLink`. When a tool put something on screen, the model's closing remark is
+  dropped so it cannot contradict the card.
+- **The model's state is the link and the open times inside its windows, and nothing before
+  the details are done** (`prompt`). No calendar contents, no other bookings, no other
+  guests. Keep it that way: what it is never told, it cannot be talked into revealing.
+  `TestPersonalLinkChat_theModelSeesOnlyTheLinkAndCanOnlyPickAnOfferedTime` pins this.
+- **Times are in the guest's own zone,** reported by their browser and sent with every
+  request. Confirm and booked cards show the owner's time alongside when the zones differ.
+- **The page caps what it shows** (three days, five times each) behind "More times". That is
+  the page's choice; the server sends every open time.
+- **A booking tells the owner on Telegram at once** (`notifyOwnerBooked`), from the booking
+  record, not from the model.
+- **The booked card only claims an invitation when one will arrive** (`guestWillBeEmailed`:
+  Bookmeet's email is set up, or the host's calendar invites the guest). Otherwise the card
+  and the owner's message say no email is coming. The program then has the last word: the
+  guest is told they can close the chat.
+- **The owner's celebration effect plays on a fresh booking,** the same way the booking page
+  does it: the page fires `bookmeet:booked` and `bookmeet-effects.js` plays the branding
+  setting. Not on reopening a link that is already booked.
+- The module's switch governs links too: off, they stop opening.
+- **Not this page's job, and not a fourth calendar surface:** it has no month grid. Do not
+  grow one here; the three calendar surfaces stay three.
+- **Wording is English only for now,** gathered in `plinkText` so moving it into the locale
+  files is one change. This is a public surface, so that move is owed before the feature
+  leaves staging. The page loads `/booking.css` (`.asst-*` and `.plink-*`) and the public skin.
+- Not built: suggesting other times, notes and change requests for the owner, the closing
+  question and the single end-of-chat message, intake questions asked in chat.
+
 ## Conventions
 
 - `pnpm` (not npm). Use `pnpm exec <tool>` for local binaries.

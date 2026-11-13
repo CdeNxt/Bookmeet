@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="{{.Locale}}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<title>{{.Title}}</title>
+{{template "publicSkinHead" .}}
+<link rel="stylesheet" href="/booking.css?v={{.CSSVersion}}">
+<style>
+/* Page chrome only. The chat's own pieces (.asst-*, .plink-*) live in the shared
+   /booking.css, next to the booking page's assistant they are built from. */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  background: #f3f4f6;
+  color: #111827;
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+</style>
+</head>
+<body style="--booking-accent:{{.AccentColor}};--booking-accent-text:{{.AccentForeground}}">
+{{template "businessHeader" .}}
+<main class="plink-shell">
+  <div class="card plink-card">
+    <div class="asst-head">
+      <div class="asst-head-row">
+        <div class="asst-title">{{.Title}}</div>
+        <label class="plink-zone">
+          <span class="plink-sr" id="plink-zone-label"></span>
+          <select id="plink-zone" aria-labelledby="plink-zone-label"></select>
+        </label>
+      </div>
+      <div class="asst-disclosure">{{.Disclosure}}</div>
+    </div>
+    <div class="asst-log" id="plink-log" aria-live="polite"></div>
+    <form class="asst-row" id="plink-form" autocomplete="off">
+      <input class="asst-input" id="plink-input" type="text" maxlength="1000" disabled>
+      <button class="asst-send" id="plink-send" type="submit" disabled></button>
+    </form>
+  </div>
+</main>
+{{/* SAFE (generic.html-templates.security.var-in-script-tag): .TextJSON is json.Marshal output of a
+     fixed string table (HTML-escapes <,>,&), and .Token is rendered by html/template's JS-string
+     escaper. Neither is raw request data. */}}
+<script>
+(function () {
+  var T = {{.TextJSON}};  // nosemgrep: generic.html-templates.security.var-in-script-tag.var-in-script-tag
+  var token = {{.Token}}; // nosemgrep: generic.html-templates.security.var-in-script-tag.var-in-script-tag
+  var SHOW_DAYS = 3, SHOW_SLOTS = 5; // how much of a long offer is shown before "More times"
+
+  var log = document.getElementById('plink-log');
+  var form = document.getElementById('plink-form');
+  var input = document.getElementById('plink-input');
+  var send = document.getElementById('plink-send');
+  var zoneSel = document.getElementById('plink-zone');
+  var busy = false, stage = 'email';
+
+  document.getElementById('plink-zone-label').textContent = T.zone_label;
+  send.textContent = T.send;
+
+  // The guest's zone comes from their browser, which knows what their device is set to.
+  var zone = 'UTC';
+  try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (e) {}
+  (function fillZones() {
+    var list = [];
+    try { list = Intl.supportedValuesOf('timeZone'); } catch (e) {}
+    if (list.indexOf(zone) < 0) list.unshift(zone);
+    list.forEach(function (z) {
+      var o = document.createElement('option');
+      o.value = z; o.textContent = z.replace(/_/g, ' ');
+      zoneSel.appendChild(o);
+    });
+    zoneSel.value = zone;
+  })();
+  zoneSel.addEventListener('change', function () {
+    zone = zoneSel.value;
+    if (stage === 'times') call({ action: 'times' });
+  });
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function button(cls, text, fn) {
+    var b = el('button', cls, text);
+    b.type = 'button';
+    b.addEventListener('click', function () { if (!busy) fn(b); });
+    return b;
+  }
+  // Only the newest card can be acted on: an older one may show times that have since gone.
+  function retire() {
+    Array.prototype.forEach.call(log.querySelectorAll('button'), function (b) { b.disabled = true; });
+  }
+  function rows(pairs) {
+    var dl = el('dl', 'plink-rows');
+    pairs.forEach(function (p) { dl.appendChild(el('dt', null, p[0])); dl.appendChild(el('dd', null, p[1])); });
+    return dl;
+  }
+
+  function draw(item) {
+    if (item.role === 'guest') { log.appendChild(el('div', 'asst-msg user', item.text)); return; }
+    retire();
+    var m;
+    if (item.kind === 'times') {
+      m = el('div', 'asst-msg bot plink-block');
+      if (item.head) m.appendChild(el('div', 'plink-head', item.head));
+      if (item.text) m.appendChild(el('div', null, item.text));
+      if (item.foot) m.appendChild(el('div', 'plink-foot', item.foot));
+      var hidden = [];
+      (item.days || []).forEach(function (d, di) {
+        var day = el('div', 'plink-day');
+        day.appendChild(el('div', 'plink-day-name', d.label));
+        var times = el('div', 'plink-times');
+        d.slots.forEach(function (s, si) {
+          var b = button('plink-slot', s.label, function () { call({ action: 'pick', start: s.start }); });
+          if (si >= SHOW_SLOTS) { b.hidden = true; hidden.push(b); }
+          times.appendChild(b);
+        });
+        day.appendChild(times);
+        if (di >= SHOW_DAYS) { day.hidden = true; hidden.push(day); }
+        m.appendChild(day);
+      });
+      if (hidden.length) {
+        m.appendChild(button('plink-more', T.more_times, function (b) {
+          hidden.forEach(function (h) { h.hidden = false; });
+          b.remove();
+          log.scrollTop = log.scrollHeight;
+        }));
+      }
+    } else if (item.kind === 'confirm' || item.kind === 'booked') {
+      m = el('div', 'asst-msg plink-block ' + (item.kind === 'booked' ? 'ok' : 'bot'));
+      m.appendChild(el('div', 'plink-title', item.title));
+      m.appendChild(rows(item.rows || []));
+      if (item.foot) m.appendChild(el('div', 'plink-foot', item.foot));
+      if (item.kind === 'confirm') {
+        var acts = el('div', 'plink-actions');
+        acts.appendChild(button('plink-primary', T.btn_confirm, function () { call({ action: 'confirm', start: item.start }); }));
+        acts.appendChild(button('plink-secondary', T.btn_change, function () { call({ action: 'change' }); }));
+        m.appendChild(acts);
+      }
+    } else {
+      m = el('div', 'asst-msg bot', item.text);
+      if (item.skip) {
+        var a = el('div', 'plink-actions');
+        a.appendChild(button('plink-secondary', T.skip, function () { call({ action: 'skip_phone' }); }));
+        m.appendChild(a);
+      }
+    }
+    log.appendChild(m);
+  }
+
+  function setStage(s) {
+    stage = s;
+    var open = s === 'email' || s === 'phone' || s === 'times';
+    input.disabled = !open; send.disabled = !open;
+    input.placeholder = s === 'email' ? T.email_holder : s === 'phone' ? T.phone_holder : T.placeholder;
+    input.type = s === 'email' ? 'email' : s === 'phone' ? 'tel' : 'text';
+    input.autocomplete = s === 'email' ? 'email' : s === 'phone' ? 'tel' : 'off';
+  }
+
+  function call(body, typed) {
+    if (busy) return;
+    busy = true;
+    if (typed) log.appendChild(el('div', 'asst-msg user', typed));
+    var wait = el('div', 'asst-typing', T.thinking);
+    log.appendChild(wait);
+    log.scrollTop = log.scrollHeight;
+    body.timezone = zone;
+    fetch('/v1/links/' + encodeURIComponent(token) + '/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    }).then(function (res) {
+      if (!res.ok) throw new Error('status ' + res.status);
+      return res.json();
+    }).then(function (data) {
+      wait.remove();
+      if (data.history) log.textContent = '';
+      (data.items || []).forEach(draw);
+      setStage(data.stage);
+      // The owner's celebration plays when the booking happens, not each time the page is
+      // reopened on a meeting that is already booked.
+      if (!data.history && (data.items || []).some(function (it) { return it.kind === 'booked'; })) {
+        window.dispatchEvent(new CustomEvent('bookmeet:booked'));
+      }
+    }).catch(function () {
+      wait.remove();
+      log.appendChild(el('div', 'asst-msg note', body.action === 'open' ? T.load_failed : T.trouble));
+    }).then(function () {
+      busy = false;
+      log.scrollTop = log.scrollHeight;
+      if (!input.disabled && !('ontouchstart' in window)) input.focus();
+    });
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var text = input.value.trim();
+    if (!text || busy) return;
+    input.value = '';
+    call({ action: 'say', text: text }, text);
+  });
+
+  call({ action: 'open' });
+})();
+</script>
+{{/* The celebration effects, as on the booking page: the script listens for bookmeet:booked
+     and plays whatever the owner chose in their branding settings ("off" plays nothing). */}}
+<script id="bm-experience" data-booked="{{.BookingEffect}}" data-cancelled="off">{{.ExperienceJS}}</script>
+{{template "publicSkinReady" .}}
+</body>
+</html>

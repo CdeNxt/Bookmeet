@@ -251,6 +251,16 @@ export type StripeSettings = {
 	webhook_url: string;
 };
 
+/** Personal booking assistant: the switch, its Telegram bot, and the signed-in user's chat link. */
+export type AssistantSettings = {
+	enabled: boolean;
+	/** true when it can actually work: switched on, a bot connected, and the AI model live. */
+	active: boolean;
+	ai_active: boolean;
+	telegram: { configured: boolean; bot_username: string };
+	link: { linked: boolean; telegram_name: string };
+};
+
 export type LLMSettings = {
 	enabled: boolean;
 	endpoint: string;

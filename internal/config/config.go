@@ -17,7 +17,11 @@ type Config struct {
 	RecoverySecret string // CALNODE_RECOVERY_SECRET — escrow key stored in keystore
 	BaseURL        string // identity host: OAuth callbacks, admin UI, team invites
 	PublicBaseURL  string // booker-facing host: booking links, emails; defaults to BaseURL
-	LogLevel       slog.Level
+	// TelegramWebhookBaseURL is where Telegram is told to deliver the assistant bot's messages.
+	// Empty means PublicBaseURL. Set it when that address sits behind a login Telegram cannot
+	// pass (TELEGRAM_WEBHOOK_BASE_URL).
+	TelegramWebhookBaseURL string
+	LogLevel               slog.Level
 
 	// Email / SMTP
 	SMTPConnectHost string
@@ -144,6 +148,7 @@ func Load() *Config {
 	// PUBLIC_BASE_URL overrides the booker-facing host (custom/vanity domain).
 	// Unset → inherits BASE_URL, so single-domain deploys need only set BASE_URL.
 	cfg.PublicBaseURL = getEnv("PUBLIC_BASE_URL", cfg.BaseURL)
+	cfg.TelegramWebhookBaseURL = getEnv("TELEGRAM_WEBHOOK_BASE_URL", "")
 	cfg.LogLevel = parseLogLevel(getEnv("LOG_LEVEL", "info"))
 	cfg.CookieSecure = getBool("COOKIE_SECURE", strings.HasPrefix(cfg.BaseURL, "https://"))
 	cfg.DemoMode = getBool("DEMO_MODE", false)
