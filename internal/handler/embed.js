@@ -99,6 +99,19 @@
     return n;
   }
 
+  var SVG_GLOBE = '<svg class="tz-globe" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.9 3.9 5.9 3.9 9s-1.3 6.1-3.9 9c-2.6-2.9-3.9-5.9-3.9-9S9.4 5.9 12 3Z"/></svg>';
+  var SVG_CHEVRON = '<svg class="tz-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
+  // Mirror BookingLogic.tzOffset / tzName (booking-logic.js), which the widget cannot load.
+  function tzOffset(tz, at) {
+    try {
+      var parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'shortOffset' }).formatToParts(at || new Date());
+      for (var i = 0; i < parts.length; i++) {
+        if (parts[i].type === 'timeZoneName') return parts[i].value || '';
+      }
+    } catch (_) {}
+    return '';
+  }
+  function tzName(tz) { return String(tz || '').replace(/_/g, ' '); }
   function dayKey(iso) { return new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso)); }
   // locale is the resolved server-side locale (this.locale), not the browser's own
   // ([]) — see the matching fix/comment in book.html / internal-docs/i18n-plan.md.
@@ -480,7 +493,46 @@
         el('span', { class: 'month-label', text: first.toLocaleDateString(this.locale, { month: 'long', year: 'numeric' }) }),
         prev, next,
       ]);
-      return el('section', { class: 'cal-col' }, [nav, grid, el('p', { class: 'tz-label', text: t(this.i18n, 'times_shown_in') + TZ })]);
+      return el('section', { class: 'cal-col' }, [nav, grid, this.tzPill()]);
+    }
+
+    // tzPill - the timezone dropdown under the calendar. Same markup and classes as the
+    // pill in book.html / manage.html (styled once, in booking.css): a visible label over
+    // an invisible native <select>. Starts on the device's zone; changing it reloads the
+    // month, because day buckets and min-notice dates are both computed in TZ.
+    tzPill() {
+      var self = this;
+      var sel = el('select', { 'aria-label': t(this.i18n, 'timezone_aria') });
+      var zones = Intl.supportedValuesOf ? Intl.supportedValuesOf('timeZone').slice() : [TZ];
+      // The device's own zone can be an alias the list leaves out ("UTC", "Asia/Calcutta").
+      if (zones.indexOf(TZ) < 0) zones.push(TZ);
+      var groups = {};
+      zones.forEach(function (z) {
+        var region = z.indexOf('/') > 0 ? z.split('/')[0] : 'Other';
+        (groups[region] = groups[region] || []).push(z);
+      });
+      Object.keys(groups).sort().forEach(function (region) {
+        var og = el('optgroup', { label: region });
+        groups[region].forEach(function (z) {
+          var opt = el('option', { value: z, text: z.replace(/_/g, ' ') });
+          if (z === TZ) opt.selected = true;
+          og.appendChild(opt);
+        });
+        sel.appendChild(og);
+      });
+      sel.addEventListener('change', function () {
+        TZ = sel.value;
+        // A day key picked in the old zone may not exist in the new one.
+        self.state.day = null; self.state.view = 'pick';
+        self.loadMonth().then(function () { self.render(); });
+      });
+      return el('p', { class: 'tz-label' }, [el('span', { class: 'tz-pill' }, [
+        el('span', { html: SVG_GLOBE }).firstChild,
+        el('span', { class: 'tz-text', 'aria-hidden': 'true', text: tzName(TZ) }),
+        el('span', { class: 'tz-offset', 'aria-hidden': 'true', text: tzOffset(TZ) }),
+        el('span', { html: SVG_CHEVRON }).firstChild,
+        sel,
+      ])]);
     }
 
     // noticeHint — the minimum-notice explanation, or '' when the event type sets none.

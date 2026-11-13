@@ -149,7 +149,26 @@
   // consolidated onto it. If these are ever unified, the shared version must take the
   // locale's list_separator/list_conjunction, not hardcode punctuation.
 
+  // tzOffset — a zone's current UTC offset as the timezone pill shows it, e.g. "GMT-8".
+  // The pill draws the zone name and the offset as separate pieces so a long name can
+  // truncate without hiding the offset. The offset comes from Intl ("shortOffset"), which
+  // older browsers reject with a RangeError; they get '' and the pill shows the name alone.
+  // Mirrored in embed.js (which cannot load this module) - keep the two in step.
+  function tzOffset(tz, at) {
+    try {
+      var parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'shortOffset' }).formatToParts(at || new Date());
+      for (var i = 0; i < parts.length; i++) {
+        if (parts[i].type === 'timeZoneName') return parts[i].value || '';
+      }
+    } catch (_) {}
+    return '';
+  }
+  // tzName — an IANA zone as people read it: "America/Los_Angeles" -> "America/Los Angeles".
+  function tzName(tz) { return String(tz || '').replace(/_/g, ' '); }
+
   return {
+    tzOffset: tzOffset,
+    tzName: tzName,
     dateKeyFromISO: dateKeyFromISO,
     ymd: ymd,
     groupSlotsByDay: groupSlotsByDay,

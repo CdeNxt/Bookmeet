@@ -48,14 +48,6 @@ body {
 /* .powered-by footer (links + Cookie-settings button) is styled in booking.css so
    the book and manage surfaces share one rule. */
 
-/* #tz-sizer is page-specific (the timezone <select> auto-sizer). */
-#tz-sizer {
-  position: absolute;
-  visibility: hidden;
-  white-space: nowrap;
-  font-size: .6875rem;
-  font-family: inherit;
-}
 
 /* Mobile back-to-calendar button (step-flow); hidden on desktop. */
 .cal-back { display: none; }
@@ -171,11 +163,13 @@ body {
   <section class="cal-col" aria-label="{{call .T "date_picker_aria"}}">
     {{template "calendarGrid" .}}
     <p class="tz-label">
-      <span class="tz-wrapper">
+      <span class="tz-pill">
+        <svg class="tz-globe" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.9 3.9 5.9 3.9 9s-1.3 6.1-3.9 9c-2.6-2.9-3.9-5.9-3.9-9S9.4 5.9 12 3Z"/></svg>
+        <span class="tz-text" id="tz-text" aria-hidden="true"></span>
+      <span class="tz-offset" id="tz-offset" aria-hidden="true"></span>
+        <svg class="tz-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
         <select id="tz-select" aria-label="{{call .T "timezone_aria"}}"></select>
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
       </span>
-      <span id="tz-sizer" aria-hidden="true"></span>
     </p>
   </section>
 
@@ -1010,16 +1004,19 @@ body {
   });
 
   // ── Timezone selector ─────────────────────────────────────────────────────
+  // The pill shows its own label (zone + current offset) over an invisible native
+  // <select>, so phones get their own picker and the label is not limited to option text.
   function resizeTzSelect() {
-    const sel = $('tz-select');
-    const sizer = $('tz-sizer');
-    sizer.textContent = sel.options[sel.selectedIndex]?.text || '';
-    sel.style.width = sizer.offsetWidth + 'px';
+    const text = $('tz-text'); if (!text) return;
+    text.textContent = BookingLogic.tzName(TZ);
+    $('tz-offset').textContent = BookingLogic.tzOffset(TZ);
   }
 
   function populateTzSelect() {
     const sel = $('tz-select');
-    const zones = Intl.supportedValuesOf ? Intl.supportedValuesOf('timeZone') : [TZ];
+    const zones = Intl.supportedValuesOf ? Intl.supportedValuesOf('timeZone').slice() : [TZ];
+    // The device's own zone can be an alias the list leaves out ("UTC", "Asia/Calcutta").
+    if (zones.indexOf(TZ) < 0) zones.push(TZ);
     const groups = {};
     zones.forEach(tz => {
       const region = tz.includes('/') ? tz.split('/')[0] : 'Other';

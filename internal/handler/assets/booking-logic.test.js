@@ -124,3 +124,14 @@ test('fmt leaves a string with no verbs untouched', () => {
   assert.equal(B.fmt('No available times.', ['unused']), 'No available times.');
   assert.equal(B.fmt('Inga lediga tider.'), 'Inga lediga tider.');
 });
+
+test('tzOffset gives the offset on the given date, so it follows daylight saving', () => {
+  assert.equal(B.tzOffset('America/Los_Angeles', new Date('2026-01-15T12:00:00Z')), 'GMT-8');
+  assert.equal(B.tzOffset('America/Los_Angeles', new Date('2026-07-15T12:00:00Z')), 'GMT-7');
+  assert.equal(B.tzOffset('Asia/Kolkata', new Date('2026-01-15T12:00:00Z')), 'GMT+5:30');
+});
+
+test('tzOffset is empty for a zone Intl rejects, and tzName still reads cleanly', () => {
+  assert.equal(B.tzOffset('Not/A_Zone'), '');
+  assert.equal(B.tzName('America/Los_Angeles'), 'America/Los Angeles');
+});

@@ -18,6 +18,7 @@
 		group_times: boolean;
 		email_header: string;
 		public_theme: string;
+		glass_tint: number;
         public_copy: Record<string,string>;
         default_public_copy: Record<string,string>;
         booking_effect: string;
@@ -44,6 +45,8 @@
 	const uploadingFlag = createAsyncFlag();
 	let groupTimes = $state(false);
 	let publicTheme = $state('auto');
+	// Liquid Glass level of the public pages' panels: 0 = clear, 100 = tinted.
+	let glassTint = $state(50);
     let publicCopy = $state<Record<string,string>>({});
     let defaultPublicCopy = $state<Record<string,string>>({});
     const copyGroups = [
@@ -99,6 +102,7 @@
 		const b = await api.get<Branding>('/v1/settings/branding');
 		groupTimes = b.group_times ?? false;
 		publicTheme = b.public_theme ?? 'auto';
+		glassTint = b.glass_tint ?? 50;
 		emailHeader = b.email_header ?? 'stacked';
         publicCopy = b.public_copy ?? {};
         defaultPublicCopy = b.default_public_copy ?? {};
@@ -195,6 +199,7 @@
 				group_times: groupTimes,
 				email_header: emailHeader,
 				public_theme: publicTheme,
+				glass_tint: glassTint,
                 public_copy: publicCopy,
                 booking_effect: bookingEffect,
                 cancel_effect: cancelEffect,
@@ -209,6 +214,7 @@
 			});
 			groupTimes = b.group_times ?? false;
 		publicTheme = b.public_theme ?? 'auto';
+		glassTint = b.glass_tint ?? 50;
 		emailHeader = b.email_header ?? 'stacked';
         publicCopy = b.public_copy ?? {};
         defaultPublicCopy = b.default_public_copy ?? {};
@@ -357,6 +363,30 @@
                     <option value="dark">Dark</option>
                 </select>
             </div>
+            <div class="mt-6 grid gap-3 sm:grid-cols-[9rem_1fr]">
+                <Label for="glass-tint" class="pt-1">Liquid Glass</Label>
+                <div class="max-w-sm">
+                    <!-- Live preview: the same clear-to-tinted mapping the public skin applies. -->
+                    <div class="glass-preview" style="--t:{glassTint / 100}" aria-hidden="true">
+                        <div class="glass-preview-bar">
+                            <span class="glass-chip glass-chip-round"></span>
+                            <span class="glass-chip glass-chip-wide">Pick a time</span>
+                        </div>
+                        <div class="glass-preview-panel">
+                            <span class="glass-line glass-line-title"></span>
+                            <span class="glass-line"></span>
+                            <span class="glass-line glass-line-short"></span>
+                        </div>
+                    </div>
+                    <div class="mt-3 flex items-center gap-3 text-muted-foreground">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="7" width="13" height="10" rx="3" opacity=".55"/><rect x="8" y="9" width="13" height="10" rx="3"/></svg>
+                        <input id="glass-tint" type="range" min="0" max="100" step="1" bind:value={glassTint} class="flex-1 accent-primary" aria-valuetext={glassTint < 34 ? 'Clear' : glassTint > 66 ? 'Tinted' : 'Balanced'} />
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="3" y="7" width="13" height="10" rx="3" opacity=".45"/><rect x="8" y="9" width="13" height="10" rx="3"/></svg>
+                    </div>
+                    <div class="mt-1 flex justify-between text-xs text-muted-foreground"><span>Clear</span><span>Tinted</span></div>
+                </div>
+            </div>
+            <p class="mt-3 text-xs text-muted-foreground">How see-through the panels on your booking, manage and directory pages are. Clear lets the moving background show through; Tinted makes the panels more solid and easier to read. Save to apply.</p>
         </div>
         <div class="rounded-lg border bg-card p-6">
             <h2 class="text-sm font-semibold">Available times</h2>
@@ -486,3 +516,37 @@
 		</Dialog.Content>
 	</Dialog.Root>
 {/if}
+
+<style>
+	/* Stand-in for the public pages: a busy backdrop under two pieces of glass, so the
+	   slider's effect is visible before saving. Not a shadcn component - there is no
+	   glass-preview primitive, and this is decoration with no behaviour. */
+	.glass-preview {
+		position: relative;
+		height: 150px;
+		overflow: hidden;
+		border-radius: 16px;
+		background:
+			radial-gradient(circle at 18% 30%, #7c86ff 0 16%, transparent 17%),
+			radial-gradient(circle at 78% 22%, #ffb86b 0 12%, transparent 13%),
+			radial-gradient(circle at 62% 78%, #4fd1a5 0 18%, transparent 19%),
+			repeating-linear-gradient(115deg, #1b1d2b 0 14px, #2b2f48 14px 28px);
+	}
+	.glass-preview-bar { position: absolute; inset: 12px 12px auto; display: flex; gap: 8px; }
+	.glass-chip,
+	.glass-preview-panel {
+		background: linear-gradient(135deg, #ffffff38, #ffffff00 60%), rgb(25 27 38 / calc(0.26 + 0.66 * var(--t)));
+		border: 1px solid #ffffff40;
+		box-shadow: inset 0 1px 0 #ffffff59, 0 6px 20px #00000040;
+		-webkit-backdrop-filter: blur(10px) saturate(180%);
+		backdrop-filter: blur(10px) saturate(180%);
+		color: #f2f3fb;
+	}
+	.glass-chip { display: inline-flex; align-items: center; height: 32px; border-radius: 999px; font-size: 12px; font-weight: 500; }
+	.glass-chip-round { width: 32px; }
+	.glass-chip-wide { padding: 0 14px; }
+	.glass-preview-panel { position: absolute; inset: auto 12px -18px; height: 92px; padding: 16px; border-radius: 18px; display: grid; gap: 8px; align-content: start; }
+	.glass-line { display: block; height: 7px; width: 78%; border-radius: 4px; background: #ffffff8c; }
+	.glass-line-title { height: 10px; width: 46%; background: #ffffffd9; }
+	.glass-line-short { width: 54%; }
+</style>

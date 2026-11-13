@@ -112,7 +112,7 @@ func (h *Handler) renderDirectory(w http.ResponseWriter, r *http.Request, data d
 	data.ExperienceJS = template.JS(bookmeetEffectsJS)
 	data.PublicTheme = brand.PublicTheme
 	data.PublicCopyJSON = brand.PublicCopyJSON()
-	data.PublicSkinHTML = h.publicHeadHTML()
+	data.PublicSkinHTML = h.publicHeadHTML(brand.GlassTint)
 	data.BusinessName = brand.BusinessName
 	data.LogoURL = brand.LogoURL
 	data.LogoHeight = pageLogoHeight(brand.LogoHeight)

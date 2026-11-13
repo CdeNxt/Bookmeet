@@ -205,7 +205,7 @@ func (h *Handler) renderManage(w http.ResponseWriter, r *http.Request, data mana
 	data.PublicTheme = brand.PublicTheme
 	data.GroupTimes = brand.GroupTimes
 	data.PublicCopyJSON = brand.PublicCopyJSON()
-	data.PublicSkinHTML = h.publicHeadHTML()
+	data.PublicSkinHTML = h.publicHeadHTML(brand.GlassTint)
 	data.BusinessName = brand.BusinessName
 	data.LogoURL = brand.LogoURL
 	data.LogoHeight = pageLogoHeight(brand.LogoHeight)

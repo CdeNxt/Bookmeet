@@ -54,7 +54,7 @@ func (h *Handler) ServeBookmeetShareImage(w http.ResponseWriter, r *http.Request
 
 // publicHeadHTML is what every public page puts in its <head>: the link-preview tags, then
 // the skin. Preview readers need an absolute image address, hence the public base URL.
-func (h *Handler) publicHeadHTML() template.HTML {
+func (h *Handler) publicHeadHTML(glassTint int) template.HTML {
 	img := template.HTMLEscapeString(strings.TrimRight(h.publicURL(), "/") + shareImagePath)
 	return template.HTML(`<meta property="og:type" content="website">
 <meta property="og:site_name" content="Bookmeet">
@@ -65,6 +65,7 @@ func (h *Handler) publicHeadHTML() template.HTML {
 <meta property="og:image:alt" content="Bookmeet">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="` + img + `">
+<meta name="bookmeet-glass" content="` + strconv.Itoa(glassTint) + `">
 ` + bookmeetSkinHTML)
 }
 
@@ -130,6 +131,7 @@ func (h *Handler) GetBranding(w http.ResponseWriter, r *http.Request) {
 		"email_header":        b.EmailHeader,
 		"group_times":         b.GroupTimes,
 		"public_theme":        b.PublicTheme,
+		"glass_tint":          b.GlassTint,
 		"public_copy":         b.PublicCopy,
 		"default_public_copy": branding.DefaultPublicCopy(),
 		"booking_effect":      b.BookingEffect,
@@ -159,6 +161,7 @@ func (h *Handler) PatchBranding(w http.ResponseWriter, r *http.Request) {
 		EmailHeader     *string            `json:"email_header"`
 		GroupTimes      *bool              `json:"group_times"`
 		PublicTheme     *string            `json:"public_theme"`
+		GlassTint       *int               `json:"glass_tint"`
 		PublicCopy      *map[string]string `json:"public_copy"`
 		BookingEffect   *string            `json:"booking_effect"`
 		CancelEffect    *string            `json:"cancel_effect"`
@@ -193,6 +196,10 @@ func (h *Handler) PatchBranding(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.PublicTheme != nil && *req.PublicTheme != "auto" && *req.PublicTheme != "light" && *req.PublicTheme != "dark" {
 		h.writeError(w, http.StatusBadRequest, "unsupported public theme")
+		return
+	}
+	if req.GlassTint != nil && (*req.GlassTint < 0 || *req.GlassTint > 100) {
+		h.writeError(w, http.StatusBadRequest, "glass_tint must be between 0 and 100")
 		return
 	}
 	var publicCopyJSON *string
@@ -269,8 +276,8 @@ func (h *Handler) PatchBranding(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := h.db.ExecContext(r.Context(), `
 		UPDATE server_settings SET business_name = ?, logo_height = ?, logo_opacity = ?,
-		       banner_opacity = ?, privacy_url = ?, terms_url = ?, fallback_locale = ?, booking_effect = COALESCE(?, booking_effect), cancel_effect = COALESCE(?, cancel_effect), hide_attribution = COALESCE(?, hide_attribution), public_theme = COALESCE(?, public_theme), public_copy = COALESCE(?, public_copy), group_times = COALESCE(?, group_times), email_header = COALESCE(?, email_header), updated_at = datetime('now')
-		WHERE id = 1`, req.BusinessName, req.LogoHeight, req.LogoOpacity, req.BannerOpacity, privacyURL, termsURL, req.FallbackLocale, req.BookingEffect, req.CancelEffect, req.HideAttribution, req.PublicTheme, publicCopyJSON, req.GroupTimes, req.EmailHeader); err != nil {
+		       banner_opacity = ?, privacy_url = ?, terms_url = ?, fallback_locale = ?, booking_effect = COALESCE(?, booking_effect), cancel_effect = COALESCE(?, cancel_effect), hide_attribution = COALESCE(?, hide_attribution), public_theme = COALESCE(?, public_theme), public_copy = COALESCE(?, public_copy), group_times = COALESCE(?, group_times), email_header = COALESCE(?, email_header), glass_tint = COALESCE(?, glass_tint), updated_at = datetime('now')
+		WHERE id = 1`, req.BusinessName, req.LogoHeight, req.LogoOpacity, req.BannerOpacity, privacyURL, termsURL, req.FallbackLocale, req.BookingEffect, req.CancelEffect, req.HideAttribution, req.PublicTheme, publicCopyJSON, req.GroupTimes, req.EmailHeader, req.GlassTint); err != nil {
 		h.logger.ErrorContext(r.Context(), "branding settings: update", "error", err)
 		h.writeError(w, http.StatusInternalServerError, "internal error")
 		return

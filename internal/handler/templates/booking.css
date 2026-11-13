@@ -140,31 +140,47 @@
 .cd.sel.today::after { background: #fff; }
 .cd:disabled { color: #d1d5db; cursor: default; background: none !important; }
 
-.tz-label {
-  margin-top: .875rem;
-  font-size: .6875rem;
-  color: #9ca3af;
-}
-.tz-wrapper {
+/* Timezone pill: a visible label (zone + offset) with the native <select> laid
+ * invisibly over it, so the whole pill is the tap target and phones use their own picker. */
+.tz-label { margin-top: 1rem; }
+.tz-pill {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 7px;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: #f9fafb;
+  color: #374151;
+  font-size: .8125rem;
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background .18s, border-color .18s;
 }
-.tz-wrapper select {
+.tz-pill:hover { background: #f3f4f6; border-color: #9ca3af; }
+.tz-pill:focus-within { outline: 2px solid var(--booking-accent, #111827); outline-offset: 2px; }
+.tz-pill svg { flex-shrink: 0; pointer-events: none; }
+.tz-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The offset never shrinks: a long zone name truncates, the offset stays readable. */
+.tz-offset { flex-shrink: 0; opacity: .72; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tz-offset:empty { display: none; }
+.tz-pill select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
   appearance: none;
   -webkit-appearance: none;
-  font-size: .6875rem;
-  color: #9ca3af;
-  font-family: inherit;
-  background: none;
-  border: none;
+  border: 0;
+  font: inherit;
+  font-size: 16px; /* below 16px iOS zooms the page when the picker opens */
   cursor: pointer;
-  padding: 0;
-  outline: none;
 }
-.tz-wrapper svg { pointer-events: none; color: #9ca3af; flex-shrink: 0; }
-.tz-wrapper:hover select,
-.tz-wrapper:hover svg { color: #6b7280; }
 
 /* ── Right column ────────────────────────────────── */
 .right-col {
@@ -500,3 +516,19 @@
   .slots-list { scrollbar-gutter: auto; }
 }
 .cd.sel, .slot-btn.sel, .btn-primary { background: var(--booking-accent, #111827) !important; border-color: var(--booking-accent, #111827); color: var(--booking-accent-text, #fff) !important; }
+
+/* ── Motion ──────────────────────────────────────── */
+/* Times rise in one after another when a day is picked. Shared by the pages and the
+ * widget; off entirely for visitors who ask for reduced motion. */
+@keyframes bk-slot-in { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: no-preference) {
+  .slots-list .slot-btn { animation: bk-slot-in .36s cubic-bezier(.22,1,.36,1) both; }
+  .slots-list .slot-btn:nth-child(2) { animation-delay: 25ms; }
+  .slots-list .slot-btn:nth-child(3) { animation-delay: 50ms; }
+  .slots-list .slot-btn:nth-child(4) { animation-delay: 75ms; }
+  .slots-list .slot-btn:nth-child(5) { animation-delay: 100ms; }
+  .slots-list .slot-btn:nth-child(6) { animation-delay: 125ms; }
+  .slots-list .slot-btn:nth-child(7) { animation-delay: 150ms; }
+  .slots-list .slot-btn:nth-child(8) { animation-delay: 175ms; }
+  .slots-list .slot-btn:nth-child(n+9) { animation-delay: 200ms; }
+}

@@ -18,12 +18,18 @@ import (
 	"github.com/calnode/calnode/internal/mailer"
 )
 
+// DefaultGlassTint is the middle of the clear-to-tinted range, where the slider starts.
+const DefaultGlassTint = 50
+
 // Settings is the instance-wide brand identity used in emails and on the public
 // booking/manage/directory pages.
 type Settings struct {
-	EmailHeader     string
-	GroupTimes      bool
-	PublicTheme     string
+	EmailHeader string
+	GroupTimes  bool
+	PublicTheme string
+	// GlassTint is the Liquid Glass level of the panels on the public pages:
+	// 0 = clear, 100 = tinted (most opaque). See bookmeet-skin.html.
+	GlassTint       int
 	PublicCopy      map[string]string
 	BookingEffect   string
 	CancelEffect    string
@@ -45,18 +51,23 @@ type Settings struct {
 func Load(ctx context.Context, db *sql.DB) Settings {
 	var s Settings
 	s.PublicCopy = DefaultPublicCopy()
+	// Set before the read: if the row cannot be scanned, 0 would mean fully clear glass.
+	s.GlassTint = DefaultGlassTint
 	var copyJSON string
 	_ = db.QueryRowContext(ctx, `
 		SELECT COALESCE(business_name,''), COALESCE(logo_url,''),
 		       COALESCE(logo_height,28), COALESCE(logo_opacity,100),
 		       COALESCE(banner_url,''), COALESCE(banner_opacity,100),
 		       COALESCE(privacy_url,''), COALESCE(terms_url,''),
-		       COALESCE(fallback_locale,'en'), booking_effect, cancel_effect, hide_attribution, public_theme, public_copy, group_times, email_header
+		       COALESCE(fallback_locale,'en'), booking_effect, cancel_effect, hide_attribution, public_theme, public_copy, group_times, email_header, glass_tint
 		FROM server_settings WHERE id = 1`).Scan(&s.BusinessName, &s.LogoURL, &s.LogoHeight, &s.LogoOpacity,
-		&s.BannerURL, &s.BannerOpacity, &s.PrivacyURL, &s.TermsURL, &s.FallbackLocale, &s.BookingEffect, &s.CancelEffect, &s.HideAttribution, &s.PublicTheme, &copyJSON, &s.GroupTimes, &s.EmailHeader)
+		&s.BannerURL, &s.BannerOpacity, &s.PrivacyURL, &s.TermsURL, &s.FallbackLocale, &s.BookingEffect, &s.CancelEffect, &s.HideAttribution, &s.PublicTheme, &copyJSON, &s.GroupTimes, &s.EmailHeader, &s.GlassTint)
 	_ = json.Unmarshal([]byte(copyJSON), &s.PublicCopy)
 	if s.PublicTheme != "light" && s.PublicTheme != "dark" {
 		s.PublicTheme = "auto"
+	}
+	if s.GlassTint < 0 || s.GlassTint > 100 {
+		s.GlassTint = DefaultGlassTint
 	}
 	if s.LogoHeight <= 0 {
 		s.LogoHeight = 28
