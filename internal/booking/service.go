@@ -371,6 +371,28 @@ func hostBusy(ctx context.Context, tx *sql.Tx, hostID, start, end, excludeBookin
 	return n > 0, err
 }
 
+// HostsBusy reports whether any of the hosts already has a booking that overlaps the time,
+// counting each booking's reserved travel time: the same question Create asks before it
+// writes. For a caller that needs the answer without making a booking.
+func (s *Service) HostsBusy(ctx context.Context, hostIDs []string, startAt, endAt time.Time, reservedBefore, reservedAfter int) (bool, error) {
+	busyStart, busyEnd := reservedWindow(startAt, endAt, reservedBefore, reservedAfter)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("booking: begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+	for _, hostID := range hostIDs {
+		busy, err := hostBusy(ctx, tx, hostID, busyStart, busyEnd, "")
+		if err != nil {
+			return false, fmt.Errorf("booking: overlap check: %w", err)
+		}
+		if busy {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // Get returns a single booking by ID.
 func reservedWindow(start, end time.Time, before, after int) (string, string) {
 	return start.UTC().Add(-time.Duration(before) * time.Minute).Format(time.RFC3339Nano),

@@ -65,57 +65,76 @@ You may only talk about the open times listed in the state. Never offer or imply
 
 When the guest chooses one of the listed times, call pick_time with its date and time exactly as listed. The program then shows a confirm button; you do not book anything yourself.
 
-You cannot change the meeting (its kind, length, place or who attends) or offer other times. If the guest wants something this link does not offer, say %[1]s will need to sort that out with them directly.
+If none of the times work, the guest may suggest up to three EXACT start times (a day and a clock time): call suggest_times with them. If they give a loose range such as "Thursday afternoon", ask which time. Never list, offer or hint at any availability beyond the open times in the state.
+
+You cannot change the meeting yourself (its kind, length, place or who attends). If the guest asks for that, record it with notify_owner, kind change_request.
+
+Anything else the guest wants passed to %[1]s - a note, that they will sort it out with %[1]s directly (kind follow_up), that they cannot meet after all (kind cannot_attend) - is recorded with notify_owner using their exact words. The program replies for you and sends it all to %[1]s together when the chat is over. Never promise that an answer will come back through this chat.
+
+When the guest indicates they are finished, call end_chat.
 
 Plain text only: no markdown, no lists, no emoji. Reply in the guest's language.`
 
 // plinkText is the page's and the program's wording.
 var plinkText = map[string]string{
-	"title":        "Booking with %s",
-	"disclosure":   "You’re chatting with %s’s AI booking assistant.",
-	"greeting":     "Hi %[1]s, %[2]s asked me to set up a %[3]s meeting with you (%[4]s).",
-	"topic":        "It’s about %s.",
-	"ask_email":    "Before we start, what’s the best email address for the invite?",
-	"have_email":   "I still have your email as %s.",
-	"bad_email":    "That doesn’t look like an email address. Could you check it?",
-	"ask_phone":    "Thanks. What’s the best phone number, in case %s needs to reach you? You can skip this.",
-	"bad_phone":    "I couldn’t read that as a phone number. Try again, or skip it.",
-	"skip":         "Skip",
-	"times_intro":  "%s can do these times. Do any of them work?",
-	"times_again":  "These times are open:",
-	"welcome_back": "Welcome back. These times are open:",
-	"times_head":   "%[1]s · %[2]s · times in %[3]s",
-	"more_times":   "More times",
-	"no_times":     "There are no open times left on this link. %s will be in touch.",
-	"confirm":      "Confirm your time",
-	"when":         "When",
-	"length":       "Length",
-	"where":        "Where",
-	"invite":       "Invite",
-	"btn_confirm":  "Confirm",
-	"btn_change":   "Change",
-	"booked":       "You’re booked.",
-	"invite_sent":  "Sent to %s",
-	"manage_hint":  "You can reschedule or cancel from the invitation.",
-	"invite_none":  "No email will be sent, so please note the time above.",
-	"done":         "That’s everything. You can close this chat now.",
-	"slot_taken":   "That time was just taken. These are still open:",
-	"not_offered":  "That isn’t one of the open times. These are:",
-	"inactive":     "This link is no longer active. Ask %s for a new one.",
-	"already":      "You’re booked. You can reschedule or cancel from the invitation.",
-	"questions":    "This meeting needs a few details I can’t collect here. %s will be in touch.",
-	"trouble":      "I’m having trouble right now. Use the buttons above, or try again in a moment.",
-	"limit":        "We’ve been at this a while. Use the buttons above, or get in touch with %s directly.",
-	"for_host":     "%[1]s for %[2]s",
-	"at_place":     "At %s.",
-	"placeholder":  "Message",
-	"send":         "Send",
-	"thinking":     "Thinking…",
-	"minutes":      "%d minutes",
-	"zone_label":   "Time zone",
-	"load_failed":  "This page could not load. Check your connection and try again.",
-	"email_holder": "Your email address",
-	"phone_holder": "Phone number (optional)",
+	"title":          "Booking with %s",
+	"disclosure":     "You’re chatting with %s’s AI booking assistant.",
+	"greeting":       "Hi %[1]s, %[2]s asked me to set up a %[3]s meeting with you (%[4]s).",
+	"topic":          "It’s about %s.",
+	"ask_email":      "Before we start, what’s the best email address for the invite?",
+	"have_email":     "I still have your email as %s.",
+	"bad_email":      "That doesn’t look like an email address. Could you check it?",
+	"ask_phone":      "Thanks. What’s the best phone number, in case %s needs to reach you? You can skip this.",
+	"bad_phone":      "I couldn’t read that as a phone number. Try again, or skip it.",
+	"skip":           "Skip",
+	"times_intro":    "%s can do these times. Do any of them work?",
+	"times_again":    "These times are open:",
+	"welcome_back":   "Welcome back. These times are open:",
+	"times_head":     "%[1]s · %[2]s · times in %[3]s",
+	"more_times":     "More times",
+	"no_times":       "There are no open times left on this link. %s will be in touch.",
+	"confirm":        "Confirm your time",
+	"when":           "When",
+	"length":         "Length",
+	"where":          "Where",
+	"invite":         "Invite",
+	"btn_confirm":    "Confirm",
+	"btn_change":     "Change",
+	"booked":         "You’re booked.",
+	"invite_sent":    "Sent to %s",
+	"manage_hint":    "You can reschedule or cancel from the invitation.",
+	"invite_none":    "No email will be sent, so please note the time above.",
+	"suggest_btn":    "Suggest another time",
+	"ask_suggest":    "Sure. What times would work for you? Give me up to three, with exact start times.",
+	"suggest_title":  "You’re suggesting",
+	"btn_send":       "Send to %s",
+	"suggest_sent":   "I’ll check with %[1]s. If one works you’ll get an invitation at %[2]s; if not, %[1]s will be in touch.",
+	"suggest_unsure": "I couldn’t work out exact times from that. Which day and start time would suit you?",
+	"anything_else":  "Anything else I can pass on to %s? If not, you can close this chat.",
+	"btn_done":       "That’s all, thanks",
+	"bye":            "Thanks, %s. You can close this chat now.",
+	"noted":          "I’ll pass that on to %s.",
+	"noted_change":   "I’ll pass that to %s, who will be in touch.",
+	"noted_followup": "No problem, I’ll let %s know.",
+	"noted_cannot":   "Understood. I’ll let %s know.",
+	"confirmed":      "%s confirmed. You’re booked.",
+	"slot_taken":     "That time was just taken. These are still open:",
+	"not_offered":    "That isn’t one of the open times. These are:",
+	"inactive":       "This link is no longer active. Ask %s for a new one.",
+	"already":        "You’re booked. You can reschedule or cancel from the invitation.",
+	"questions":      "This meeting needs a few details I can’t collect here. %s will be in touch.",
+	"trouble":        "I’m having trouble right now. Use the buttons above, or try again in a moment.",
+	"limit":          "We’ve been at this a while. Use the buttons above, or get in touch with %s directly.",
+	"for_host":       "%[1]s for %[2]s",
+	"at_place":       "At %s.",
+	"placeholder":    "Message",
+	"send":           "Send",
+	"thinking":       "Thinking…",
+	"minutes":        "%d minutes",
+	"zone_label":     "Time zone",
+	"load_failed":    "This page could not load. Check your connection and try again.",
+	"email_holder":   "Your email address",
+	"phone_holder":   "Phone number (optional)",
 }
 
 func plinkT(key string, args ...any) string {
@@ -137,6 +156,12 @@ type chatItem struct {
 	Start string      `json:"start,omitempty"` // "confirm": the time being confirmed
 	Foot  string      `json:"foot,omitempty"`
 	Skip  bool        `json:"skip,omitempty"` // show a Skip button (the phone question)
+	// Starts are the times on a "suggest" card, sent back when the guest taps Send.
+	Starts []string `json:"starts,omitempty"`
+	// Done shows a "That's all" button (the closing question).
+	Done bool `json:"done,omitempty"`
+	// Label is the wording of a card's main button when it names someone ("Send to Jason").
+	Label string `json:"label,omitempty"`
 }
 
 type chatDay struct {
@@ -150,10 +175,11 @@ type chatSlot struct {
 }
 
 type plinkChatRequest struct {
-	Action   string `json:"action"` // open, say, pick, confirm, change, skip_phone, times
-	Text     string `json:"text"`
-	Start    string `json:"start"`
-	Timezone string `json:"timezone"`
+	Action   string   `json:"action"` // open, say, pick, confirm, change, skip_phone, times
+	Text     string   `json:"text"`
+	Start    string   `json:"start"`
+	Starts   []string `json:"starts"`
+	Timezone string   `json:"timezone"`
 }
 
 type plinkChatResponse struct {
@@ -162,6 +188,9 @@ type plinkChatResponse struct {
 	// what to append.
 	History bool   `json:"history"`
 	Stage   string `json:"stage"` // email, phone, times, booked, closed
+	// Ended is true once the guest has said there is nothing else. The page stops taking
+	// input until it is reopened.
+	Ended bool `json:"ended"`
 }
 
 // plinkSession is one request's view of a link.
@@ -177,6 +206,7 @@ type plinkSession struct {
 	minutes   int
 	locType   string
 	out       []chatItem
+	lastText  string // what the guest just typed, for a tool that passes it on
 }
 
 func (h *Handler) newPlinkSession(ctx context.Context, l *personallink.Link, tz string) (*plinkSession, error) {
@@ -226,14 +256,14 @@ func (s *plinkSession) stage() string {
 // add shows an item and saves it to the conversation.
 func (s *plinkSession) add(ctx context.Context, item chatItem) {
 	s.out = append(s.out, item)
-	content := item.Text
-	if item.Kind != "text" || item.Skip {
+	// Plain text is stored as text; a card, or text that carries a button, as JSON.
+	content, kind := item.Text, item.Kind
+	if item.Kind != "text" || item.Skip || item.Done {
 		raw, _ := json.Marshal(item)
 		content = string(raw)
-	}
-	kind := item.Kind
-	if item.Kind == "text" && item.Skip {
-		kind = "text+skip"
+		if item.Kind == "text" {
+			kind = "text+button"
+		}
 	}
 	if err := s.links.AddMessage(ctx, s.link.ID, item.Role, kind, content); err != nil {
 		s.h.logger.WarnContext(ctx, "personal link chat: save message", "error", err)
@@ -273,10 +303,15 @@ func plinkClock(t time.Time) string { return t.Format("3:04 PM") }
 // when writes a time for the guest, with the owner's own time alongside when the two are in
 // different zones: "Tuesday 17 November, 7:00 AM PST (10:00 AM EST for Jason)".
 func (s *plinkSession) when(start time.Time) string {
-	g := start.In(s.loc)
-	out := g.Format("Monday 2 January") + ", " + plinkClock(g) + " " + g.Format("MST")
-	o := start.In(s.ownerLoc)
-	if _, gOff := g.Zone(); func() int { _, oOff := o.Zone(); return oOff }() != gOff {
+	return start.In(s.loc).Format("Monday 2 January") + ", " + s.clockBoth(start)
+}
+
+// clockBoth is the clock time for the guest, with the owner's alongside when they differ.
+func (s *plinkSession) clockBoth(start time.Time) string {
+	g, o := start.In(s.loc), start.In(s.ownerLoc)
+	out := plinkClock(g) + " " + g.Format("MST")
+	_, gOff := g.Zone()
+	if _, oOff := o.Zone(); oOff != gOff {
 		out += " (" + plinkT("for_host", plinkClock(o)+" "+o.Format("MST"), s.ownerFirst()) + ")"
 	}
 	return out
@@ -444,9 +479,9 @@ func (s *plinkSession) book(ctx context.Context, start time.Time) {
 		card.Foot = plinkT("invite_none")
 	}
 	s.add(ctx, card)
-	// The last word is the program's: the guest is done and can go.
-	s.say(ctx, plinkT("done"))
 	s.h.notifyOwnerBooked(ctx, s, b, emailed)
+	// The last word is the program's: anything else, and if not, they can go.
+	s.closing(ctx)
 }
 
 // guestWillBeEmailed reports whether anything about this booking will reach the guest's
@@ -502,14 +537,140 @@ func (h *Handler) notifyOwnerBooked(ctx context.Context, s *plinkSession, b *boo
 		s.link.UserID, fmt.Sprintf("%s booked through their link: %s.", s.link.GuestName, when), time.Now().UTC().Format(time.RFC3339))
 }
 
+// ---- other times, things to pass on, and the end of the chat ----
+
+func (s *plinkSession) setMode(ctx context.Context, mode string) {
+	if err := s.links.SetChatMode(ctx, s.link.ID, mode); err != nil {
+		s.h.logger.WarnContext(ctx, "personal link chat: set mode", "error", err)
+	}
+	s.link.ChatMode = mode
+}
+
+// closing asks whether there is anything else. The answer is how Bookmeet knows the chat is
+// over, which is what releases everything held for the owner.
+func (s *plinkSession) closing(ctx context.Context) {
+	s.setMode(ctx, personallink.ChatClosing)
+	s.add(ctx, chatItem{Role: "assistant", Kind: "text", Text: plinkT("anything_else", s.ownerFirst()), Done: true})
+}
+
+// end is the guest saying there is nothing else. The owner is told now rather than at the
+// next sweep.
+func (s *plinkSession) end(ctx context.Context) {
+	s.setMode(ctx, personallink.ChatEnded)
+	s.say(ctx, plinkT("bye", firstName(s.link.GuestName)))
+	s.h.reportChat(ctx, s.link.ID)
+}
+
+// hold keeps something for the owner and answers the guest in the program's own short words.
+func (s *plinkSession) hold(ctx context.Context, kind, words string) {
+	words = strings.TrimSpace(words)
+	if len(words) > 1000 {
+		words = words[:1000]
+	}
+	if err := s.links.Hold(ctx, s.link.ID, kind, words); err != nil {
+		s.h.logger.ErrorContext(ctx, "personal link chat: hold", "error", err)
+		s.say(ctx, plinkT("trouble"))
+		return
+	}
+	switch kind {
+	case personallink.HeldChange:
+		s.say(ctx, plinkT("noted_change", s.ownerFirst()))
+	case personallink.HeldFollowUp:
+		if s.link.Status == personallink.StatusOpen {
+			if err := s.links.SetStatus(ctx, s.link.ID, personallink.StatusFollowUp); err == nil {
+				s.link.Status = personallink.StatusFollowUp
+			}
+		}
+		s.say(ctx, plinkT("noted_followup", s.ownerFirst()))
+	case personallink.HeldCannot:
+		s.say(ctx, plinkT("noted_cannot", s.ownerFirst()))
+	default:
+		s.say(ctx, plinkT("noted", s.ownerFirst()))
+		return // a note is not the end of anything
+	}
+	s.closing(ctx)
+}
+
+func (s *plinkSession) askSuggest(ctx context.Context) {
+	s.setMode(ctx, personallink.ChatSuggesting)
+	s.say(ctx, plinkT("ask_suggest"))
+}
+
+// suggestCard shows the guest the times they are about to suggest, in both zones, to
+// confirm or change before anything goes to the owner.
+func (s *plinkSession) suggestCard(ctx context.Context, starts []time.Time) {
+	item := chatItem{Role: "assistant", Kind: "suggest", Title: plinkT("suggest_title"), Label: plinkT("btn_send", s.ownerFirst())}
+	for _, start := range starts {
+		item.Rows = append(item.Rows, [2]string{start.In(s.loc).Format("Mon 2 Jan"), s.clockBoth(start)})
+		item.Starts = append(item.Starts, start.UTC().Format(time.RFC3339))
+	}
+	s.add(ctx, item)
+}
+
+// usableSuggestions keeps up to three future times, dropping repeats.
+func usableSuggestions(starts []time.Time, now time.Time) []time.Time {
+	var out []time.Time
+	seen := map[int64]bool{}
+	for _, t := range starts {
+		if !t.After(now) || t.After(now.AddDate(1, 0, 0)) || seen[t.Unix()] {
+			continue
+		}
+		seen[t.Unix()] = true
+		if out = append(out, t.UTC()); len(out) == 3 {
+			break
+		}
+	}
+	return out
+}
+
+// sendSuggestions holds the times the guest confirmed. Nothing is checked against the
+// owner's calendar here and nothing about it is said: the owner sees every suggestion.
+func (s *plinkSession) sendSuggestions(ctx context.Context, raw []string) {
+	var starts []time.Time
+	for _, v := range raw {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			starts = append(starts, t)
+		}
+	}
+	starts = usableSuggestions(starts, time.Now())
+	if len(starts) == 0 {
+		s.say(ctx, plinkT("suggest_unsure"))
+		return
+	}
+	out := make([]string, len(starts))
+	for i, t := range starts {
+		out[i] = t.Format(time.RFC3339)
+	}
+	content, _ := json.Marshal(out)
+	if err := s.links.Hold(ctx, s.link.ID, personallink.HeldSuggestions, string(content)); err != nil {
+		s.h.logger.ErrorContext(ctx, "personal link chat: hold suggestions", "error", err)
+		s.say(ctx, plinkT("trouble"))
+		return
+	}
+	s.say(ctx, plinkT("suggest_sent", s.ownerFirst(), s.link.GuestEmail))
+	s.closing(ctx)
+}
+
+var plinkDoneWords = regexp.MustCompile(`(?i)^\s*(no|nope|nah|nothing|none|that'?s all|that’s all|that'?s it|that’s it|that is all|all good|all set|i'?m good|i’m good|no thanks|no thank you|thanks|thank you|bye|goodbye|done)([\s,.!]+(thanks|thank you|bye))?[\s.!]*$`)
+
 // ---- what the guest typed ----
 
 // heard handles a typed message. The program reads an email or a phone number itself; the
 // model gets what is left.
 func (s *plinkSession) heard(ctx context.Context, text string) {
-	switch s.stage() {
+	s.lastText = text
+	stage := s.stage()
+	// After "anything else?", a plain no is the end of the chat. The program reads it.
+	if stage != "closed" && s.link.ChatMode == personallink.ChatClosing && plinkDoneWords.MatchString(text) {
+		s.end(ctx)
+		return
+	}
+	switch stage {
 	case "booked":
-		s.say(ctx, plinkT("already"))
+		// Booked already: whatever they add is something for the owner.
+		if !s.model(ctx, text) {
+			s.hold(ctx, personallink.HeldNote, text)
+		}
 		return
 	case "closed":
 		s.say(ctx, plinkT("inactive", s.ownerFirst()))
@@ -531,11 +692,17 @@ func (s *plinkSession) heard(ctx context.Context, text string) {
 		return
 	}
 	// No model, or it failed: fall back to the plain next step.
-	switch s.stage() {
-	case "email":
+	switch {
+	case s.stage() == "email":
 		s.say(ctx, plinkT("bad_email"))
-	case "phone":
+	case s.stage() == "phone":
 		s.add(ctx, chatItem{Role: "assistant", Kind: "text", Text: plinkT("bad_phone"), Skip: true})
+	case s.link.ChatMode == personallink.ChatSuggesting || s.link.ChatMode == personallink.ChatClosing:
+		// The guest was asked for other times, or for anything else, and nothing here can
+		// read the answer. It still reaches the owner, in the guest's own words, and the
+		// guest is asked once more so the chat has a way to end.
+		s.hold(ctx, personallink.HeldNote, text)
+		s.closing(ctx)
 	default:
 		s.say(ctx, plinkT("trouble"))
 	}
@@ -557,7 +724,7 @@ func (s *plinkSession) model(ctx context.Context, text string) bool {
 			continue // cards are the program's; the state already says what is on offer
 		}
 		content := m.Content
-		if m.Kind == "text+skip" {
+		if m.Kind != "text" {
 			var item chatItem
 			if json.Unmarshal([]byte(m.Content), &item) == nil {
 				content = item.Text
@@ -615,6 +782,8 @@ func (s *plinkSession) prompt(ctx context.Context) string {
 		b.WriteString("Step: waiting for the guest's email address. Times are hidden until it is saved.\n")
 	case "phone":
 		fmt.Fprintf(&b, "Step: email saved (%s). Waiting for a phone number, which the guest may skip.\n", s.link.GuestEmail)
+	case "booked":
+		b.WriteString("Step: the meeting is booked. Nothing more can be booked or suggested. The guest may leave a note for the host, or finish.\n")
 	default:
 		b.WriteString("Step: details done. Open times, in the guest's zone:\n")
 		res, err := s.h.personalLinkSlots(ctx, s.link, s.loc.String())
@@ -637,6 +806,12 @@ func (s *plinkSession) prompt(ctx context.Context) string {
 		}
 		b.WriteString("\n")
 	}
+	switch s.link.ChatMode {
+	case personallink.ChatSuggesting:
+		b.WriteString("The guest has just been asked which other times would work for them.\n")
+	case personallink.ChatClosing:
+		b.WriteString("The guest has just been asked whether there is anything else.\n")
+	}
 	return b.String()
 }
 
@@ -645,22 +820,36 @@ func (s *plinkSession) tools() []llm.Tool {
 		return map[string]any{"type": "object", "properties": props, "required": required}
 	}
 	str := func(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
+	passOn := []llm.Tool{
+		{Type: "function", Function: llm.ToolFunction{
+			Name: "notify_owner", Description: "Record something the guest wants passed to the host. The program replies to the guest for you.",
+			Parameters: obj(map[string]any{
+				"kind":        map[string]any{"type": "string", "enum": []string{"note", "change_request", "follow_up", "cannot_attend"}},
+				"guest_words": str("What the guest said, in their exact words"),
+			}, "kind", "guest_words"),
+		}},
+	}
 	switch s.stage() {
 	case "email":
-		return []llm.Tool{{Type: "function", Function: llm.ToolFunction{
+		return append([]llm.Tool{{Type: "function", Function: llm.ToolFunction{
 			Name: "save_email", Description: "Save the guest's email address when they give one.",
 			Parameters: obj(map[string]any{"email": str("The email address exactly as the guest wrote it")}, "email"),
-		}}}
+		}}}, passOn...)
 	case "phone":
-		return []llm.Tool{
+		return append([]llm.Tool{
 			{Type: "function", Function: llm.ToolFunction{
 				Name: "save_phone", Description: "Save the guest's phone number when they give one.",
 				Parameters: obj(map[string]any{"phone": str("The phone number as the guest wrote it")}, "phone"),
 			}},
 			{Type: "function", Function: llm.ToolFunction{Name: "skip_phone", Description: "The guest does not want to give a phone number."}},
-		}
+		}, passOn...)
 	}
-	return []llm.Tool{
+	// Past the details, the guest can leave something for the owner or say they are done.
+	always := append(passOn, llm.Tool{Type: "function", Function: llm.ToolFunction{Name: "end_chat", Description: "The guest has nothing else. Ends the chat."}})
+	if s.stage() == "booked" {
+		return always
+	}
+	return append([]llm.Tool{
 		{Type: "function", Function: llm.ToolFunction{Name: "show_times", Description: "Show the open times again as buttons."}},
 		{Type: "function", Function: llm.ToolFunction{
 			Name: "pick_time", Description: "The guest chose one of the listed open times. Shows them a confirm button.",
@@ -669,19 +858,72 @@ func (s *plinkSession) tools() []llm.Tool {
 				"time": str("The time exactly as listed, such as 9:30 AM"),
 			}, "date", "time"),
 		}},
-	}
+		{Type: "function", Function: llm.ToolFunction{
+			Name: "suggest_times", Description: "The guest named exact times that are not among the open times. Shows them a card to confirm and send to the host.",
+			Parameters: obj(map[string]any{
+				"suggestions": map[string]any{
+					"type": "array", "description": "Up to three times, in the guest's zone",
+					"items": obj(map[string]any{"date": str("YYYY-MM-DD"), "time": str("Start time, such as 2:00 PM")}, "date", "time"),
+				},
+			}, "suggestions"),
+		}},
+	}, always...)
 }
 
 func (s *plinkSession) runTool(ctx context.Context, name, argsJSON string) string {
 	var args struct {
-		Email string `json:"email"`
-		Phone string `json:"phone"`
-		Date  string `json:"date"`
-		Time  string `json:"time"`
+		Email       string `json:"email"`
+		Phone       string `json:"phone"`
+		Date        string `json:"date"`
+		Time        string `json:"time"`
+		Kind        string `json:"kind"`
+		GuestWords  string `json:"guest_words"`
+		Suggestions []struct {
+			Date string `json:"date"`
+			Time string `json:"time"`
+		} `json:"suggestions"`
 	}
 	_ = json.Unmarshal([]byte(argsJSON), &args)
 	stage := s.stage()
 	switch {
+	case name == "notify_owner" && stage != "closed":
+		kind, ok := map[string]string{
+			"note": personallink.HeldNote, "change_request": personallink.HeldChange,
+			"follow_up": personallink.HeldFollowUp, "cannot_attend": personallink.HeldCannot,
+		}[args.Kind]
+		if !ok {
+			kind = personallink.HeldNote
+		}
+		// The guest's own message is what is passed on, not the model's retelling of it.
+		words := s.lastText
+		if words == "" {
+			words = args.GuestWords
+		}
+		s.hold(ctx, kind, words)
+		return "Recorded, and the program has replied to the guest."
+	case name == "end_chat" && (stage == "times" || stage == "booked"):
+		s.end(ctx)
+		return "The chat is ended."
+	case name == "suggest_times" && stage == "times":
+		var starts []time.Time
+		for _, sg := range args.Suggestions {
+			day, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(sg.Date), s.loc)
+			minute, ok := plinkParseClock(sg.Time)
+			if err != nil || !ok {
+				continue
+			}
+			start := time.Date(day.Year(), day.Month(), day.Day(), minute/60, minute%60, 0, 0, s.loc)
+			if s.offered(ctx, start) {
+				return "error: " + start.In(s.loc).Format("Mon 2 Jan ") + plinkClock(start.In(s.loc)) + " is already one of the open times. Use pick_time for it."
+			}
+			starts = append(starts, start)
+		}
+		starts = usableSuggestions(starts, time.Now())
+		if len(starts) == 0 {
+			return "error: no exact future time was given. Ask the guest which day and start time would suit them."
+		}
+		s.suggestCard(ctx, starts)
+		return "The guest sees a card to confirm and send."
 	case name == "save_email" && stage == "email":
 		if !s.saveEmail(ctx, args.Email) {
 			return "error: that is not a valid email address. Ask the guest to check it."
@@ -753,11 +995,25 @@ func (h *Handler) PersonalLinkChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The guest's page closing. A beacon, so there is nobody to answer.
+	if req.Action == "leave" {
+		_ = s.links.MarkLeft(ctx, l.ID)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	history := false
+	if req.Action != "open" && s.stage() != "closed" {
+		// The guest did something: the chat is live again, whatever it was before.
+		_ = s.links.Touch(ctx, l.ID)
+		if l.ChatMode == personallink.ChatEnded {
+			s.setMode(ctx, "")
+		}
+	}
 	switch req.Action {
 	case "open":
 		history = true
 		_ = s.links.MarkOpened(ctx, l.ID)
+		_ = s.links.MarkBack(ctx, l.ID)
 		past, _ := s.links.Messages(ctx, l.ID)
 		if len(past) == 0 {
 			if s.stage() == "closed" {
@@ -798,7 +1054,22 @@ func (h *Handler) PersonalLinkChat(w http.ResponseWriter, r *http.Request) {
 		}
 	case "times", "change":
 		if s.stage() == "times" {
+			s.setMode(ctx, "")
 			s.times(ctx, plinkT("times_again"))
+		}
+	case "suggest":
+		if s.stage() == "times" {
+			s.add(ctx, chatItem{Role: "guest", Kind: "text", Text: plinkT("suggest_btn")})
+			s.askSuggest(ctx)
+		}
+	case "suggest_send":
+		if s.stage() == "times" {
+			s.sendSuggestions(ctx, req.Starts)
+		}
+	case "end":
+		if s.stage() != "closed" {
+			s.add(ctx, chatItem{Role: "guest", Kind: "text", Text: plinkT("btn_done")})
+			s.end(ctx)
 		}
 	case "pick", "confirm":
 		start, err := time.Parse(time.RFC3339, req.Start)
@@ -831,7 +1102,9 @@ func (h *Handler) PersonalLinkChat(w http.ResponseWriter, r *http.Request) {
 		s.out = []chatItem{}
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	h.writeJSON(w, http.StatusOK, plinkChatResponse{Items: s.out, History: history, Stage: s.stage()})
+	h.writeJSON(w, http.StatusOK, plinkChatResponse{
+		Items: s.out, History: history, Stage: s.stage(), Ended: s.link.ChatMode == personallink.ChatEnded,
+	})
 }
 
 func (h *Handler) plinkGuestMessages(ctx context.Context, linkID string) int {

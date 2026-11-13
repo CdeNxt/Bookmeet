@@ -578,37 +578,82 @@ type bookingExtras struct {
 	// PhysicalLocation is the address of an in-person meeting. The REST handler takes it
 	// from the booker; a personal link takes it from the place its owner confirmed.
 	PhysicalLocation string
+	// OwnerApproved marks a time the owner chose by hand for this one meeting, knowing the
+	// engine would not offer it: a guest's suggested time the owner tapped "Book anyway" on.
+	// It skips the owner's own rules - hours, minimum notice, how far ahead, and what their
+	// calendar shows - and nothing else. The time must still be in the future, and another
+	// Bookmeet booking in the way still refuses it. Only an owner's tap may set this; never
+	// a guest, a model or an agent.
+	OwnerApproved bool
 }
+
+// calendarClashError is errSlotUnavailable with one more fact for the program: the time
+// failed because a host's calendar has something then. It reads and matches exactly like
+// errSlotUnavailable, so no caller that words errors for a booker or an agent can tell the
+// two apart; only code that asks errors.Is(err, errCalendarClash) learns the reason.
+type calendarClashError struct{}
+
+func (calendarClashError) Error() string        { return errSlotUnavailable.Error() }
+func (calendarClashError) Is(target error) bool { return target == errSlotUnavailable }
+
+var errCalendarClash error = calendarClashError{}
 
 // createBookingForSlugWith is createBookingForSlug plus the optional parts in bookingExtras.
 // The in-person handling follows CreateBooking's step for step - same validation, same
 // location switch, same reserved travel time - so a time the slot list offered for an
 // address is a time that books for it.
 func (h *Handler) createBookingForSlugWith(ctx context.Context, slug string, startAt time.Time, organizer booking.Attendee, rawAnswers []booking.Answer, extras bookingExtras) (*booking.Booking, error) {
+	et, params, err := h.planBooking(ctx, slug, startAt, organizer, rawAnswers, extras)
+	if err != nil {
+		return nil, err
+	}
+	b, err := h.bookingSvc.Create(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	go h.dispatchBookingConfirmation(b, bookingConfirmationInput{ // #nosec G118 -- deliberately its own context.Background(); the request context is cancelled the moment this handler returns, which would abort these side effects immediately
+		EventTypeName:     et.Name,
+		EventTypeSlug:     slug,
+		LocationType:      et.LocationType,
+		OrganizerName:     params.Organizer.Name,
+		OrganizerEmail:    params.Organizer.Email,
+		OrganizerTimezone: params.Organizer.IANATimezone,
+		OrganizerLocale:   params.Organizer.Locale,
+	})
+	return b, nil
+}
+
+// planBooking is everything createBookingForSlugWith decides before it writes: the event
+// type as it will be booked, and the booking to create. It makes every check the core makes
+// except the one only the write itself can make (another booking taking the time, which
+// booking.Service.Create guards). Split out so a caller can ask "would this book?" with
+// exactly the answer booking would give, and no second copy of the rules.
+func (h *Handler) planBooking(ctx context.Context, slug string, startAt time.Time, organizer booking.Attendee, rawAnswers []booking.Answer, extras bookingExtras) (*bookableEventType, booking.CreateParams, error) {
+	var none booking.CreateParams
 	// Both callers take the address from something they do not control — an LLM's
 	// extraction from booker chat, or an MCP client's tool arguments — so it is checked
 	// here, once, rather than in each of them. (The REST handler does not come through
 	// this core; it normalises at its own intake, before its throttle reads the value.)
 	email, err := normalizeBookerEmail(organizer.Email)
 	if err != nil {
-		return nil, err
+		return nil, none, err
 	}
 	organizer.Email = email
 
 	et, err := h.loadBookableEventType(ctx, slug)
 	if err != nil {
-		return nil, err
+		return nil, none, err
 	}
 	// Paid events require the Stripe Checkout flow (booking page only) — agents/assistant
 	// can't pay, so they can't book a paid event.
 	if et.PriceCents > 0 {
-		return nil, errPaymentRequired
+		return nil, none, errPaymentRequired
 	}
 	// The attendee's own locale (set by the assistant from the page's resolved language;
 	// empty for MCP callers, which i18n.Get turns into nil → English).
 	answers, err := h.validateAnswersCore(ctx, et.ID, rawAnswers, i18n.Get(organizer.Locale))
 	if err != nil {
-		return nil, err
+		return nil, none, err
 	}
 	endAt := startAt.UTC().Add(time.Duration(et.DurationMinutes) * time.Minute)
 	locValue := ""
@@ -618,7 +663,7 @@ func (h *Handler) createBookingForSlugWith(ctx context.Context, slug string, sta
 	physical := strings.TrimSpace(extras.PhysicalLocation)
 	if physical != "" {
 		if !et.AllowInPerson || len(physical) > 500 || strings.ContainsAny(physical, "\r\n\x00") {
-			return nil, errInvalidInPersonLocation
+			return nil, none, errInvalidInPersonLocation
 		}
 		if !et.InPersonVideo || !videoMeetingLocation(et.LocationType) {
 			et.LocationType = "in_person"
@@ -627,17 +672,24 @@ func (h *Handler) createBookingForSlugWith(ctx context.Context, slug string, sta
 	}
 	hosts, err := h.resolveEventTypeHosts(ctx, et.ID)
 	if err != nil {
-		return nil, fmt.Errorf("resolve event-type hosts: %w", err)
+		return nil, none, fmt.Errorf("resolve event-type hosts: %w", err)
 	}
 	candidates, required, optional := resolveBookingHostPool(hosts, et.RoutingMode)
 	if len(candidates) == 0 {
-		return nil, errNoHostAvailable
+		return nil, none, errNoHostAvailable
 	}
-	if err := h.validateBookingTime(ctx, et, et.RoutingMode, candidates, required, startAt.UTC(), endAt); err != nil {
-		return nil, err
-	}
-	if candidates, err = h.filterAvailableHosts(ctx, et, candidates, startAt.UTC(), endAt); err != nil {
-		return nil, err
+	if extras.OwnerApproved {
+		// The owner's rules are theirs to waive for one meeting. A time already gone is not.
+		if !startAt.After(bookingNow()) {
+			return nil, none, errSlotUnavailable
+		}
+	} else {
+		if err := h.validateBookingTime(ctx, et, et.RoutingMode, candidates, required, startAt.UTC(), endAt); err != nil {
+			return nil, none, err
+		}
+		if candidates, err = h.filterAvailableHosts(ctx, et, candidates, startAt.UTC(), endAt); err != nil {
+			return nil, none, err
+		}
 	}
 	var reservedBefore, reservedAfter int
 	if physical != "" {
@@ -655,14 +707,17 @@ func (h *Handler) createBookingForSlugWith(ctx context.Context, slug string, sta
 		}
 		et.applyReservation(reservedBefore, reservedAfter)
 	}
-	candidates, optional, err = h.calendarFreeHosts(ctx, et, candidates, required, optional, startAt.UTC(), endAt)
-	if err != nil {
-		if !errors.Is(err, errSlotUnavailable) {
+	if !extras.OwnerApproved {
+		candidates, optional, err = h.calendarFreeHosts(ctx, et, candidates, required, optional, startAt.UTC(), endAt)
+		if err != nil {
+			if errors.Is(err, errSlotUnavailable) {
+				return nil, none, errCalendarClash
+			}
 			h.logger.ErrorContext(ctx, "booking calendar check failed", "error", err)
+			return nil, none, err
 		}
-		return nil, err
 	}
-	b, err := h.bookingSvc.Create(ctx, booking.CreateParams{
+	return et, booking.CreateParams{
 		EventTypeID:           et.ID,
 		HostIDs:               candidates,
 		RoutingMode:           et.RoutingMode,
@@ -681,20 +736,7 @@ func (h *Handler) createBookingForSlugWith(ctx context.Context, slug string, sta
 		MaxActivePerInvitee:   et.MaxActiveBookings,
 		MaxBookingsPerHour:    maxBookingsPerEmailPerHour,
 		InviteDelivery:        et.InviteDelivery,
-	})
-	if err != nil {
-		return nil, err
-	}
-	go h.dispatchBookingConfirmation(b, bookingConfirmationInput{ // #nosec G118 -- deliberately its own context.Background(); the request context is cancelled the moment this handler returns, which would abort these side effects immediately
-		EventTypeName:     et.Name,
-		EventTypeSlug:     slug,
-		LocationType:      et.LocationType,
-		OrganizerName:     organizer.Name,
-		OrganizerEmail:    organizer.Email,
-		OrganizerTimezone: organizer.IANATimezone,
-		OrganizerLocale:   organizer.Locale,
-	})
-	return b, nil
+	}, nil
 }
 
 type attendeeJSON struct {

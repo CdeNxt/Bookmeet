@@ -374,8 +374,43 @@ section.
 - **Wording is English only for now,** gathered in `plinkText` so moving it into the locale
   files is one change. This is a public surface, so that move is owed before the feature
   leaves staging. The page loads `/booking.css` (`.asst-*` and `.plink-*`) and the public skin.
-- Not built: suggesting other times, notes and change requests for the owner, the closing
-  question and the single end-of-chat message, intake questions asked in chat.
+- Not built: intake questions asked in chat.
+
+## Personal booking assistant: what the owner hears, and booking over a clash (Bookmeet)
+
+`personal_link_report.go`, with the held items and chat state in `internal/personallink`
+(`personal_link_held`, `chat_mode` and the three `chat_*_at` columns, migration 00087).
+
+- **Two rules decide when the owner is told.** A booking reaches them the moment it happens
+  (`notifyOwnerBooked`). Everything else the guest wanted passed on - suggested times, a
+  change request, a note, "I'll follow up", "I can't make it" - is held (`Hold`) and sent as
+  ONE message when the chat is over (`reportChat`). Do not send the owner anything else from
+  inside a live chat.
+- **A chat is over when** the guest says so (`end`, reported at once), their page has been
+  closed for 45 seconds (a `leave` beacon, then the sweep), or they have been quiet for five
+  minutes (`ChatsOver`, run every minute by `StartPersonalLinkSweep`). A page closing cannot
+  always be seen, which is why quiet is the backstop. On a machine that sleeps when idle the
+  sweep sleeps too, and the message goes out when it next wakes.
+- **Every message names the meeting briefly** (event type, and the time once booked): an
+  owner may have several with the same person.
+- **Nothing the owner does goes back into the guest's chat.** A tap books a suggested time
+  (the guest gets a calendar invitation, and a booked card waits for when they reopen the
+  link) or changes the offer (the owner gets a new link to send). "None of these" sends the
+  guest nothing.
+- **Every suggested time reaches the owner, with a verdict for their eyes only**
+  (`suggestedTimeVerdict`: free, clashes with the calendar, outside their hours, taken by
+  another Bookmeet booking). The guest and the model are never told which, or a suggestion
+  would be a way to probe the calendar. The verdict asks `planBooking`, the same checks a
+  booking makes, so it cannot disagree with what booking would do.
+- **`bookingExtras.OwnerApproved` is the one path that books over the owner's own rules and
+  calendar,** and it exists only behind the owner's "Book anyway" tap
+  (`bookPersonalLinkApproved`). Never set it from a guest's action, a model's output or an
+  agent's call. It still refuses a past time and another Bookmeet booking in the way.
+- **`errCalendarClash` reads and matches as `errSlotUnavailable`** on purpose: code that
+  words an error for a booker or an agent cannot tell a calendar clash from any other
+  unavailable time. Only `errors.Is(err, errCalendarClash)` learns the reason.
+- **What the guest's note says is what they typed** (`lastText`), not the model's retelling.
+- A held item is answered once (`ResolveHeld`); a second tap is told so.
 
 ## Conventions
 

@@ -24,6 +24,7 @@ import (
 type inviteProvider struct {
 	mu      sync.Mutex
 	created []calendar.CreateEventParams
+	busy    []slots.Interval // what the host's calendar shows as taken; empty = free
 }
 
 func (p *inviteProvider) Name() string                                           { return "google" }
@@ -39,7 +40,9 @@ func (p *inviteProvider) ListCalendars(context.Context, string, string) ([]calen
 	return nil, nil
 }
 func (p *inviteProvider) FreeBusy(context.Context, string, time.Time, time.Time) ([]slots.Interval, error) {
-	return nil, nil
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.busy, nil
 }
 func (p *inviteProvider) CreateEvent(_ context.Context, _ string, params calendar.CreateEventParams) (string, string, string, error) {
 	p.mu.Lock()

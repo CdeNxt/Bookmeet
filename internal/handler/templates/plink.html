@@ -136,6 +136,18 @@ body {
           log.scrollTop = log.scrollHeight;
         }));
       }
+      var other = el('div', 'plink-actions');
+      other.appendChild(button('plink-secondary', T.suggest_btn, function () { call({ action: 'suggest' }); }));
+      m.appendChild(other);
+    } else if (item.kind === 'suggest') {
+      // The times the guest is about to suggest, to confirm before they go to the owner.
+      m = el('div', 'asst-msg bot plink-block');
+      m.appendChild(el('div', 'plink-title', item.title));
+      m.appendChild(rows(item.rows || []));
+      var sa = el('div', 'plink-actions');
+      sa.appendChild(button('plink-primary', item.label, function () { call({ action: 'suggest_send', starts: item.starts }); }));
+      sa.appendChild(button('plink-secondary', T.btn_change, function () { call({ action: 'suggest' }); }));
+      m.appendChild(sa);
     } else if (item.kind === 'confirm' || item.kind === 'booked') {
       m = el('div', 'asst-msg plink-block ' + (item.kind === 'booked' ? 'ok' : 'bot'));
       m.appendChild(el('div', 'plink-title', item.title));
@@ -149,18 +161,21 @@ body {
       }
     } else {
       m = el('div', 'asst-msg bot', item.text);
-      if (item.skip) {
+      if (item.skip || item.done) {
         var a = el('div', 'plink-actions');
-        a.appendChild(button('plink-secondary', T.skip, function () { call({ action: 'skip_phone' }); }));
+        if (item.skip) a.appendChild(button('plink-secondary', T.skip, function () { call({ action: 'skip_phone' }); }));
+        if (item.done) a.appendChild(button('plink-secondary', T.btn_done, function () { call({ action: 'end' }); }));
         m.appendChild(a);
       }
     }
     log.appendChild(m);
   }
 
-  function setStage(s) {
+  // The box stays open after a booking, so the guest can leave a note, until they say
+  // there is nothing else.
+  function setStage(s, ended) {
     stage = s;
-    var open = s === 'email' || s === 'phone' || s === 'times';
+    var open = !ended && (s === 'email' || s === 'phone' || s === 'times' || s === 'booked');
     input.disabled = !open; send.disabled = !open;
     input.placeholder = s === 'email' ? T.email_holder : s === 'phone' ? T.phone_holder : T.placeholder;
     input.type = s === 'email' ? 'email' : s === 'phone' ? 'tel' : 'text';
@@ -184,7 +199,7 @@ body {
       wait.remove();
       if (data.history) log.textContent = '';
       (data.items || []).forEach(draw);
-      setStage(data.stage);
+      setStage(data.stage, data.ended);
       // The owner's celebration plays when the booking happens, not each time the page is
       // reopened on a meeting that is already booked.
       if (!data.history && (data.items || []).some(function (it) { return it.kind === 'booked'; })) {
@@ -206,6 +221,14 @@ body {
     if (!text || busy) return;
     input.value = '';
     call({ action: 'say', text: text }, text);
+  });
+
+  // Tell the server when the page closes. It is one of the ways Bookmeet learns a chat is
+  // over, which is when the owner is sent whatever the guest wanted passed on.
+  window.addEventListener('pagehide', function () {
+    try {
+      navigator.sendBeacon('/v1/links/' + encodeURIComponent(token) + '/chat', JSON.stringify({ action: 'leave' }));
+    } catch (e) {}
   });
 
   call({ action: 'open' });
