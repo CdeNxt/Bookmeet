@@ -149,26 +149,65 @@
   // consolidated onto it. If these are ever unified, the shared version must take the
   // locale's list_separator/list_conjunction, not hardcode punctuation.
 
-  // tzOffset — a zone's current UTC offset as the timezone pill shows it, e.g. "GMT-8".
-  // The pill draws the zone name and the offset as separate pieces so a long name can
-  // truncate without hiding the offset. The offset comes from Intl ("shortOffset"), which
-  // older browsers reject with a RangeError; they get '' and the pill shows the name alone.
   // Mirrored in embed.js (which cannot load this module) - keep the two in step.
-  function tzOffset(tz, at) {
+  // The timezone dropdown offers a short list of widely used zones instead of every IANA
+  // zone (400+). One representative per region/offset; the visitor's own zone is always
+  // added, so nobody is forced onto a neighbour's clock.
+  var TZ_COMMON = [
+    'Pacific/Honolulu', 'America/Anchorage', 'America/Los_Angeles', 'America/Denver',
+    'America/Chicago', 'America/New_York', 'America/Bogota', 'America/Halifax',
+    'America/Sao_Paulo', 'America/Argentina/Buenos_Aires', 'UTC', 'Europe/London', 'Europe/Paris',
+    'Africa/Lagos', 'Europe/Athens', 'Africa/Cairo', 'Africa/Johannesburg', 'Europe/Istanbul',
+    'Europe/Moscow', 'Asia/Dubai', 'Asia/Karachi', 'Asia/Kolkata', 'Asia/Dhaka', 'Asia/Bangkok',
+    'Asia/Shanghai', 'Asia/Singapore', 'Asia/Hong_Kong', 'Asia/Tokyo', 'Asia/Seoul',
+    'Australia/Perth', 'Australia/Adelaide', 'Australia/Sydney', 'Pacific/Auckland'
+  ];
+  function tzPart(tz, style, locale, at) {
     try {
-      var parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'shortOffset' }).formatToParts(at || new Date());
+      var parts = new Intl.DateTimeFormat(locale || 'en-US', { timeZone: tz, timeZoneName: style }).formatToParts(at || new Date());
       for (var i = 0; i < parts.length; i++) {
         if (parts[i].type === 'timeZoneName') return parts[i].value || '';
       }
     } catch (_) {}
     return '';
   }
-  // tzName — an IANA zone as people read it: "America/Los_Angeles" -> "America/Los Angeles".
-  function tzName(tz) { return String(tz || '').replace(/_/g, ' '); }
+  // tzOffset - a zone's current UTC offset, e.g. "GMT-8". '' where Intl cannot say.
+  function tzOffset(tz, at) { return tzPart(tz, 'shortOffset', 'en-US', at); }
+  // tzName - the everyday name of a zone in the page's language ("Pacific Time"), falling
+  // back to the readable IANA name ("America/Los Angeles") on browsers without it.
+  function tzName(tz, locale, at) {
+    var name = tzPart(tz, 'longGeneric', locale, at);
+    // Where a zone has no everyday name Intl answers with a bare offset ("GMT+00:00").
+    // The offset is already shown beside the name, so use the zone's own name there.
+    if (!name || /^(GMT|UTC)([+-]|$)/.test(name)) name = String(tz || '').replace(/_/g, ' ');
+    return name;
+  }
+  // "GMT-8" -> -480, "GMT+5:30" -> 330, "GMT" -> 0. Used only to order the list.
+  function tzMinutes(offset) {
+    var m = /([+-])(\d{1,2})(?::(\d{2}))?/.exec(offset || '');
+    return m ? (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3] || 0)) : 0;
+  }
+  // tzChoices - the dropdown's options, west to east: [{ value, name, offset }]. The
+  // visitor's zone `own` is always present. When it reads the same as a listed zone (same
+  // name and offset today, e.g. Indianapolis and New York) it takes that entry's place, so
+  // the visitor keeps their real zone and its own daylight-saving rules.
+  function tzChoices(own, locale, at) {
+    var list = [], seen = {};
+    function add(tz, replace) {
+      var c = { value: tz, name: tzName(tz, locale, at), offset: tzOffset(tz, at) };
+      var key = c.name + '|' + c.offset;
+      if (key in seen) { if (replace) list[seen[key]] = c; return; }
+      seen[key] = list.length; list.push(c);
+    }
+    TZ_COMMON.forEach(function (tz) { add(tz, false); });
+    if (own) add(own, true);
+    return list.sort(function (a, b) { return tzMinutes(a.offset) - tzMinutes(b.offset) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0); });
+  }
 
   return {
     tzOffset: tzOffset,
     tzName: tzName,
+    tzChoices: tzChoices,
     dateKeyFromISO: dateKeyFromISO,
     ymd: ymd,
     groupSlotsByDay: groupSlotsByDay,

@@ -101,17 +101,61 @@
 
   var SVG_GLOBE = '<svg class="tz-globe" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.9 3.9 5.9 3.9 9s-1.3 6.1-3.9 9c-2.6-2.9-3.9-5.9-3.9-9S9.4 5.9 12 3Z"/></svg>';
   var SVG_CHEVRON = '<svg class="tz-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
-  // Mirror BookingLogic.tzOffset / tzName (booking-logic.js), which the widget cannot load.
-  function tzOffset(tz, at) {
+  // Mirror of the timezone helpers in booking-logic.js, which the widget cannot load.
+  // Keep the two in step.
+  // The timezone dropdown offers a short list of widely used zones instead of every IANA
+  // zone (400+). One representative per region/offset; the visitor's own zone is always
+  // added, so nobody is forced onto a neighbour's clock.
+  var TZ_COMMON = [
+    'Pacific/Honolulu', 'America/Anchorage', 'America/Los_Angeles', 'America/Denver',
+    'America/Chicago', 'America/New_York', 'America/Bogota', 'America/Halifax',
+    'America/Sao_Paulo', 'America/Argentina/Buenos_Aires', 'UTC', 'Europe/London', 'Europe/Paris',
+    'Africa/Lagos', 'Europe/Athens', 'Africa/Cairo', 'Africa/Johannesburg', 'Europe/Istanbul',
+    'Europe/Moscow', 'Asia/Dubai', 'Asia/Karachi', 'Asia/Kolkata', 'Asia/Dhaka', 'Asia/Bangkok',
+    'Asia/Shanghai', 'Asia/Singapore', 'Asia/Hong_Kong', 'Asia/Tokyo', 'Asia/Seoul',
+    'Australia/Perth', 'Australia/Adelaide', 'Australia/Sydney', 'Pacific/Auckland'
+  ];
+  function tzPart(tz, style, locale, at) {
     try {
-      var parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'shortOffset' }).formatToParts(at || new Date());
+      var parts = new Intl.DateTimeFormat(locale || 'en-US', { timeZone: tz, timeZoneName: style }).formatToParts(at || new Date());
       for (var i = 0; i < parts.length; i++) {
         if (parts[i].type === 'timeZoneName') return parts[i].value || '';
       }
     } catch (_) {}
     return '';
   }
-  function tzName(tz) { return String(tz || '').replace(/_/g, ' '); }
+  // tzOffset - a zone's current UTC offset, e.g. "GMT-8". '' where Intl cannot say.
+  function tzOffset(tz, at) { return tzPart(tz, 'shortOffset', 'en-US', at); }
+  // tzName - the everyday name of a zone in the page's language ("Pacific Time"), falling
+  // back to the readable IANA name ("America/Los Angeles") on browsers without it.
+  function tzName(tz, locale, at) {
+    var name = tzPart(tz, 'longGeneric', locale, at);
+    // Where a zone has no everyday name Intl answers with a bare offset ("GMT+00:00").
+    // The offset is already shown beside the name, so use the zone's own name there.
+    if (!name || /^(GMT|UTC)([+-]|$)/.test(name)) name = String(tz || '').replace(/_/g, ' ');
+    return name;
+  }
+  // "GMT-8" -> -480, "GMT+5:30" -> 330, "GMT" -> 0. Used only to order the list.
+  function tzMinutes(offset) {
+    var m = /([+-])(\d{1,2})(?::(\d{2}))?/.exec(offset || '');
+    return m ? (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3] || 0)) : 0;
+  }
+  // tzChoices - the dropdown's options, west to east: [{ value, name, offset }]. The
+  // visitor's zone `own` is always present. When it reads the same as a listed zone (same
+  // name and offset today, e.g. Indianapolis and New York) it takes that entry's place, so
+  // the visitor keeps their real zone and its own daylight-saving rules.
+  function tzChoices(own, locale, at) {
+    var list = [], seen = {};
+    function add(tz, replace) {
+      var c = { value: tz, name: tzName(tz, locale, at), offset: tzOffset(tz, at) };
+      var key = c.name + '|' + c.offset;
+      if (key in seen) { if (replace) list[seen[key]] = c; return; }
+      seen[key] = list.length; list.push(c);
+    }
+    TZ_COMMON.forEach(function (tz) { add(tz, false); });
+    if (own) add(own, true);
+    return list.sort(function (a, b) { return tzMinutes(a.offset) - tzMinutes(b.offset) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0); });
+  }
   function dayKey(iso) { return new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso)); }
   // locale is the resolved server-side locale (this.locale), not the browser's own
   // ([]) — see the matching fix/comment in book.html / internal-docs/i18n-plan.md.
@@ -503,22 +547,10 @@
     tzPill() {
       var self = this;
       var sel = el('select', { 'aria-label': t(this.i18n, 'timezone_aria') });
-      var zones = Intl.supportedValuesOf ? Intl.supportedValuesOf('timeZone').slice() : [TZ];
-      // The device's own zone can be an alias the list leaves out ("UTC", "Asia/Calcutta").
-      if (zones.indexOf(TZ) < 0) zones.push(TZ);
-      var groups = {};
-      zones.forEach(function (z) {
-        var region = z.indexOf('/') > 0 ? z.split('/')[0] : 'Other';
-        (groups[region] = groups[region] || []).push(z);
-      });
-      Object.keys(groups).sort().forEach(function (region) {
-        var og = el('optgroup', { label: region });
-        groups[region].forEach(function (z) {
-          var opt = el('option', { value: z, text: z.replace(/_/g, ' ') });
-          if (z === TZ) opt.selected = true;
-          og.appendChild(opt);
-        });
-        sel.appendChild(og);
+      tzChoices(TZ, this.locale).forEach(function (c) {
+        var opt = el('option', { value: c.value, text: c.offset ? c.name + ' (' + c.offset + ')' : c.name });
+        if (c.value === TZ) opt.selected = true;
+        sel.appendChild(opt);
       });
       sel.addEventListener('change', function () {
         TZ = sel.value;
@@ -528,7 +560,7 @@
       });
       return el('p', { class: 'tz-label' }, [el('span', { class: 'tz-pill' }, [
         el('span', { html: SVG_GLOBE }).firstChild,
-        el('span', { class: 'tz-text', 'aria-hidden': 'true', text: tzName(TZ) }),
+        el('span', { class: 'tz-text', 'aria-hidden': 'true', text: tzName(TZ, this.locale) }),
         el('span', { class: 'tz-offset', 'aria-hidden': 'true', text: tzOffset(TZ) }),
         el('span', { html: SVG_CHEVRON }).firstChild,
         sel,

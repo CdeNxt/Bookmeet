@@ -131,7 +131,31 @@ test('tzOffset gives the offset on the given date, so it follows daylight saving
   assert.equal(B.tzOffset('Asia/Kolkata', new Date('2026-01-15T12:00:00Z')), 'GMT+5:30');
 });
 
-test('tzOffset is empty for a zone Intl rejects, and tzName still reads cleanly', () => {
+test('tzOffset is empty for a zone Intl rejects, and tzName falls back to the IANA name', () => {
   assert.equal(B.tzOffset('Not/A_Zone'), '');
-  assert.equal(B.tzName('America/Los_Angeles'), 'America/Los Angeles');
+  assert.equal(B.tzName('Not/A_Zone'), 'Not/A Zone');
+});
+
+test('tzName is the everyday name, in the page language', () => {
+  assert.equal(B.tzName('America/Los_Angeles', 'en'), 'Pacific Time');
+  assert.notEqual(B.tzName('America/Los_Angeles', 'fr'), 'Pacific Time');
+  assert.equal(B.tzName('UTC', 'en'), 'UTC'); // not Intl's "GMT+00:00"
+});
+
+test('tzChoices is a short west-to-east list that always holds the visitor\'s zone', () => {
+  const at = new Date('2026-01-15T12:00:00Z');
+  const list = B.tzChoices('Asia/Kathmandu', 'en', at);
+  assert.ok(list.length < 45, 'short list, got ' + list.length);
+  assert.ok(list.some(c => c.value === 'Asia/Kathmandu'), 'an unlisted zone is added');
+  assert.equal(list[0].value, 'Pacific/Honolulu');
+  assert.equal(list[list.length - 1].value, 'Pacific/Auckland');
+  const names = list.map(c => c.name + c.offset);
+  assert.equal(new Set(names).size, names.length, 'no two options read the same');
+});
+
+test('tzChoices keeps the visitor\'s real zone when it reads like a listed one', () => {
+  const at = new Date('2026-01-15T12:00:00Z');
+  const values = B.tzChoices('America/Indiana/Indianapolis', 'en', at).map(c => c.value);
+  assert.ok(values.includes('America/Indiana/Indianapolis'));
+  assert.ok(!values.includes('America/New_York'), 'the look-alike entry is replaced, not duplicated');
 });

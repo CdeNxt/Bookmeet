@@ -1008,31 +1008,19 @@ body {
   // <select>, so phones get their own picker and the label is not limited to option text.
   function resizeTzSelect() {
     const text = $('tz-text'); if (!text) return;
-    text.textContent = BookingLogic.tzName(TZ);
+    text.textContent = BookingLogic.tzName(TZ, LOCALE);
     $('tz-offset').textContent = BookingLogic.tzOffset(TZ);
   }
 
   function populateTzSelect() {
-    const sel = $('tz-select');
-    const zones = Intl.supportedValuesOf ? Intl.supportedValuesOf('timeZone').slice() : [TZ];
-    // The device's own zone can be an alias the list leaves out ("UTC", "Asia/Calcutta").
-    if (zones.indexOf(TZ) < 0) zones.push(TZ);
-    const groups = {};
-    zones.forEach(tz => {
-      const region = tz.includes('/') ? tz.split('/')[0] : 'Other';
-      (groups[region] = groups[region] || []).push(tz);
-    });
-    Object.keys(groups).sort().forEach(region => {
-      const og = document.createElement('optgroup');
-      og.label = region;
-      groups[region].forEach(tz => {
-        const opt = document.createElement('option');
-        opt.value = tz;
-        opt.textContent = tz.replace(/_/g, ' ');
-        if (tz === TZ) opt.selected = true;
-        og.appendChild(opt);
-      });
-      sel.appendChild(og);
+    const sel = $('tz-select'); if (!sel) return;
+    // A short list of common zones by their everyday names, plus the visitor's own.
+    BookingLogic.tzChoices(TZ, LOCALE).forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.value;
+      opt.textContent = c.offset ? c.name + ' (' + c.offset + ')' : c.name;
+      if (c.value === TZ) opt.selected = true;
+      sel.appendChild(opt);
     });
     resizeTzSelect();
   }
