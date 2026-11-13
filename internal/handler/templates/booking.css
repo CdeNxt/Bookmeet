@@ -521,7 +521,30 @@
 /* Times rise in one after another when a day is picked. Shared by the pages and the
  * widget; off entirely for visitors who ask for reduced motion. */
 @keyframes bk-slot-in { from { opacity: 0; transform: translateY(8px); } }
+/* The assistant's chat drawer opens as a bubble: a round bead at its launcher's corner
+ * that inflates with one overshoot and one settle. Its messages pop in the same way, each
+ * from its own speaker's side. These apply wherever .asst-panel / .asst-msg are used - the
+ * booking page drawer, the widget's drawer and the assistant's chat page. */
+@keyframes bk-bubble-in {
+  0%   { opacity: 0; transform: scale(.12); border-radius: 160px; animation-timing-function: cubic-bezier(.3,.7,.3,1); }
+  12%  { opacity: 1; transform: scale(.28); border-radius: 160px; animation-timing-function: cubic-bezier(.3,.7,.3,1); }
+  55%  { transform: scale(1.04); border-radius: 22px; animation-timing-function: cubic-bezier(.45,0,.35,1); }
+  80%  { transform: scale(.99); animation-timing-function: cubic-bezier(.45,0,.35,1); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes bk-bubble-fill { 0%, 45% { opacity: 0; } }
+@keyframes bk-msg-in {
+  0%   { opacity: 0; transform: scale(.5); animation-timing-function: cubic-bezier(.3,.7,.3,1); }
+  60%  { opacity: 1; transform: scale(1.05); animation-timing-function: cubic-bezier(.45,0,.35,1); }
+  100% { opacity: 1; transform: scale(1); }
+}
 @media (prefers-reduced-motion: no-preference) {
+  .asst-panel:not([hidden]) { transform-origin: bottom right; animation: bk-bubble-in .62s both; }
+  .asst-panel:not([hidden]) > * { animation: bk-bubble-fill .62s both; }
+  .asst-fab-btn:not([hidden]) { transform-origin: bottom right; animation: bk-msg-in .42s both; }
+  .asst-msg { transform-origin: bottom left; animation: bk-msg-in .42s both; }
+  .asst-msg.user { transform-origin: bottom right; }
+  .asst-msg.note { transform-origin: bottom center; }
   .slots-list .slot-btn { animation: bk-slot-in .36s cubic-bezier(.22,1,.36,1) both; }
   .slots-list .slot-btn:nth-child(2) { animation-delay: 25ms; }
   .slots-list .slot-btn:nth-child(3) { animation-delay: 50ms; }

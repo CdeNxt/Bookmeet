@@ -289,45 +289,66 @@ html body.bm-scene .card:has(#venue-results:not([hidden])){overflow:visible}
 #venue-map{width:100%;height:210px;border:0;border-radius:8px}
 .directory-back{display:inline-block;margin-top:12px}
 .venue-address{overflow-wrap:anywhere}
-@keyframes bm-rise{from{opacity:0;transform:translateY(16px) scale(.985)}}
-@keyframes bm-step-in{from{opacity:0;transform:translateY(12px)}}
-@keyframes bm-step-fwd{from{opacity:0;transform:translateX(28px)}}
-@keyframes bm-step-back{from{opacity:0;transform:translateX(-28px)}}
-@keyframes bm-vt-out{to{opacity:0;transform:scale(.985)}}
-@keyframes bm-vt-in{from{opacity:0;transform:translateY(10px)}}
+/* Bubble: a panel collapses to a round bead and inflates into what comes next, with one
+   overshoot and one settle. The last keyframe sets no radius, so each panel lands on its own. */
+@keyframes bm-bubble-in{
+ 0%{opacity:0;transform:scale(.16);border-radius:160px;animation-timing-function:cubic-bezier(.3,.7,.3,1)}
+ 10%{opacity:1;transform:scale(.3);border-radius:160px;animation-timing-function:cubic-bezier(.3,.7,.3,1)}
+ 52%{transform:scale(1.05);border-radius:30px;animation-timing-function:cubic-bezier(.45,0,.35,1)}
+ 78%{transform:scale(.985);animation-timing-function:cubic-bezier(.45,0,.35,1)}
+ 100%{opacity:1;transform:scale(1)}}
+/* What is inside a bubble stays hidden while it is still a bead. */
+@keyframes bm-bubble-fill{0%,45%{opacity:0}}
+/* Page to page: one pass over the pair of page pictures - down to a bead, swap, inflate. */
+@keyframes bm-bubble-swap{
+ 0%{transform:scale(1);border-radius:var(--bm-glass-radius);animation-timing-function:cubic-bezier(.5,0,1,.6)}
+ 27%{transform:scale(.18);border-radius:160px}
+ 33%{transform:scale(.18);border-radius:160px;animation-timing-function:cubic-bezier(.3,.7,.3,1)}
+ 68%{transform:scale(1.05);border-radius:30px;animation-timing-function:cubic-bezier(.45,0,.35,1)}
+ 86%{transform:scale(.985);border-radius:var(--bm-glass-radius);animation-timing-function:cubic-bezier(.45,0,.35,1)}
+ 100%{transform:scale(1);border-radius:var(--bm-glass-radius)}}
+/* The pictures swap in one step while the bubble is a bead. A cross-fade here would leave
+   the bead empty for a moment, which reads as the card vanishing. */
+@keyframes bm-bubble-old{0%,30%{opacity:1}30.01%,100%{opacity:0}}
+@keyframes bm-bubble-new{0%,30%{opacity:0}30.01%,100%{opacity:1}}
+/* A view changing inside a panel that stays put: a small pop, not a whole bubble. */
+@keyframes bm-pop{
+ 0%{opacity:0;transform:scale(.9);animation-timing-function:cubic-bezier(.3,.7,.3,1)}
+ 55%{opacity:1;transform:scale(1.02);animation-timing-function:cubic-bezier(.45,0,.35,1)}
+ 100%{opacity:1;transform:scale(1)}}
+@keyframes bm-fade-in{from{opacity:0}}
+@keyframes bm-fade-out{to{opacity:0}}
 .bm-ver{margin:20px auto 0;text-align:center;font:400 10px/1.2 Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:.05em;color:#ffffff66;user-select:text}
 html[data-bm-theme="light"] .bm-ver{color:#00000070}
 @media(prefers-reduced-motion:no-preference){
  /* Page to page. The card and the hero are the only things captured: the canvas behind
-    them keeps drawing live, so the field never freezes or jumps during a navigation. The
-    card's group morphs between the two pages' card sizes while the old content fades out
-    and the new content rises in. */
+    them keeps drawing live, so the field never freezes or jumps during a navigation.
+    The pair of card pictures is the bubble: it shrinks to a bead showing the old page,
+    swaps, and inflates showing the new one, while the group underneath morphs between
+    the two pages' card sizes. Every public page with a .card gets this, the assistant's
+    chat page included. */
  @view-transition{navigation:auto}
  .bm-scene :is(.card,.dir-card){view-transition-name:bm-booking}
  .bm-scene .bm-hero{view-transition-name:bm-hero}
  :root{view-transition-name:none}
  ::view-transition{pointer-events:none}
- ::view-transition-group(bm-booking),::view-transition-group(bm-hero){animation-duration:520ms;animation-timing-function:var(--bm-ease)}
+ ::view-transition-group(bm-booking),::view-transition-group(bm-hero){animation-duration:1000ms;animation-timing-function:var(--bm-ease)}
  /* A captured card is a flat picture with no live backdrop, so the glass blur is put
-    back on the group for the length of the transition. Without this the field shows
-    through sharp for half a second and then snaps to blurred. */
- ::view-transition-group(bm-booking){border-radius:var(--bm-glass-radius);overflow:clip;-webkit-backdrop-filter:var(--bm-glass-filter);backdrop-filter:var(--bm-glass-filter)}
- ::view-transition-old(bm-booking),::view-transition-old(bm-hero){animation:bm-vt-out 220ms ease-in both}
- ::view-transition-new(bm-booking),::view-transition-new(bm-hero){animation:bm-vt-in 460ms var(--bm-ease) 90ms both}
- /* First arrival, and browsers without cross-page transitions. */
- html.bm-no-vt body.bm-scene :is(.card,.dir-card){animation:bm-rise 620ms var(--bm-ease) 60ms both}
- html.bm-no-vt body.bm-scene .bm-hero{animation:bm-step-in 620ms var(--bm-ease) both}
- /* Steps inside the card. An element animates each time it comes back from display:none,
-    which is how every view and mobile step is switched, so no script is involved. */
- .bm-scene :is(#main-view,#slots-view,#form-view,#confirm-view,#reschedule-view,#confirm-reschedule-view,#cancel-confirm-view,#success-reschedule-view,#success-cancel-view):not(.hidden){animation:bm-step-in 420ms var(--bm-ease) both}
- @media(max-width:700px){
-  /* One section at a time on a phone: forward steps come in from the right, and the
-     calendar comes back in from the left. The calendar only does so once the visitor has
-     changed step (data-bm-stepped, set by the skin script), so the first render just rises
-     with the card. */
-  .bm-scene :is(#slots-view,#form-view,#confirm-view,#reschedule-view,#confirm-reschedule-view,#cancel-confirm-view,#success-reschedule-view,#success-cancel-view):not(.hidden){animation-name:bm-step-fwd}
-  .bm-scene .card[data-bm-stepped] .cal-col{animation:bm-step-back 420ms var(--bm-ease) both}
- }
+    back on the bubble for the length of the transition. Without it the field shows
+    through sharp and then snaps to blurred when the real card returns. */
+ ::view-transition-image-pair(bm-booking){overflow:clip;-webkit-backdrop-filter:var(--bm-glass-filter);backdrop-filter:var(--bm-glass-filter);animation:bm-bubble-swap 1000ms both}
+ ::view-transition-old(bm-booking){animation:bm-bubble-old 1000ms linear both}
+ ::view-transition-new(bm-booking){animation:bm-bubble-new 1000ms linear both}
+ ::view-transition-old(bm-hero){animation:bm-fade-out 260ms ease-in both}
+ ::view-transition-new(bm-hero){animation:bm-fade-in 520ms var(--bm-ease) 330ms both}
+ /* First arrival, and browsers without cross-page transitions: the card inflates from a bead. */
+ html.bm-no-vt body.bm-scene :is(.card,.dir-card){animation:bm-bubble-in 720ms 60ms both}
+ html.bm-no-vt body.bm-scene :is(.card,.dir-card)>*{animation:bm-bubble-fill 720ms 60ms both}
+ html.bm-no-vt body.bm-scene .bm-hero{animation:bm-fade-in 620ms var(--bm-ease) both}
+ /* Views inside the card. An element animates each time it comes back from display:none,
+    which is how every view is switched, so no script is involved. On a phone, where a
+    step replaces the whole card, the skin script re-inflates the card itself as well. */
+ .bm-scene :is(#main-view,#slots-view,#form-view,#confirm-view,#reschedule-view,#confirm-reschedule-view,#cancel-confirm-view,#success-reschedule-view,#success-cancel-view):not(.hidden){animation:bm-pop 460ms both}
 }
 </style>
 <script>
@@ -336,8 +357,18 @@ html[data-bm-theme="light"] .bm-ver{color:#00000070}
   if(!document.querySelector('.card,.dir-card')||document.body.classList.contains('bm-scene'))return;
   document.body.classList.add('bm-scene');
   const card=document.querySelector('.card,.dir-card');card.id=card.id||'bm-booking';
-  // Marks the card once the visitor has moved between mobile steps (see the step CSS).
-  addEventListener('load',()=>new MutationObserver(()=>{card.dataset.bmStepped='1'}).observe(card,{attributes:true,attributeFilter:['class']}),{once:true});
+  // On a phone a step (calendar, times, form) replaces the whole card, so the card itself
+  // re-inflates as a bubble. Steps are switched by classes on the card; watching them here
+  // keeps the three pages' own scripts out of it. Mirrors @keyframes bm-bubble-in.
+  const phone=matchMedia('(max-width:700px)'),still=matchMedia('(prefers-reduced-motion: reduce)');
+  const grow='cubic-bezier(.3,.7,.3,1)',settle='cubic-bezier(.45,0,.35,1)';
+  let stepClass=card.className;
+  addEventListener('load',()=>new MutationObserver(()=>{
+   if(card.className===stepClass)return;stepClass=card.className;
+   if(!phone.matches||still.matches||!card.animate)return;
+   card.animate([{opacity:0,transform:'scale(.16)',borderRadius:'160px',easing:grow},{opacity:1,transform:'scale(.3)',borderRadius:'160px',offset:.1,easing:grow},{transform:'scale(1.05)',borderRadius:'30px',offset:.52,easing:settle},{transform:'scale(.985)',offset:.78,easing:settle},{opacity:1,transform:'scale(1)'}],{duration:720});
+   for(const part of card.children)part.animate([{opacity:0},{opacity:0,offset:.45},{opacity:1}],{duration:720});
+  }).observe(card,{attributes:true,attributeFilter:['class']}),{once:true});
   const buildVersion='__BM_VERSION__';
   if(buildVersion&&buildVersion.slice(0,2)!=='__'){const ver=document.createElement('div');ver.className='bm-ver';ver.textContent=buildVersion;ver.setAttribute('aria-hidden','true');document.body.appendChild(ver)}
   let copy={};try{copy=JSON.parse(document.querySelector('meta[name="bookmeet-copy"]')?.content||'{}')}catch(_){}
