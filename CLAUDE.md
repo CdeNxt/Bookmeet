@@ -361,6 +361,13 @@ section.
   the page's choice; the server sends every open time.
 - **A booking tells the owner on Telegram at once** (`notifyOwnerBooked`), from the booking
   record, not from the model.
+- **The booked card only claims an invitation when one will arrive** (`guestWillBeEmailed`:
+  Bookmeet's email is set up, or the host's calendar invites the guest). Otherwise the card
+  and the owner's message say no email is coming. The program then has the last word: the
+  guest is told they can close the chat.
+- **The owner's celebration effect plays on a fresh booking,** the same way the booking page
+  does it: the page fires `bookmeet:booked` and `bookmeet-effects.js` plays the branding
+  setting. Not on reopening a link that is already booked.
 - The module's switch governs links too: off, they stop opening.
 - **Not this page's job, and not a fourth calendar surface:** it has no month grid. Do not
   grow one here; the three calendar surfaces stay three.

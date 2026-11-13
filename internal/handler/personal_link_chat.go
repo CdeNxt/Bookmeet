@@ -97,6 +97,8 @@ var plinkText = map[string]string{
 	"booked":       "You’re booked.",
 	"invite_sent":  "Sent to %s",
 	"manage_hint":  "You can reschedule or cancel from the invitation.",
+	"invite_none":  "No email will be sent, so please note the time above.",
+	"done":         "That’s everything. You can close this chat now.",
 	"slot_taken":   "That time was just taken. These are still open:",
 	"not_offered":  "That isn’t one of the open times. These are:",
 	"inactive":     "This link is no longer active. Ask %s for a new one.",
@@ -431,14 +433,40 @@ func (s *plinkSession) book(ctx context.Context, start time.Time) {
 		return
 	}
 	s.link.Status, s.link.BookingID = personallink.StatusBooked, b.ID
-	rows := append(s.meetingRows(start), [2]string{plinkT("invite"), plinkT("invite_sent", s.link.GuestEmail)})
-	s.add(ctx, chatItem{Role: "assistant", Kind: "booked", Title: plinkT("booked"), Rows: rows, Foot: plinkT("manage_hint")})
-	s.h.notifyOwnerBooked(ctx, s, b)
+	// The card says an invitation was sent only when something will actually reach the
+	// guest. On a server with no email and no calendar to invite from, it says so instead.
+	emailed := s.h.guestWillBeEmailed(ctx, b)
+	card := chatItem{Role: "assistant", Kind: "booked", Title: plinkT("booked"), Rows: s.meetingRows(start)}
+	if emailed {
+		card.Rows = append(card.Rows, [2]string{plinkT("invite"), plinkT("invite_sent", s.link.GuestEmail)})
+		card.Foot = plinkT("manage_hint")
+	} else {
+		card.Foot = plinkT("invite_none")
+	}
+	s.add(ctx, card)
+	// The last word is the program's: the guest is done and can go.
+	s.say(ctx, plinkT("done"))
+	s.h.notifyOwnerBooked(ctx, s, b, emailed)
+}
+
+// guestWillBeEmailed reports whether anything about this booking will reach the guest's
+// inbox: Bookmeet's own email when it is set up, or the host's calendar inviting them.
+func (h *Handler) guestWillBeEmailed(ctx context.Context, b *booking.Booking) bool {
+	if h.isEmailEnabled() {
+		return true
+	}
+	if b.InviteDelivery != "" && b.InviteDelivery != booking.InviteByCalendar {
+		return false
+	}
+	var n int
+	_ = h.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM calendar_connections WHERE user_id = ? AND is_destination = 1`, b.HostID).Scan(&n)
+	return n > 0
 }
 
 // notifyOwnerBooked tells the owner on Telegram the moment a guest books. Every fact in it
 // comes from the booking and the link; no model writes it.
-func (h *Handler) notifyOwnerBooked(ctx context.Context, s *plinkSession, b *booking.Booking) {
+func (h *Handler) notifyOwnerBooked(ctx context.Context, s *plinkSession, b *booking.Booking, emailed bool) {
 	bot, _ := h.getTelegram()
 	if bot == nil {
 		return
@@ -457,8 +485,12 @@ func (h *Handler) notifyOwnerBooked(ctx context.Context, s *plinkSession, b *boo
 	if phone == "" {
 		phone = "not given"
 	}
-	text := fmt.Sprintf("Booked: %s\n%s · %s\nWhen: %s\nWhere: %s\nEmail: %s\nPhone: %s\n\nIt's on your calendar and %s's invitation is sent.",
-		s.link.GuestName, s.etName, plinkT("minutes", s.minutes), when, s.where(), s.link.GuestEmail, phone, firstName(s.link.GuestName))
+	closing := fmt.Sprintf("It's on your calendar and %s's invitation is sent.", firstName(s.link.GuestName))
+	if !emailed {
+		closing = fmt.Sprintf("It's booked in Bookmeet, but no invitation went to %s: this server has no email set up and no calendar to invite from.", firstName(s.link.GuestName))
+	}
+	text := fmt.Sprintf("Booked: %s\n%s · %s\nWhen: %s\nWhere: %s\nEmail: %s\nPhone: %s\n\n%s",
+		s.link.GuestName, s.etName, plinkT("minutes", s.minutes), when, s.where(), s.link.GuestEmail, phone, closing)
 	if s.link.Topic != "" {
 		text = strings.Replace(text, "\nWhen:", "\nTopic: "+s.link.Topic+"\nWhen:", 1)
 	}
@@ -836,6 +868,10 @@ type plinkPageData struct {
 	Disclosure       string
 	Token            string
 	TextJSON         template.JS
+	// The owner's celebration effect for a booking, and the script that plays it: the same
+	// pair the booking page uses.
+	BookingEffect string
+	ExperienceJS  template.JS
 }
 
 // PersonalLinkPage handles GET /i/{token}: the page a guest lands on from a personal link.
@@ -857,10 +893,12 @@ func (h *Handler) PersonalLinkPage(w http.ResponseWriter, r *http.Request) {
 		CSSVersion: bookingCSSVersion, BusinessName: brand.BusinessName, LogoURL: brand.LogoURL,
 		LogoHeight: pageLogoHeight(brand.LogoHeight), LogoOpacity: opacityCSS(brand.LogoOpacity),
 		AccentColor: accent, AccentForeground: accentForeground(accent), Locale: "en",
-		Title:      plinkT("title", firstName(owner)),
-		Disclosure: plinkT("disclosure", firstName(owner)),
-		Token:      token,
-		TextJSON:   template.JS(textJSON), // #nosec G203 -- json.Marshal output of a fixed string table, which escapes <,>,& by default
+		Title:         plinkT("title", firstName(owner)),
+		Disclosure:    plinkT("disclosure", firstName(owner)),
+		Token:         token,
+		TextJSON:      template.JS(textJSON), // #nosec G203 -- json.Marshal output of a fixed string table, which escapes <,>,& by default
+		BookingEffect: brand.BookingEffect,
+		ExperienceJS:  template.JS(bookmeetEffectsJS), // #nosec G203 -- our own bundled JS source constant, not user input
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Content-Security-Policy", strictPublicCSP)

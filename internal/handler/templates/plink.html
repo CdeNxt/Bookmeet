@@ -185,6 +185,11 @@ body {
       if (data.history) log.textContent = '';
       (data.items || []).forEach(draw);
       setStage(data.stage);
+      // The owner's celebration plays when the booking happens, not each time the page is
+      // reopened on a meeting that is already booked.
+      if (!data.history && (data.items || []).some(function (it) { return it.kind === 'booked'; })) {
+        window.dispatchEvent(new CustomEvent('bookmeet:booked'));
+      }
     }).catch(function () {
       wait.remove();
       log.appendChild(el('div', 'asst-msg note', body.action === 'open' ? T.load_failed : T.trouble));
@@ -206,6 +211,9 @@ body {
   call({ action: 'open' });
 })();
 </script>
+{{/* The celebration effects, as on the booking page: the script listens for bookmeet:booked
+     and plays whatever the owner chose in their branding settings ("off" plays nothing). */}}
+<script id="bm-experience" data-booked="{{.BookingEffect}}" data-cancelled="off">{{.ExperienceJS}}</script>
 {{template "publicSkinReady" .}}
 </body>
 </html>

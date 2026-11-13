@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/calnode/calnode/internal/mailer"
 	"github.com/calnode/calnode/internal/personallink"
 )
 
@@ -206,8 +207,15 @@ func TestPersonalLinkChat_pickConfirmBooksAndTellsTheOwnerAtOnce(t *testing.T) {
 
 	sent := len(f.tg.sent(ownerChat))
 	res = f.chat(t, f.token, plinkChatRequest{Action: "confirm", Start: start.Format(time.RFC3339)})
-	if res.Stage != "booked" || len(res.Items) != 1 || res.Items[0].Kind != "booked" {
-		t.Fatalf("after confirming: stage %q, %v", res.Stage, kinds(res.Items))
+	if got := kinds(res.Items); res.Stage != "booked" || len(got) != 2 || got[0] != "assistant:booked" || got[1] != "assistant:text" {
+		t.Fatalf("after confirming: stage %q, %v; want the booked card, then the closing line", res.Stage, got)
+	}
+	if invite := res.Items[0].Rows[len(res.Items[0].Rows)-1]; invite[1] != "Sent to bill@example.com" {
+		t.Errorf("booked card's last row = %v; want the invite line", invite)
+	}
+	// The assistant finishes by telling the guest they are done.
+	if !strings.Contains(res.Items[1].Text, "You can close this chat now") {
+		t.Errorf("closing line = %q", res.Items[1].Text)
 	}
 	var bookedAt, tz string
 	if err := f.h.db.QueryRow(`SELECT b.start_at, a.iana_timezone FROM bookings b JOIN booking_attendees a ON a.booking_id = b.id`).Scan(&bookedAt, &tz); err != nil {
@@ -360,6 +368,56 @@ func TestPersonalLinkChat_withoutAModelTheButtonsStillWork(t *testing.T) {
 	f.chat(t, f.token, plinkChatRequest{Action: "pick", Start: start.Format(time.RFC3339)})
 	if res := f.chat(t, f.token, plinkChatRequest{Action: "confirm", Start: start.Format(time.RFC3339)}); res.Stage != "booked" {
 		t.Fatalf("booking by buttons with no model: stage %q", res.Stage)
+	}
+}
+
+// On a server with no email and no calendar to invite from, nothing reaches the guest's
+// inbox. The card and the owner's message say so instead of claiming an invitation was sent.
+func TestPersonalLinkChat_saysSoWhenNoInvitationCanBeSent(t *testing.T) {
+	f := newChatFixture(t)
+	f.h.SetMailer(&mailer.Noop{}, "https://book.team.example")
+	if _, err := f.h.db.Exec(`DELETE FROM calendar_connections`); err != nil {
+		t.Fatal(err)
+	}
+	f.throughDetails(t)
+	start := f.at(17, 0)
+	f.chat(t, f.token, plinkChatRequest{Action: "pick", Start: start.Format(time.RFC3339)})
+	res := f.chat(t, f.token, plinkChatRequest{Action: "confirm", Start: start.Format(time.RFC3339)})
+
+	if res.Stage != "booked" {
+		t.Fatalf("stage %q; the booking itself should still succeed", res.Stage)
+	}
+	card := res.Items[0]
+	for _, row := range card.Rows {
+		if strings.Contains(row[1], "Sent to") {
+			t.Errorf("the card claims an invitation was sent: %v", row)
+		}
+	}
+	if !strings.Contains(card.Foot, "No email will be sent") {
+		t.Errorf("card footer = %q; want it to say no email is coming", card.Foot)
+	}
+	told := f.tg.sent(ownerChat)
+	if last := told[len(told)-1]; !strings.Contains(last, "no invitation went to Bill") {
+		t.Errorf("the owner was not told the guest got no invitation:\n%s", last)
+	}
+}
+
+// The page carries the owner's celebration effect, to play when the booking happens.
+func TestPersonalLinkPage_carriesTheOwnersBookingEffect(t *testing.T) {
+	f := newChatFixture(t)
+	if _, err := f.h.db.Exec(`UPDATE server_settings SET booking_effect = 'confetti' WHERE id = 1`); err != nil {
+		t.Skipf("booking effect is not stored where this test expects: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/i/"+f.token, nil)
+	req.SetPathValue("token", f.token)
+	rec := httptest.NewRecorder()
+	f.h.PersonalLinkPage(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, `id="bm-experience" data-booked="confetti"`) || !strings.Contains(body, "BookMeetEffects") {
+		t.Error("the page does not carry the booking effect and the script that plays it")
+	}
+	if !strings.Contains(body, "bookmeet:booked") {
+		t.Error("the page never fires the booked event")
 	}
 }
 
