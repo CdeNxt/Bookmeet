@@ -310,8 +310,8 @@ or a button tap is the next section.
 ## Personal booking assistant: the owner's side on Telegram (Bookmeet)
 
 `assistant_owner.go`. The owner messages the bot; the model works out a guest, a meeting
-type, days and times; the owner confirms on a details panel. The guest's chat page is not
-built yet (`GET /i/{token}` is a placeholder).
+type, days and times; the owner confirms on a details panel. The guest's side is the next
+section.
 
 - **The model's only way to act is `show_details`, which shows a panel. Creating a link and
   booking happen on a button tap, never from model output.** A tap is callback data handled
@@ -336,6 +336,39 @@ built yet (`GET /i/{token}` is a placeholder).
 - The prompt (`ownerAssistantRules`) is code-owned, like `assistantBaseRules`.
 - Not built: a meeting topic on a direct booking (bookings have nowhere to keep one), and
   per-meeting length or location.
+
+## Personal booking assistant: the guest's chat page (Bookmeet)
+
+`GET /i/{token}` (`templates/plink.html`) is a shell; the conversation comes from
+`POST /v1/links/{token}/chat` (`personal_link_chat.go`) and is saved on the link
+(`personal_link_messages`), so reloading continues it.
+
+- **The program owns the flow; the model fills the gaps.** The greeting, the order (email,
+  then phone, then times), the cards and every button are the program's. A button press
+  never reaches the model. A typed email or phone number is read by the program too
+  (`heard`), so the common path works with no model at all.
+- **The model gets tools for the current step only** (`tools`), and each ends in something
+  the program draws. `pick_time` shows a confirm card; only the guest's Confirm books, through
+  `bookPersonalLink`. When a tool put something on screen, the model's closing remark is
+  dropped so it cannot contradict the card.
+- **The model's state is the link and the open times inside its windows, and nothing before
+  the details are done** (`prompt`). No calendar contents, no other bookings, no other
+  guests. Keep it that way: what it is never told, it cannot be talked into revealing.
+  `TestPersonalLinkChat_theModelSeesOnlyTheLinkAndCanOnlyPickAnOfferedTime` pins this.
+- **Times are in the guest's own zone,** reported by their browser and sent with every
+  request. Confirm and booked cards show the owner's time alongside when the zones differ.
+- **The page caps what it shows** (three days, five times each) behind "More times". That is
+  the page's choice; the server sends every open time.
+- **A booking tells the owner on Telegram at once** (`notifyOwnerBooked`), from the booking
+  record, not from the model.
+- The module's switch governs links too: off, they stop opening.
+- **Not this page's job, and not a fourth calendar surface:** it has no month grid. Do not
+  grow one here; the three calendar surfaces stay three.
+- **Wording is English only for now,** gathered in `plinkText` so moving it into the locale
+  files is one change. This is a public surface, so that move is owed before the feature
+  leaves staging. The page loads `/booking.css` (`.asst-*` and `.plink-*`) and the public skin.
+- Not built: suggesting other times, notes and change requests for the owner, the closing
+  question and the single end-of-chat message, intake questions asked in chat.
 
 ## Conventions
 

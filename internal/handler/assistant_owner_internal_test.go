@@ -64,6 +64,14 @@ func (fm *fakeModel) calls(tool string, args any) {
 	fm.mu.Unlock()
 }
 
+// tool queues a tool call on its own, for turns where the program's answer ends the turn.
+func (fm *fakeModel) tool(name string, args any) {
+	raw, _ := json.Marshal(args)
+	fm.mu.Lock()
+	fm.script = append(fm.script, llm.Message{Role: "assistant", ToolCalls: []llm.ToolCall{{ID: "call-1", Type: "function", Function: llm.FunctionCall{Name: name, Arguments: string(raw)}}}})
+	fm.mu.Unlock()
+}
+
 // toolResults returns every tool result the program handed back to the model.
 func (fm *fakeModel) toolResults() []string {
 	fm.mu.Lock()
@@ -589,32 +597,5 @@ func TestOwnerAssistant_tapsFromElsewhereAndOnDeadPanelsDoNothing(t *testing.T) 
 	answers := f.tg.of("answerCallbackQuery")
 	if last := answers[len(answers)-1]; last["text"] != "That panel is no longer active." {
 		t.Errorf("tap on a dead panel answered %v", last)
-	}
-}
-
-func TestPersonalLinkPage_opensForARealLinkOnly(t *testing.T) {
-	f := newOwnerFixture(t)
-	f.model.calls("show_details", billWindows())
-	f.message(t, "set it up")
-	f.tap(t, "Create link")
-	l := f.links(t)[0]
-	token, _ := f.h.personalLinks().Token(context.Background(), f.userID, l.ID)
-
-	get := func(tok string) *httptest.ResponseRecorder {
-		req := httptest.NewRequest(http.MethodGet, "/i/"+tok, nil)
-		req.SetPathValue("token", tok)
-		rec := httptest.NewRecorder()
-		f.h.PersonalLinkPage(rec, req)
-		return rec
-	}
-	if rec := get("not-a-real-token"); rec.Code != http.StatusNotFound {
-		t.Errorf("unknown token: %d; want 404", rec.Code)
-	}
-	rec := get(token)
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Hi Bill") {
-		t.Fatalf("real token: %d - %s", rec.Code, rec.Body.String())
-	}
-	if f.links(t)[0].LastOpenedAt.IsZero() {
-		t.Error("opening the link was not recorded")
 	}
 }

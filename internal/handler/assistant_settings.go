@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html"
 	"net/http"
 	"strings"
 	"time"
@@ -487,28 +486,6 @@ func (h *Handler) telegramLinkedUser(ctx context.Context, chatID int64) (string,
 		return "", false
 	}
 	return userID, true
-}
-
-// PersonalLinkPage handles GET /i/{token}: where a guest lands from a personal link. The
-// booking chat that belongs here is the next piece of work; until then the page confirms the
-// link is real and records that it was opened.
-func (h *Handler) PersonalLinkPage(w http.ResponseWriter, r *http.Request) {
-	l, err := h.personalLinks().ByToken(r.Context(), r.PathValue("token"))
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	_ = h.personalLinks().MarkOpened(r.Context(), l.ID)
-	owner := h.personalLinkOwnerName(r.Context(), l.UserID)
-	line := "The booking chat for this link opens here soon. " + owner + " will be in touch if you need a time before then."
-	if !l.Active() {
-		line = "This link is no longer active. Ask " + owner + " for a new one."
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("X-Robots-Tag", "noindex, nofollow")
-	fmt.Fprintf(w, `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Booking with %s</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 1.25rem;color:#252735}h1{font-weight:300;font-size:1.6rem}</style></head><body><h1>Hi %s</h1><p>%s</p></body></html>`,
-		html.EscapeString(owner), html.EscapeString(firstName(l.GuestName)), html.EscapeString(line))
 }
 
 var errTelegramLinkCode = errors.New("telegram link code is not valid")

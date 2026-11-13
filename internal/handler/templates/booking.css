@@ -500,3 +500,51 @@
   .slots-list { scrollbar-gutter: auto; }
 }
 .cd.sel, .slot-btn.sel, .btn-primary { background: var(--booking-accent, #111827) !important; border-color: var(--booking-accent, #111827); color: var(--booking-accent-text, #fff) !important; }
+
+/* ── Personal booking link: the guest's chat page (plink.html) ──
+   Built from the assistant pieces above (.asst-log, .asst-msg, .asst-row), laid out as a
+   page of its own instead of a drawer. */
+/* The public skin adds its hero copy (.bm-hero) beside the card, so the shell is a row with
+   room for both; without the skin the card sits centred on its own. */
+.plink-shell { width: 100%; max-width: 1040px; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; gap: 48px; padding: 16px; box-sizing: border-box; }
+main.plink-shell > .bm-hero { flex: 1 1 320px; min-width: 0; max-width: 420px; }
+/* Written this specifically because the skin sizes .card for the booking page's wide layout. */
+main.plink-shell > .card.plink-card { flex: 0 0 auto; flex-direction: column; width: min(460px, 100%); max-width: 460px; height: min(760px, calc(100dvh - 32px)); min-height: 420px; }
+/* display:flex above would otherwise beat the hidden attribute the "More times" cap uses. */
+.plink-day[hidden], .plink-slot[hidden] { display: none; }
+.plink-card .asst-msg { max-width: 92%; }
+.plink-block { white-space: normal; display: flex; flex-direction: column; gap: .5rem; }
+.plink-head { font-size: .75rem; letter-spacing: .03em; text-transform: uppercase; color: #6b7280; }
+.plink-foot { font-size: .8125rem; color: #6b7280; }
+.asst-msg.ok .plink-foot { color: inherit; }
+.plink-day { display: flex; flex-direction: column; gap: .375rem; }
+.plink-day-name { font-size: .75rem; letter-spacing: .03em; text-transform: uppercase; color: #6b7280; }
+.plink-times { display: flex; flex-wrap: wrap; gap: .375rem; }
+.plink-slot {
+  border: 1px solid var(--booking-accent, #111827); background: #fff; color: #111827;
+  border-radius: 999px; padding: .5rem .75rem; min-height: 40px;
+  font: inherit; font-size: .8125rem; font-variant-numeric: tabular-nums; cursor: pointer;
+}
+.plink-slot:hover:not(:disabled) { background: var(--booking-accent, #111827); color: var(--booking-accent-text, #fff); }
+.plink-more { align-self: flex-start; background: none; border: none; padding: .25rem 0; font: inherit; font-size: .8125rem; color: #111827; text-decoration: underline; cursor: pointer; }
+.plink-title { font-weight: 600; }
+.plink-rows { display: grid; grid-template-columns: auto 1fr; gap: .2rem .75rem; margin: 0; font-size: .8125rem; }
+.plink-rows dt { color: #6b7280; }
+.asst-msg.ok .plink-rows dt { color: inherit; opacity: .8; }
+.plink-rows dd { margin: 0; }
+.plink-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.plink-primary, .plink-secondary { border-radius: 999px; padding: .5rem 1rem; min-height: 40px; font: inherit; font-size: .8125rem; font-weight: 600; cursor: pointer; }
+.plink-primary { border: 1px solid var(--booking-accent, #111827); background: var(--booking-accent, #111827); color: var(--booking-accent-text, #fff); }
+.plink-secondary { border: 1px solid #d1d5db; background: #fff; color: #111827; }
+.plink-slot:disabled, .plink-primary:disabled, .plink-secondary:disabled, .plink-more:disabled { opacity: .45; cursor: default; }
+.plink-slot:focus-visible, .plink-primary:focus-visible, .plink-secondary:focus-visible, .plink-more:focus-visible { outline: 2px solid var(--booking-accent, #111827); outline-offset: 2px; }
+.plink-zone select { max-width: 11rem; border: 1px solid #e5e7eb; border-radius: 8px; padding: .25rem .375rem; font: inherit; font-size: .75rem; color: #374151; background: #fff; }
+.plink-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* A conversation needs the width more than the page needs its headline. */
+@media (max-width: 860px) {
+  main.plink-shell > .bm-hero { display: none; }
+}
+@media (max-width: 520px) {
+  .plink-shell { padding: 0; }
+  main.plink-shell > .card.plink-card { width: 100%; max-width: none; height: 100dvh; border-radius: 0; }
+}

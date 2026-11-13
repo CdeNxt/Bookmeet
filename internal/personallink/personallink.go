@@ -69,14 +69,17 @@ type Link struct {
 	PlaceName    string
 	PlaceAddress string
 	Topic        string // what the meeting is about, in the owner's words
-	Status       string
-	BookingID    string
-	ReplacesID   string
-	ExpiresAt    time.Time
-	LastOpenedAt time.Time // zero until the guest first opens it
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	Windows      []Window
+	// DetailsDone: the guest has been through the email and phone step.
+	DetailsDone   bool
+	GuestTimezone string // the zone the guest's browser reported; empty until they open the link
+	Status        string
+	BookingID     string
+	ReplacesID    string
+	ExpiresAt     time.Time
+	LastOpenedAt  time.Time // zero until the guest first opens it
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	Windows       []Window
 }
 
 // Active reports whether the guest can still use the link.
@@ -116,7 +119,9 @@ type CreateParams struct {
 	PlaceName    string
 	PlaceAddress string
 	Topic        string
-	Windows      []Window
+	// DetailsDone carries "this guest already gave their details" onto a replacement link.
+	DetailsDone bool
+	Windows     []Window
 }
 
 // Create makes a link and returns it with its token. The token is the secret in the URL;
@@ -156,6 +161,8 @@ func (s *Service) Replace(ctx context.Context, userID, oldID string, p CreatePar
 		if p.GuestPhone == "" {
 			p.GuestPhone = old.GuestPhone
 		}
+		// Someone who already gave an email is not walked through the details step again.
+		p.DetailsDone = old.DetailsDone && p.GuestEmail == old.GuestEmail && p.GuestEmail != ""
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -223,7 +230,7 @@ func (s *Service) insert(ctx context.Context, tx *sql.Tx, p CreateParams, replac
 		ID: uid.New(), UserID: p.UserID, EventTypeID: p.EventTypeID,
 		GuestName: name, GuestEmail: strings.TrimSpace(p.GuestEmail), GuestPhone: strings.TrimSpace(p.GuestPhone),
 		PlaceName: strings.TrimSpace(p.PlaceName), PlaceAddress: strings.TrimSpace(p.PlaceAddress),
-		Topic:  strings.TrimSpace(p.Topic),
+		Topic: strings.TrimSpace(p.Topic), DetailsDone: p.DetailsDone && strings.TrimSpace(p.GuestEmail) != "",
 		Status: StatusOpen, ReplacesID: replacesID,
 		ExpiresAt: windows[len(windows)-1].End, CreatedAt: now, UpdatedAt: now, Windows: windows,
 	}
@@ -235,10 +242,10 @@ func (s *Service) insert(ctx context.Context, tx *sql.Tx, p CreateParams, replac
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO personal_links
 		  (id, user_id, event_type_id, token_hash, token_enc, guest_name, guest_email, guest_phone,
-		   place_name, place_address, topic, status, replaces_id, expires_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		   place_name, place_address, topic, details_done, status, replaces_id, expires_at, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		l.ID, l.UserID, l.EventTypeID, hashToken(token), enc, l.GuestName, l.GuestEmail, l.GuestPhone,
-		l.PlaceName, l.PlaceAddress, l.Topic, l.Status, nullable(replacesID), stamp(l.ExpiresAt), stamp(now), stamp(now)); err != nil {
+		l.PlaceName, l.PlaceAddress, l.Topic, l.DetailsDone, l.Status, nullable(replacesID), stamp(l.ExpiresAt), stamp(now), stamp(now)); err != nil {
 		return nil, "", fmt.Errorf("personal link: insert: %w", err)
 	}
 	for _, w := range windows {
@@ -282,7 +289,7 @@ func normalizeWindows(in []Window, now time.Time) ([]Window, error) {
 	return out, nil
 }
 
-const linkColumns = `id, user_id, event_type_id, guest_name, guest_email, guest_phone, place_name, place_address, topic,
+const linkColumns = `id, user_id, event_type_id, guest_name, guest_email, guest_phone, place_name, place_address, topic, details_done, guest_timezone,
 	status, COALESCE(booking_id, ''), COALESCE(replaces_id, ''), expires_at, COALESCE(last_opened_at, ''), created_at, updated_at`
 
 // ByToken finds the link a URL token belongs to. An unknown token and a malformed one are
@@ -334,7 +341,7 @@ func (s *Service) load(ctx context.Context, query string, args ...any) (*Link, e
 	var l Link
 	var expires, opened, created, updated string
 	err := s.db.QueryRowContext(ctx, query, args...).Scan(
-		&l.ID, &l.UserID, &l.EventTypeID, &l.GuestName, &l.GuestEmail, &l.GuestPhone, &l.PlaceName, &l.PlaceAddress, &l.Topic,
+		&l.ID, &l.UserID, &l.EventTypeID, &l.GuestName, &l.GuestEmail, &l.GuestPhone, &l.PlaceName, &l.PlaceAddress, &l.Topic, &l.DetailsDone, &l.GuestTimezone,
 		&l.Status, &l.BookingID, &l.ReplacesID, &expires, &opened, &created, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -407,6 +414,57 @@ func (s *Service) SaveGuestDetails(ctx context.Context, id, email, phone string)
 		    updated_at = ?
 		WHERE id = ?`, email, email, phone, phone, stamp(s.now()), id)
 	return err
+}
+
+// SetDetailsDone records that the guest has finished the email and phone step.
+func (s *Service) SetDetailsDone(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE personal_links SET details_done = 1, updated_at = ? WHERE id = ?`, stamp(s.now()), id)
+	return err
+}
+
+// SetGuestTimezone records the zone the guest's browser reported.
+func (s *Service) SetGuestTimezone(ctx context.Context, id, tz string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE personal_links SET guest_timezone = ? WHERE id = ?`, tz, id)
+	return err
+}
+
+// Message is one entry in the guest's conversation on a link.
+type Message struct {
+	ID        int64
+	Role      string // "guest" or "assistant"
+	Kind      string // "text", or a card kind the page knows how to draw
+	Content   string
+	CreatedAt time.Time
+}
+
+// AddMessage appends to the link's conversation.
+func (s *Service) AddMessage(ctx context.Context, linkID, role, kind, content string) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO personal_link_messages (link_id, role, kind, content, created_at) VALUES (?, ?, ?, ?, ?)`,
+		linkID, role, kind, content, stamp(s.now()))
+	return err
+}
+
+// Messages returns the link's conversation, oldest first.
+func (s *Service) Messages(ctx context.Context, linkID string) ([]Message, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, role, kind, content, created_at FROM personal_link_messages
+		WHERE link_id = ? ORDER BY id LIMIT 500`, linkID)
+	if err != nil {
+		return nil, fmt.Errorf("personal link: messages: %w", err)
+	}
+	defer rows.Close()
+	var out []Message
+	for rows.Next() {
+		var m Message
+		var created string
+		if err := rows.Scan(&m.ID, &m.Role, &m.Kind, &m.Content, &created); err != nil {
+			return nil, fmt.Errorf("personal link: messages: %w", err)
+		}
+		m.CreatedAt = parse(created)
+		out = append(out, m)
+	}
+	return out, rows.Err()
 }
 
 // SetStatus moves an active link between the active statuses (open, proposed, followup).

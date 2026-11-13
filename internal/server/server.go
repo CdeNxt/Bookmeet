@@ -436,6 +436,7 @@ func New(ctx context.Context, cfg *config.Config, db *sql.DB, logger *slog.Logge
 	mux.HandleFunc("POST /v1/telegram/webhook", RateLimit(600, time.Minute)(h.TelegramWebhook))
 	// Where a guest lands from a personal booking link.
 	mux.HandleFunc("GET /i/{token}", RateLimit(60, time.Minute)(h.PersonalLinkPage))
+	mux.HandleFunc("POST /v1/links/{token}/chat", RateLimit(40, time.Minute)(h.PersonalLinkChat))
 	mux.HandleFunc("GET /v1/settings/branding", h.RequireAuth(h.GetBranding))
 	mux.HandleFunc("PATCH /v1/settings/branding", settingsRL(h.RequireAuth(h.PatchBranding)))
 	mux.HandleFunc("POST /v1/settings/branding/logo", settingsRL(h.RequireAuth(h.UploadBrandingLogo)))

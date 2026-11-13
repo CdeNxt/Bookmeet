@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1359,13 +1358,4 @@ func (s *ownerSession) toolChangeLink(ctx context.Context, l *personallink.Link)
 		return "error: the panel could not be shown."
 	}
 	return "The panel is on screen with the link's current offer:\n" + s.draftSummary(d) + "\nAsk the owner what to change, or tell them to tap Create new link."
-}
-
-// personalLinkOwner is a tiny helper for the guest-side placeholder page.
-func (h *Handler) personalLinkOwnerName(ctx context.Context, userID string) string {
-	var name string
-	if err := h.db.QueryRowContext(ctx, `SELECT name FROM users WHERE id = ?`, userID).Scan(&name); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		h.logger.WarnContext(ctx, "personal link: owner name", "error", err)
-	}
-	return name
 }
