@@ -75,6 +75,12 @@ FROM alpine:3.24
 
 RUN apk add --no-cache ca-certificates tzdata
 
+# Tailscale, only when asked for (staging: packaging/fly/fly.staging.toml sets this), so
+# that copy can also be opened privately from the owner's own devices. Every other image
+# is built without it. entrypoint.sh starts it only when it is installed and a key is set.
+ARG TAILSCALE=0
+RUN if [ "$TAILSCALE" = 1 ]; then apk add --no-cache tailscale; fi
+
 COPY --from=builder /usr/local/bin/litestream /usr/local/bin/litestream
 COPY --from=builder /build/calnode /calnode
 COPY litestream.yml /etc/litestream.yml
