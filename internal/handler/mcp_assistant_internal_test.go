@@ -9,6 +9,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/calnode/calnode/internal/calendar"
 	"github.com/calnode/calnode/internal/personallink"
 	"github.com/calnode/calnode/internal/slots"
 )
@@ -19,6 +20,8 @@ import (
 // waits on, so the gap is written down rather than forgotten. Adding a Telegram tool without
 // an entry here fails TestMCPAssistant_parityWithTelegram.
 var mcpAssistantParity = map[string]string{
+	// show_details is two things on Telegram: a link (windows), or with the guest's email
+	// and book_at, a direct booking, which is book_for_guest here (checked below).
 	"show_details": "create_personal_link",
 	"list_links":   "list_personal_links",
 	"resend_link":  "get_personal_link",
@@ -66,7 +69,10 @@ func TestMCPAssistant_parityWithTelegram(t *testing.T) {
 			t.Errorf("Telegram tool %s maps to MCP tool %s, which the server does not have", name, target)
 		}
 	}
-	if init := cs.InitializeResult(); init == nil || !strings.Contains(strings.ToLower(init.Instructions), "personal links") {
+	if have["book_for_guest"] == nil {
+		t.Error("show_details' direct booking (book_at with an email) has no MCP counterpart, book_for_guest")
+	}
+	if init := cs.InitializeResult(); init == nil || !strings.Contains(strings.ToLower(init.Instructions), "personal link") {
 		t.Error("the server gives agents no instructions about personal links")
 	}
 }
@@ -303,5 +309,131 @@ func TestMCPAssistant_createRefusals(t *testing.T) {
 	}
 	if n := f.count(t, `SELECT COUNT(*) FROM personal_links`); n != 0 {
 		t.Fatalf("%d links made by refused calls", n)
+	}
+}
+
+// The Telegram "Book it" for an agent: one exact time for a guest with an email, booked as
+// the owner's invitation, with the manage link back. Outside the owner's hours it is refused,
+// because only the owner's Allow tap can book there.
+func TestMCPAssistant_bookForGuest(t *testing.T) {
+	f := newOwnerFixture(t)
+	cs := connectMCPInternal(t, f.h)
+	args := map[string]any{"guest_name": "Ann Agent", "guest_email": "ann@example.com", "event_type": "intro", "date": date(3), "time": "09:00"}
+	var out bookForGuestOut
+	if err := json.Unmarshal([]byte(callJSON(t, cs, "book_for_guest", args)), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.BookingID == "" || !strings.Contains(out.ManageURL, "/manage/") || !strings.HasPrefix(out.When.At, date(3)+"T09:00") {
+		t.Fatalf("booked = %+v", out)
+	}
+	// The same time again: the owner has something then now.
+	args["guest_email"] = "other@example.com"
+	if msg := toolError(t, cs, "book_for_guest", args); !strings.Contains(msg, "already has something") {
+		t.Errorf("a taken time: %s", msg)
+	}
+	f.closeDay(t, 4)
+	args["date"] = date(4)
+	if msg := toolError(t, cs, "book_for_guest", args); !strings.Contains(msg, "outside the times") {
+		t.Errorf("a closed day: %s", msg)
+	}
+	if n := f.count(t, `SELECT COUNT(*) FROM bookings`); n != 1 {
+		t.Errorf("%d bookings; want 1", n)
+	}
+}
+
+// The owner's answer to a guest's suggested times, given by their agent: a free one books
+// through the link, closes what was held and leaves the booked card for the guest; a second
+// answer is refused. "none" leaves the link working and tells the guest nothing.
+func TestMCPAssistant_answerGuest(t *testing.T) {
+	f := newChatFixture(t)
+	ctx := context.Background()
+	links := f.h.personalLinks()
+	if err := links.SaveGuestDetails(ctx, f.link.ID, "bill@example.com", ""); err != nil {
+		t.Fatal(err)
+	}
+	suggest := func() int64 {
+		starts, _ := json.Marshal([]string{f.at(20, 0).UTC().Format(time.RFC3339), f.at(21, 0).UTC().Format(time.RFC3339)})
+		if err := links.Hold(ctx, f.link.ID, personallink.HeldSuggestions, string(starts)); err != nil {
+			t.Fatal(err)
+		}
+		items, _ := links.HeldItems(ctx, f.link.ID)
+		return items[len(items)-1].ID
+	}
+	cs := connectMCPInternal(t, f.h)
+
+	first := suggest()
+	if res := callJSON(t, cs, "answer_guest", map[string]any{"link_id": f.link.ID, "held_id": first, "answer": "none"}); !strings.Contains(res, "not been told") {
+		t.Errorf("none: %s", res)
+	}
+	if l := f.reload(t); !l.Active() {
+		t.Fatalf("link is %q after none; want still usable", l.Status)
+	}
+
+	held := suggest()
+	if msg := toolError(t, cs, "answer_guest", map[string]any{"link_id": f.link.ID, "held_id": held, "answer": "book", "at": f.at(22, 0).UTC().Format(time.RFC3339)}); !strings.Contains(msg, "one of the guest's suggested times") {
+		t.Errorf("a time the guest did not suggest: %s", msg)
+	}
+	var out answerGuestOut
+	if err := json.Unmarshal([]byte(callJSON(t, cs, "answer_guest", map[string]any{
+		"link_id": f.link.ID, "held_id": held, "answer": "book", "at": f.at(21, 0).UTC().Format(time.RFC3339),
+	})), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Booked == nil || out.Booked.BookingID == "" {
+		t.Fatalf("answer = %+v", out)
+	}
+	if l := f.reload(t); l.Status != personallink.StatusBooked || l.BookingID != out.Booked.BookingID {
+		t.Errorf("link = %q booking %q; want booked %q", l.Status, l.BookingID, out.Booked.BookingID)
+	}
+	if msg := toolError(t, cs, "answer_guest", map[string]any{"link_id": f.link.ID, "held_id": held, "answer": "none"}); !strings.Contains(msg, "already been answered") {
+		t.Errorf("answering twice: %s", msg)
+	}
+	if res := f.chat(t, f.token, plinkChatRequest{Action: "open"}); !strings.Contains(fmtJSON(res), `"booked"`) {
+		t.Errorf("the guest's page shows no booked card: %s", fmtJSON(res))
+	}
+}
+
+func fmtJSON(v any) string { b, _ := json.Marshal(v); return string(b) }
+
+// A calendar event's title is for the owner's eyes on Telegram only. An agent hitting that
+// very event, by every route it has, is told only that the owner is busy.
+func TestMCPAssistant_calendarTitlesNeverReachAnAgent(t *testing.T) {
+	f := newChatFixture(t)
+	ctx := context.Background()
+	links := f.h.personalLinks()
+	_ = links.SaveGuestDetails(ctx, f.link.ID, "bill@example.com", "")
+	clash := f.at(21, 0)
+	f.cal.mu.Lock()
+	f.cal.busy = []slots.Interval{{Start: clash.Add(-30 * time.Minute), End: clash.Add(30 * time.Minute)}}
+	f.cal.titled = []calendar.BusyEvent{{Title: "Dentist", Start: clash.Add(-30 * time.Minute), End: clash.Add(30 * time.Minute)}}
+	f.cal.mu.Unlock()
+	starts, _ := json.Marshal([]string{clash.UTC().Format(time.RFC3339)})
+	_ = links.Hold(ctx, f.link.ID, personallink.HeldSuggestions, string(starts))
+	items, _ := links.HeldItems(ctx, f.link.ID)
+	cs := connectMCPInternal(t, f.h)
+
+	var seen []string
+	call := func(name string, args map[string]any) {
+		res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		blob, _ := json.Marshal(res)
+		seen = append(seen, name+": "+string(blob))
+	}
+	day := clash.UTC().Format("2006-01-02")
+	call("answer_guest", map[string]any{"link_id": f.link.ID, "held_id": items[0].ID, "answer": "book", "at": clash.UTC().Format(time.RFC3339)})
+	call("book_for_guest", map[string]any{"guest_name": "Ann", "guest_email": "ann@example.com", "event_type": "intro", "date": day, "time": "21:00"})
+	call("check_personal_link_offer", map[string]any{"guest_name": "Ann", "event_type": "intro", "windows": []map[string]string{{"date": day, "start": "20:30", "end": "21:30"}}})
+	call("get_personal_link", map[string]any{"link_id": f.link.ID})
+	call("whats_waiting", nil)
+	call("get_available_slots", map[string]any{"event_type_id": "intro", "date_from": day, "date_to": day})
+	for _, s := range seen {
+		if strings.Contains(s, "Dentist") {
+			t.Errorf("a calendar title reached the agent: %s", s)
+		}
+	}
+	if !strings.Contains(seen[0], "already has something") || !strings.Contains(seen[1], "already has something") {
+		t.Errorf("the agent was not told the owner is busy:\n%s\n%s", seen[0], seen[1])
 	}
 }
