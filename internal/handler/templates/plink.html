@@ -49,6 +49,9 @@ body {
 {{/* SAFE (generic.html-templates.security.var-in-script-tag): .TextJSON is json.Marshal output of a
      fixed string table (HTML-escapes <,>,&), and .Token is rendered by html/template's JS-string
      escaper. Neither is raw request data. */}}
+{{/* SAFE (generic.html-templates.security.var-in-script-tag): .BookingLogicJS is the static,
+     go:embed'd shared JS asset (assets/booking-logic.js), a compile-time constant. */}}
+<script>{{.BookingLogicJS}}</script>  <!-- nosemgrep: generic.html-templates.security.var-in-script-tag.var-in-script-tag -->
 <script>
 (function () {
   var T = {{.TextJSON}};  // nosemgrep: generic.html-templates.security.var-in-script-tag.var-in-script-tag
@@ -68,13 +71,12 @@ body {
   // The guest's zone comes from their browser, which knows what their device is set to.
   var zone = 'UTC';
   try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (e) {}
+  // A short list of common zones by their everyday names, plus the guest's own: the same
+  // list the booking and manage pages offer (BookingLogic.tzChoices).
   (function fillZones() {
-    var list = [];
-    try { list = Intl.supportedValuesOf('timeZone'); } catch (e) {}
-    if (list.indexOf(zone) < 0) list.unshift(zone);
-    list.forEach(function (z) {
+    BookingLogic.tzChoices(zone, document.documentElement.lang).forEach(function (c) {
       var o = document.createElement('option');
-      o.value = z; o.textContent = z.replace(/_/g, ' ');
+      o.value = c.value; o.textContent = c.offset ? c.name + ' (' + c.offset + ')' : c.name;
       zoneSel.appendChild(o);
     });
     zoneSel.value = zone;

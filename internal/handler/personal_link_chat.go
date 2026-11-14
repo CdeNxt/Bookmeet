@@ -1145,6 +1145,9 @@ type plinkPageData struct {
 	// pair the booking page uses.
 	BookingEffect string
 	ExperienceJS  template.JS
+	// BookingLogicJS is the shared booking logic module, inlined for its timezone list
+	// (the same short list the booking and manage pages offer).
+	BookingLogicJS template.JS
 }
 
 // PersonalLinkPage handles GET /i/{token}: the page a guest lands on from a personal link.
@@ -1166,12 +1169,13 @@ func (h *Handler) PersonalLinkPage(w http.ResponseWriter, r *http.Request) {
 		CSSVersion: bookingCSSVersion, BusinessName: brand.BusinessName, LogoURL: brand.LogoURL,
 		LogoHeight: pageLogoHeight(brand.LogoHeight), LogoOpacity: opacityCSS(brand.LogoOpacity),
 		AccentColor: accent, AccentForeground: accentForeground(accent), Locale: "en",
-		Title:         plinkT("title", firstName(owner)),
-		Disclosure:    plinkT("disclosure", firstName(owner)),
-		Token:         token,
-		TextJSON:      template.JS(textJSON), // #nosec G203 -- json.Marshal output of a fixed string table, which escapes <,>,& by default
-		BookingEffect: brand.BookingEffect,
-		ExperienceJS:  template.JS(bookmeetEffectsJS), // #nosec G203 -- our own bundled JS source constant, not user input
+		Title:          plinkT("title", firstName(owner)),
+		Disclosure:     plinkT("disclosure", firstName(owner)),
+		Token:          token,
+		TextJSON:       template.JS(textJSON), // #nosec G203 -- json.Marshal output of a fixed string table, which escapes <,>,& by default
+		BookingEffect:  brand.BookingEffect,
+		ExperienceJS:   template.JS(bookmeetEffectsJS), // #nosec G203 -- our own bundled JS source constant, not user input
+		BookingLogicJS: template.JS(bookingLogicJS),    // #nosec G203 -- our own bundled JS source constant, not user input
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Content-Security-Policy", strictPublicCSP)

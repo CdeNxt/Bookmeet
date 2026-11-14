@@ -122,7 +122,7 @@
   // forms the locale files use for these keys: plain %s, taken in order, and the indexed
   // %[n]s that lets a translation reorder its arguments ("%[1]s has no available times on
   // %[2]s" is date-first in several languages). Server-side, Go's fmt does this job; this
-  // is the client half of the same contract.
+  // is the client half of the same rule.
   //
   // Deliberately not a printf. Accepting %d without implementing number formatting would
   // be worse than not claiming to: the keys these surfaces substitute carry %s only, and
