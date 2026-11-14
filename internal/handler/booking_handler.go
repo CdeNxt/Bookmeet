@@ -704,6 +704,11 @@ func (h *Handler) planBooking(ctx context.Context, slug string, startAt time.Tim
 			return nil, none, errSlotUnavailable
 		}
 	} else {
+		if extras.OwnerInvited {
+			// How far ahead the owner takes bookings is a rule for the public booking page,
+			// not for a meeting they arranged themselves (see slotsWanted.OwnerArranged).
+			et.MaxFutureDays = 0
+		}
 		if err := h.validateBookingTime(ctx, et, et.RoutingMode, candidates, required, startAt.UTC(), endAt); err != nil {
 			return nil, none, err
 		}

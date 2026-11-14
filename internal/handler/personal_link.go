@@ -76,8 +76,13 @@ func (h *Handler) personalLinkSlots(ctx context.Context, l *personallink.Link, t
 	// An exception the owner allowed on this link: their hours, notice and booking horizon
 	// are set aside inside its windows. Their calendar and bookings are not.
 	want.OwnerException = l.OutsideAvailability
+	want.OwnerArranged = true // the owner chose these dates; their booking horizon is not for them
 	res, err := h.computeSlots(ctx, slug, tzName,
 		from.Format("2006-01-02"), last.UTC().AddDate(0, 0, 1).Format("2006-01-02"), want)
+	if errors.Is(err, errBadDateRange) {
+		// Every window has passed, or lies beyond the engine's one-year reach: nothing to offer.
+		return slotsResult{Slots: []slotJSON{}, Hosts: map[string]map[string]string{}}, nil
+	}
 	if err != nil {
 		return slotsResult{}, err
 	}
@@ -114,7 +119,7 @@ func (h *Handler) windowSlotCounts(ctx context.Context, slug, tzName string, win
 	if today := time.Now().UTC().Truncate(24 * time.Hour); from.Before(today) {
 		from = today
 	}
-	want := slotsWanted{}
+	want := slotsWanted{OwnerArranged: true} // as personalLinkSlots asks
 	if place != "" {
 		want.InPerson, want.Location = true, place
 	}

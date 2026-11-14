@@ -42,85 +42,26 @@ func (f *ownerFixture) closeDay(t *testing.T, day int) {
 }
 
 // The owner asks for a day they do not take meetings. The panel says so before anything is
-// made, nothing is created without the Allow tap, and with it the link really offers the times.
-func TestOwnerAssistant_timesOutsideTheOwnersHoursNeedTheirSayAndThenWork(t *testing.T) {
+// How far ahead the owner takes bookings is a rule for the public booking page. A meeting the
+// owner sets up is not held to it: a day beyond it, inside their hours, needs no exception,
+// shows no warning, and the link offers it.
+func TestOwnerAssistant_datesBeyondTheBookingWindowNeedNoException(t *testing.T) {
 	f := newOwnerFixture(t)
-	f.closeDay(t, 3)
-	// Something already in the diary inside the window: an exception must not offer it.
-	day, _ := time.Parse("2006-01-02", date(3))
-	lf := &linkFixture{inviteFixture: f.inviteFixture}
-	f.cal.mu.Lock()
-	f.cal.busy = []slots.Interval{{Start: day.Add(10 * time.Hour), End: day.Add(10*time.Hour + 30*time.Minute)}}
-	f.cal.mu.Unlock()
-
-	panel := f.askFor(t, 3, "09:00", "11:00")
-	if !strings.Contains(panel, "Heads up:") || !strings.Contains(panel, "is outside the times you take meetings") {
-		t.Fatalf("the panel does not warn that the day is outside the owner's hours:\n%s", panel)
-	}
-	if _, ok := f.buttons()["Allow outside my availability"]; !ok {
-		t.Fatalf("buttons = %v; want an Allow button", f.buttons())
-	}
-
-	f.tap(t, "Create link")
-	if n := len(f.links(t)); n != 0 {
-		t.Fatalf("a link was created for times outside the owner's hours without their say (%d links)", n)
-	}
-	if got := f.lastNotice(); !strings.Contains(got, "outside your availability") {
-		t.Errorf("the refusal said %q", got)
-	}
-
-	f.tap(t, "Allow outside my availability")
-	if !strings.Contains(f.panel(), "Allowed: this link will offer those times anyway") {
-		t.Fatalf("after Allow the panel says:\n%s", f.panel())
-	}
-	f.tap(t, "Create link")
-	links := f.links(t)
-	if len(links) != 1 || !links[0].OutsideAvailability {
-		t.Fatalf("links = %+v; want one link carrying the exception", links)
-	}
-
-	// The guest is offered the times, minus the one the owner is busy for.
-	res, err := f.h.personalLinkSlots(context.Background(), links[0], "UTC")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got []string
-	for _, s := range res.Slots {
-		st, _ := time.Parse(time.RFC3339, s.Start)
-		got = append(got, st.UTC().Format("15:04"))
-	}
-	if want := []string{"09:00", "09:30", "10:30"}; !sameStrings(got, want) {
-		t.Fatalf("the exception offers %v; want %v (10:00 is busy)", got, want)
-	}
-	// And one of them books, where the ordinary rules would refuse the whole day.
-	if _, err := f.h.bookPersonalLink(context.Background(), links[0], day.Add(9*time.Hour), lf.guest(), false); err != nil {
-		t.Fatalf("booking through the exception: %v", err)
-	}
-}
-
-func TestOwnerAssistant_datesBeyondTheBookingWindowSayHowFar(t *testing.T) {
-	f := newOwnerFixture(t)
-	if _, err := f.h.db.Exec(`UPDATE event_types SET max_future_days = 14 WHERE id = ?`, f.etID); err != nil {
+	if _, err := f.h.db.Exec(`UPDATE event_types SET max_future_days = 3 WHERE id = ?`, f.etID); err != nil {
 		t.Fatal(err)
 	}
 	panel := f.askFor(t, 20, "09:00", "10:00")
-	if !strings.Contains(panel, "is beyond the 14 days ahead you take bookings") {
-		t.Fatalf("the panel does not say the day is beyond the booking window:\n%s", panel)
+	if strings.Contains(panel, "Heads up") || f.buttons()["Allow outside my availability"] != "" {
+		t.Fatalf("a day beyond the booking window, inside the owner's hours, drew a warning:\n%s", panel)
 	}
-	f.tap(t, "Allow outside my availability")
 	f.tap(t, "Create link")
 	links := f.links(t)
-	if len(links) != 1 {
-		t.Fatalf("%d links; want 1", len(links))
+	if len(links) != 1 || links[0].OutsideAvailability {
+		t.Fatalf("%d links (exception %v); want one ordinary link", len(links), len(links) == 1 && links[0].OutsideAvailability)
 	}
 	res, err := f.h.personalLinkSlots(context.Background(), links[0], "UTC")
 	if err != nil || len(res.Slots) != 2 {
-		t.Fatalf("the exception offers %d times (err %v); want the two inside the window", len(res.Slots), err)
-	}
-
-	// A day inside the window needs no exception and shows no warning.
-	if panel := f.askFor(t, 3, "09:00", "10:00"); strings.Contains(panel, "Heads up") {
-		t.Errorf("a day inside the owner's availability drew a warning:\n%s", panel)
+		t.Fatalf("the link offers %d times (err %v); want the two inside the window", len(res.Slots), err)
 	}
 }
 
@@ -313,15 +254,15 @@ func TestPersonalLinkChat_theOwnerCanBookOverAnotherBookmeetMeeting(t *testing.T
 
 // The date table the model reads is not the owner's booking window. It reaches months
 // ahead, the model is told it is no limit, and a request five weeks out (past the three
-// weeks the table once stopped at) reaches the panel, which is where the owner is asked.
+// weeks the table once stopped at) reaches the panel.
 func TestOwnerAssistant_datesWeeksAheadReachThePanel(t *testing.T) {
 	f := newOwnerFixture(t)
 	if _, err := f.h.db.Exec(`UPDATE event_types SET max_future_days = 14 WHERE id = ?`, f.etID); err != nil {
 		t.Fatal(err)
 	}
 	panel := f.askFor(t, 35, "09:00", "10:00")
-	if !strings.Contains(panel, "is beyond the 14 days ahead you take bookings") || f.buttons()["Allow outside my availability"] == "" {
-		t.Fatalf("a day five weeks out did not reach the panel with the Allow button:\n%s", panel)
+	if !strings.Contains(panel, "Create link") && f.buttons()["Create link"] == "" {
+		t.Fatalf("a day five weeks out did not reach the panel:\n%s", panel)
 	}
 
 	f.model.mu.Lock()
@@ -331,5 +272,24 @@ func TestOwnerAssistant_datesWeeksAheadReachThePanel(t *testing.T) {
 		if !strings.Contains(system, want) {
 			t.Errorf("the model's instructions are missing %q", want)
 		}
+	}
+}
+
+// A link already made for dates beyond the owner's booking window, without an exception,
+// offers its times and books (the case that showed a guest "I'm having trouble").
+func TestPersonalLinkChat_aLinkBeyondTheBookingWindowStillOffersAndBooks(t *testing.T) {
+	f := newChatFixture(t)
+	if _, err := f.h.db.Exec(`UPDATE event_types SET max_future_days = 1 WHERE id = ?`, f.etID); err != nil {
+		t.Fatal(err)
+	}
+	res := f.throughDetails(t)
+	last := res.Items[len(res.Items)-1]
+	if last.Kind != "times" || len(labels(last)) == 0 {
+		t.Fatalf("after the details: %v; want the times", kinds(res.Items))
+	}
+	start := f.at(17, 0)
+	f.chat(t, f.token, plinkChatRequest{Action: "pick", Start: start.Format(time.RFC3339)})
+	if res = f.chat(t, f.token, plinkChatRequest{Action: "confirm", Start: start.Format(time.RFC3339)}); res.Stage != "booked" {
+		t.Fatalf("confirming ended at %q (%v); want booked", res.Stage, kinds(res.Items))
 	}
 }

@@ -424,6 +424,13 @@ The owner can let one meeting go outside their own rules. Everything here is beh
 Settings → AI → "Allow exceptions to my availability" (`assistant_exceptions`, on by
 default), and behind a tap each time. Off, the assistant only reports.
 
+- **How far ahead the owner takes bookings (`max_future_days`) never applies to a meeting
+  they arranged** - a personal link, a direct booking, a guest's suggestion they book. It is
+  a rule for the public booking page. `slotsWanted.OwnerArranged` and
+  `bookingExtras.OwnerInvited` drop it; the panel no longer warns about it. A link that
+  was refused for it showed the guest "I'm having trouble" (the engine rejects a date range
+  wholly beyond the horizon), which is how this was found. Hours and notice still need the
+  Allow tap.
 - **Three separate waivers, and only the owner sets any of them** (`bookingExtras`):
   `OutsideRules` sets aside the owner's hours, minimum notice and booking horizon and KEEPS
   the calendar check; `OwnerApproved` also books over what the calendar shows;

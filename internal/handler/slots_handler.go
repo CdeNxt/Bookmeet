@@ -174,6 +174,11 @@ type slotsWanted struct {
 	// offer; the caller narrows the result to the link's windows, so "any time" here never
 	// reaches a guest as that. No public or agent-facing caller may set it.
 	OwnerException bool
+	// OwnerArranged drops how far ahead the owner takes bookings, and nothing else. That
+	// limit is for the public booking page; it does not apply to a meeting the owner set up
+	// themselves (a personal link, a direct booking), whose dates they chose. Their hours,
+	// notice and calendar still apply unless OwnerException is set as well.
+	OwnerArranged bool
 }
 
 // computeSlots returns the bookable slots (and the candidate hosts' display map) for
@@ -197,6 +202,9 @@ func (h *Handler) computeSlots(ctx context.Context, slug, tzName, fromStr, toStr
 	}
 	if want.OwnerException {
 		et.MinNoticeMinutes, et.MaxFutureDays = 0, 0
+	}
+	if want.OwnerArranged {
+		et.MaxFutureDays = 0
 	}
 	if tzName == "" {
 		tzName = "UTC"

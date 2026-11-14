@@ -840,15 +840,10 @@ func (s *ownerSession) analyse(ctx context.Context, d *ownerDraft) {
 	}
 }
 
-// outsideReason says why a day or time is outside the owner's availability: too far ahead,
-// or outside their hours.
-func (s *ownerSession) outsideReason(et *ownerEventType, date, span string) string {
-	if et.MaxFutureDays > 0 {
-		horizon := s.now.In(s.prof.Loc).AddDate(0, 0, et.MaxFutureDays).Format("2006-01-02")
-		if date > horizon {
-			return fmt.Sprintf("%s is beyond the %d days ahead you take bookings.", span, et.MaxFutureDays)
-		}
-	}
+// outsideReason says why a day or time is outside the owner's availability. How far ahead
+// they take bookings is not among the reasons: that limit is for the public booking page,
+// not for a meeting the owner arranges themselves.
+func (s *ownerSession) outsideReason(_ *ownerEventType, _, span string) string {
 	return span + " is outside the times you take meetings."
 }
 
