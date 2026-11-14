@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -41,13 +42,12 @@ func (f *ownerFixture) closeDay(t *testing.T, day int) {
 	}
 }
 
-// The owner asks for a day they do not take meetings. A link's windows are the hours for that
-// meeting, so there is no warning and no Allow tap: the link offers the times, minus the one
-// the owner is busy for, and one of them books.
-func TestOwnerAssistant_aLinksWindowsAreTheHoursForThatMeeting(t *testing.T) {
+// The owner explicitly asks for a day they do not take meetings. The panel flags it and
+// nothing is made until they confirm with the Allow tap; then the link offers its whole
+// window, minus the one time the owner is busy for, and it books.
+func TestOwnerAssistant_timesOutsideUsualHoursAreConfirmedFirst(t *testing.T) {
 	f := newOwnerFixture(t)
 	f.closeDay(t, 3)
-	// Something already in the diary inside the window: it must not be offered.
 	day, _ := time.Parse("2006-01-02", date(3))
 	lf := &linkFixture{inviteFixture: f.inviteFixture}
 	f.cal.mu.Lock()
@@ -55,13 +55,24 @@ func TestOwnerAssistant_aLinksWindowsAreTheHoursForThatMeeting(t *testing.T) {
 	f.cal.mu.Unlock()
 
 	panel := f.askFor(t, 3, "09:00", "11:00")
-	if strings.Contains(panel, "outside the times you take meetings") || f.buttons()["Allow outside my availability"] != "" {
-		t.Fatalf("a link's own window was treated as outside the owner's hours:\n%s", panel)
+	if !strings.Contains(panel, "is outside the times you take meetings") || !strings.Contains(panel, "Tap Allow to confirm") {
+		t.Fatalf("the panel does not flag the day and ask to confirm:\n%s", panel)
+	}
+	f.tap(t, "Create link")
+	if n := len(f.links(t)); n != 0 {
+		t.Fatalf("a link was made for times outside usual hours without confirming (%d)", n)
+	}
+	if got := f.lastNotice(); !strings.Contains(got, "Tap Allow to confirm") {
+		t.Errorf("the refusal said %q", got)
+	}
+	f.tap(t, "Allow outside my availability")
+	if !strings.Contains(f.panel(), "Confirmed: this link offers those times too") {
+		t.Fatalf("after Allow the panel says:\n%s", f.panel())
 	}
 	f.tap(t, "Create link")
 	links := f.links(t)
-	if len(links) != 1 || !links[0].OutsideAvailability {
-		t.Fatalf("links = %+v; want one link offering its whole window", links)
+	if len(links) != 1 {
+		t.Fatalf("%d links after confirming; want 1", len(links))
 	}
 	res, err := f.h.personalLinkSlots(context.Background(), links[0], "UTC")
 	if err != nil {
@@ -77,6 +88,80 @@ func TestOwnerAssistant_aLinksWindowsAreTheHoursForThatMeeting(t *testing.T) {
 	}
 	if _, err := f.h.bookPersonalLink(context.Background(), links[0], day.Add(9*time.Hour), lf.guest(), false); err != nil {
 		t.Fatalf("booking through the link: %v", err)
+	}
+}
+
+// workWeek gives the owner Monday to Friday, 9 to 5, and nothing at weekends.
+func (f *ownerFixture) workWeek(t *testing.T) {
+	t.Helper()
+	if _, err := f.h.db.Exec(`DELETE FROM availability_rules WHERE user_id = ?`, f.userID); err != nil {
+		t.Fatal(err)
+	}
+	for wd := 1; wd <= 5; wd++ {
+		if _, err := f.h.db.Exec(`INSERT INTO availability_rules (id, user_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, '09:00', '17:00')`,
+			fmt.Sprintf("ww-%d", wd), f.userID, wd); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// Days given without times get the owner's usual hours, and the days they do not work are
+// left out. Nothing needs confirming, and the model is told the usual hours.
+func TestOwnerAssistant_daysWithoutTimesUseTheUsualHours(t *testing.T) {
+	f := newOwnerFixture(t)
+	f.workWeek(t)
+	var ws []map[string]string
+	weekdays := 0
+	for d := 20; d < 27; d++ {
+		ws = append(ws, map[string]string{"date": date(d)})
+		if wd := time.Now().UTC().AddDate(0, 0, d).Weekday(); wd != time.Saturday && wd != time.Sunday {
+			weekdays++
+		}
+	}
+	f.model.calls("show_details", map[string]any{"guest_name": "Bill Mathers", "event_type": "intro", "windows": ws})
+	f.message(t, "a link for Bill sometime that week")
+	panel := f.panel()
+	if got := strings.Count(panel, "9:00 AM to 5:00 PM"); got != weekdays {
+		t.Fatalf("the panel offers %d days at 9 to 5; want the %d weekdays:\n%s", got, weekdays, panel)
+	}
+	if strings.Contains(panel, "Sat ") || strings.Contains(panel, "Sun ") || strings.Contains(panel, "Heads up") {
+		t.Fatalf("a weekend day or a warning is on the panel:\n%s", panel)
+	}
+	f.model.mu.Lock()
+	system := f.model.requests[len(f.model.requests)-1][0].Content
+	f.model.mu.Unlock()
+	if !strings.Contains(system, "Usual hours: Mon 09:00-17:00") || !strings.Contains(system, "Sat off") {
+		t.Errorf("the model is not told the usual hours")
+	}
+	f.tap(t, "Create link")
+	if n := len(f.links(t)); n != 1 {
+		t.Fatalf("%d links; want 1", n)
+	}
+}
+
+// Only days the owner does not work, without times: nothing is guessed. The model is told to
+// ask the owner whether they want them anyway.
+func TestOwnerAssistant_onlyDaysOffWithoutTimesAreAskedAbout(t *testing.T) {
+	f := newOwnerFixture(t)
+	f.workWeek(t)
+	var sat string
+	for d := 20; d < 27; d++ {
+		if time.Now().UTC().AddDate(0, 0, d).Weekday() == time.Saturday {
+			sat = date(d)
+		}
+	}
+	f.model.calls("show_details", map[string]any{"guest_name": "Bill Mathers", "event_type": "intro",
+		"windows": []map[string]string{{"date": sat}}})
+	f.message(t, "a link for Bill on Saturday")
+	f.model.mu.Lock()
+	reqs := f.model.requests
+	last := reqs[len(reqs)-1]
+	f.model.mu.Unlock()
+	if tool := last[len(last)-1].Content; !strings.Contains(tool, "none of those days are among the owner's usual working days") {
+		t.Fatalf("the model was told %q", tool)
+	}
+	if n := len(f.links(t)); n != 0 {
+		t.Fatalf("%d links", n)
 	}
 }
 

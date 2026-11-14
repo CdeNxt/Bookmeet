@@ -15,6 +15,7 @@ import (
 	"github.com/calnode/calnode/internal/booking"
 	"github.com/calnode/calnode/internal/llm"
 	"github.com/calnode/calnode/internal/personallink"
+	"github.com/calnode/calnode/internal/slots"
 	"github.com/calnode/calnode/internal/telegram"
 )
 
@@ -57,7 +58,9 @@ Do not guess anything the owner has not said or clearly implied. When something 
 
 Dates: read them from the calendar below. Do not work out a date any other way. Times are in the owner's time zone and written as 24-hour HH:MM in tool calls.
 
-The calendar below is only a table for turning what the owner says into dates. It says nothing about when the owner is free, their working hours, or how far ahead they take bookings, and you do not know any of those. Never refuse, question or shorten a request because a date is far ahead, at a weekend or at an unusual hour: pass exactly what the owner asked for to show_details. The program checks it against the owner's availability and asks the owner itself whether to allow an exception. A date later than the calendar shows is still fine if the owner gives it unambiguously ("12 March"): work it out from the last week listed, or ask for the date in full.
+The calendar below is only a table for turning what the owner says into dates. It says nothing about when the owner is free or how far ahead they take bookings, and you do not know their calendar. Never refuse or shorten a request because a date is far ahead: pass it to show_details. A date later than the calendar shows is still fine if the owner gives it unambiguously ("12 March"): work it out from the last week listed, or ask for the date in full.
+
+Usual hours: when the owner gives days but no times ("between 12 and 18 January", "next week"), do not ask for times and do not make any up. Pass one window per date in the range with NO start and NO end: the program fills in the owner's usual hours for that meeting type (listed below) and leaves out the days they do not usually work. Pass start and end only for times the owner actually said. If the owner explicitly asks for a weekend, a day they do not usually work, or a time outside their usual hours ("Saturday", "6pm"), pass exactly that: the program shows it on the panel and asks the owner to confirm before anything is made, so do not ask yourself.
 
 One exact time: pass book_at. With guest_email it is booked directly once the owner taps; without an email the program makes a single-time link for the owner to send. If the owner names one exact time and has not said which they want, ask once whether they have the guest's email or would like a link.
 
@@ -546,6 +549,9 @@ func (s *ownerSession) systemPrompt(ctx context.Context) string {
 		if et.AllowInPerson {
 			b.WriteString(", can be in person at a place the owner names")
 		}
+		if week := s.usualWeek(ctx, et.ID); week != "" {
+			b.WriteString(". Usual hours: " + week)
+		}
 		b.WriteString("\n")
 	}
 	if d := s.openDraft(ctx); d != nil {
@@ -581,8 +587,10 @@ func ownerTools() []llm.Tool {
 				"windows": map[string]any{
 					"type": "array", "description": "Times to offer, one entry per day and stretch. Omit when using book_at.",
 					"items": obj(map[string]any{
-						"date": str("YYYY-MM-DD from the calendar"), "start": str("HH:MM, 24-hour"), "end": str("HH:MM, 24-hour"),
-					}, "date", "start", "end"),
+						"date":  str("YYYY-MM-DD from the calendar"),
+						"start": str("HH:MM, 24-hour. Omit, with end, to use the owner's usual hours that day"),
+						"end":   str("HH:MM, 24-hour. Omit, with start, to use the owner's usual hours that day"),
+					}, "date"),
 				},
 				"book_at": obj(map[string]any{
 					"date": str("YYYY-MM-DD from the calendar"), "time": str("HH:MM, 24-hour start time"),
@@ -710,7 +718,24 @@ func (s *ownerSession) toolShowDetails(ctx context.Context, argsJSON string) str
 			return fmt.Sprintf("error: at most %d windows. Ask the owner to narrow it down.", ownerMaxWindows)
 		}
 		var ws []draftWindow
+		var skipped []string
 		for _, w := range args.Windows {
+			if strings.TrimSpace(w.Start) == "" && strings.TrimSpace(w.End) == "" && okDate(w.Date) {
+				// Days without times: the owner's usual hours that day, and none on a day off.
+				spans, err := s.usualHours(ctx, et.ID, w.Date)
+				if err != nil {
+					return "error: the owner's usual hours could not be read. Ask the owner which times to offer."
+				}
+				if len(spans) == 0 {
+					skipped = append(skipped, s.day(w.Date))
+				}
+				for _, sp := range spans {
+					if sp[1]-sp[0] >= et.Minutes {
+						ws = append(ws, draftWindow{Date: w.Date, Start: sp[0], End: sp[1]})
+					}
+				}
+				continue
+			}
 			start, ok1 := parseClock(w.Start)
 			end, ok2 := parseClock(w.End)
 			switch {
@@ -720,6 +745,12 @@ func (s *ownerSession) toolShowDetails(ctx context.Context, argsJSON string) str
 				return fmt.Sprintf("error: the window on %s is shorter than the %d-minute meeting. Ask the owner for a longer one.", w.Date, et.Minutes)
 			}
 			ws = append(ws, draftWindow{Date: w.Date, Start: start, End: end})
+		}
+		if len(ws) == 0 && len(skipped) > 0 {
+			return "error: none of those days are among the owner's usual working days (" + strings.Join(skipped, ", ") + "). Ask the owner whether they want to offer them anyway, and at what times."
+		}
+		if len(ws) > ownerMaxWindows {
+			return fmt.Sprintf("error: that is more than %d stretches of time. Ask the owner to narrow the days down.", ownerMaxWindows)
 		}
 		sortWindows(ws)
 		if last, _ := s.instant(ws[len(ws)-1].Date, ws[len(ws)-1].End); !last.After(s.now) {
@@ -823,9 +854,10 @@ func (s *ownerSession) analyse(ctx context.Context, d *ownerDraft) {
 			s.h.logger.WarnContext(ctx, "assistant: check availability", "error", err)
 			return
 		}
-		// With exceptions on, a link's windows are the hours for that meeting: it offers
-		// every time inside them the owner is not busy for, so "outside your hours" does
-		// not arise. With them off, the owner's own hours still decide.
+		// Times outside the owner's usual hours are always shown on the panel, because the
+		// owner asked for them explicitly or not at all (days given without times get the
+		// usual hours). With exceptions on, the Allow tap confirms them and the link then
+		// offers its whole windows; with them off, the owner's own hours decide.
 		anyInside := false
 		for i, w := range d.Windows {
 			span := s.day(w.Date) + ", " + s.clock(w.Start) + " to " + s.clock(w.End)
@@ -837,8 +869,6 @@ func (s *ownerSession) analyse(ctx context.Context, d *ownerDraft) {
 			switch {
 			case exception[i] == 0:
 				d.Busy = append(d.Busy, span+": you're busy the whole time, so nothing can be offered.")
-			case s.exceptions:
-				anyInside = true
 			case normal[i] == 0:
 				d.Outside = append(d.Outside, s.outsideReason(et, w.Date, span))
 			case normal[i] < exception[i]:
@@ -924,11 +954,13 @@ func (s *ownerSession) renderPanel(d *ownerDraft) (string, telegram.Markup) {
 		case d.OutsideOK && d.Direct:
 			b.WriteString("\nAllowed: it will be booked outside your availability.")
 		case d.OutsideOK:
-			b.WriteString("\nAllowed: this link will offer those times anyway. Times you're busy are still left out.")
+			b.WriteString("\nConfirmed: this link offers those times too. Times you're busy are still left out.")
 		case !s.exceptions:
 			b.WriteString("\n" + exceptionsOffHint)
-		default:
+		case d.Direct:
 			b.WriteString("\nTap Allow to make an exception for this one meeting.")
+		default:
+			b.WriteString("\nYou asked for these outside your usual hours. Tap Allow to confirm you want to offer them.")
 		}
 	}
 
@@ -1017,6 +1049,61 @@ func (s *ownerSession) renderPanel(d *ownerDraft) (string, telegram.Markup) {
 	}
 	rows = append(rows, []telegram.Button{{Text: create, Data: cb("go")}, {Text: "Discard", Data: cb("x")}})
 	return b.String(), rows
+}
+
+// usualHours returns the owner's usual stretches on a date for a meeting type, as minutes in
+// their own zone: their weekly hours (general and for that type), with any date override for
+// that day applied. Nothing on a day they do not work.
+func (s *ownerSession) usualHours(ctx context.Context, etID, date string) ([][2]int, error) {
+	loc, rules, overrides, err := s.h.loadHostSchedule(ctx, s.userID, etID)
+	if err != nil {
+		return nil, err
+	}
+	day, err := time.ParseInLocation("2006-01-02", date, loc)
+	if err != nil {
+		return nil, err
+	}
+	ivs, err := slots.ResolveDayWindows(loc, day, rules, overrides)
+	if err != nil {
+		return nil, err
+	}
+	var out [][2]int
+	for _, iv := range ivs {
+		a, z := iv.Start.In(s.prof.Loc), iv.End.In(s.prof.Loc)
+		if a.Format("2006-01-02") != date {
+			continue
+		}
+		end := z.Hour()*60 + z.Minute()
+		if z.Format("2006-01-02") != date {
+			end = 24 * 60
+		}
+		out = append(out, [2]int{a.Hour()*60 + a.Minute(), end})
+	}
+	return out, nil
+}
+
+// usualWeek is the owner's weekly hours for a meeting type in one line, so the model can talk
+// about them sensibly: "Mon 09:00-17:00, ..., Sat off, Sun off". The program applies them.
+func (s *ownerSession) usualWeek(ctx context.Context, etID string) string {
+	_, rules, _, err := s.h.loadHostSchedule(ctx, s.userID, etID)
+	if err != nil || len(rules) == 0 {
+		return ""
+	}
+	order := []time.Weekday{time.Monday, time.Tuesday, time.Wednesday, time.Thursday, time.Friday, time.Saturday, time.Sunday}
+	var parts []string
+	for _, wd := range order {
+		var spans []string
+		for _, r := range rules {
+			if r.DayOfWeek == wd {
+				spans = append(spans, r.StartTime+"-"+r.EndTime)
+			}
+		}
+		if len(spans) == 0 {
+			spans = []string{"off"}
+		}
+		parts = append(parts, wd.String()[:3]+" "+strings.Join(spans, " and "))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // exceptionsOffHint tells the owner the one switch that lets a link offer times outside their
@@ -1256,6 +1343,10 @@ func (s *ownerSession) tapDraft(ctx context.Context, d *ownerDraft, op, arg stri
 		}
 		// Nothing asked for is inside the owner's availability, and they have not allowed
 		// an exception: there would be nothing to offer, or nothing that books.
+		if s.exceptions && len(d.Outside) > 0 && !d.OutsideOK {
+			s.refreshPanel(ctx, d)
+			return "Some of these times are outside your usual hours. Tap Allow to confirm, or change them."
+		}
 		if d.OutsideAll && !d.OutsideOK {
 			if !s.exceptions {
 				s.say(ctx, "Nothing was made: those times are outside your availability, so the link would offer nothing. "+exceptionsOffHint)
