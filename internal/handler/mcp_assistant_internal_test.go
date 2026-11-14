@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/calnode/calnode/internal/personallink"
+	"github.com/calnode/calnode/internal/slots"
 )
 
 // mcpAssistantParity maps every tool the Telegram assistant's model has to the MCP tool an
@@ -17,11 +19,11 @@ import (
 // waits on, so the gap is written down rather than forgotten. Adding a Telegram tool without
 // an entry here fails TestMCPAssistant_parityWithTelegram.
 var mcpAssistantParity = map[string]string{
-	"show_details": "pending: create_personal_link and check_personal_link_offer (build step 2)",
+	"show_details": "create_personal_link",
 	"list_links":   "list_personal_links",
 	"resend_link":  "get_personal_link",
 	"cancel_link":  "cancel_personal_link",
-	"change_link":  "pending: create_personal_link with replaces_link_id (build step 2)",
+	"change_link":  "create_personal_link",
 }
 
 func connectMCPInternal(t *testing.T, h *Handler) *mcp.ClientSession {
@@ -78,7 +80,8 @@ func callJSON(t *testing.T, cs *mcp.ClientSession, name string, args map[string]
 	}
 	blob, _ := json.Marshal(res.StructuredContent)
 	if res.IsError {
-		t.Fatalf("%s returned an error: %+v", name, res.Content)
+		msg, _ := json.Marshal(res.Content)
+		t.Fatalf("%s returned an error: %s", name, msg)
 	}
 	return string(blob)
 }
@@ -180,5 +183,125 @@ func TestMCPAssistant_anotherUserSeesNothing(t *testing.T) {
 	}
 	if l := f.reload(t); l.Status != personallink.StatusOpen {
 		t.Errorf("link is %q; want open", l.Status)
+	}
+}
+
+// toolError calls a tool that should refuse and returns its message.
+func toolError(t *testing.T, cs *mcp.ClientSession, name string, args map[string]any) string {
+	t.Helper()
+	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: name, Arguments: args})
+	if err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+	if !res.IsError {
+		blob, _ := json.Marshal(res.StructuredContent)
+		t.Fatalf("%s succeeded; want a refusal: %s", name, blob)
+	}
+	blob, _ := json.Marshal(res.Content)
+	return string(blob)
+}
+
+func offerArgs(day int, start, end string) map[string]any {
+	return map[string]any{
+		"guest_name": "Ann Agent", "event_type": "intro", "topic": "the budget",
+		"windows": []map[string]string{{"date": date(day), "start": start, "end": end}},
+	}
+}
+
+// An agent checks an offer and makes the link: the days come back written out in the
+// owner's zone, the link offers what the check said, and the guest's page opens.
+func TestMCPAssistant_checkAndCreate(t *testing.T) {
+	f := newOwnerFixture(t)
+	cs := connectMCPInternal(t, f.h)
+
+	var check mcpOfferCheck
+	if err := json.Unmarshal([]byte(callJSON(t, cs, "check_personal_link_offer", offerArgs(3, "09:00", "11:00"))), &check); err != nil {
+		t.Fatal(err)
+	}
+	if !check.CanCreate || check.TimesOffered != 4 || len(check.Windows) != 1 || check.Windows[0].Verdict != "open" ||
+		!strings.Contains(check.Windows[0].Text, time.Now().UTC().AddDate(0, 0, 3).Format("Mon 2 Jan")) {
+		t.Fatalf("check = %+v", check)
+	}
+	if n := f.count(t, `SELECT COUNT(*) FROM personal_links`); n != 0 {
+		t.Fatalf("checking made %d links", n)
+	}
+
+	var made createPersonalLinkOut
+	if err := json.Unmarshal([]byte(callJSON(t, cs, "create_personal_link", offerArgs(3, "09:00", "11:00"))), &made); err != nil {
+		t.Fatal(err)
+	}
+	token := made.URL[strings.LastIndex(made.URL, "/i/")+3:]
+	if made.LinkID == "" || token == "" || !strings.Contains(made.MessageToSend, made.URL) {
+		t.Fatalf("created = %+v", made)
+	}
+	l, err := f.h.personalLinks().Get(context.Background(), f.userID, made.LinkID)
+	if err != nil || l.GuestName != "Ann Agent" || l.Topic != "the budget" {
+		t.Fatalf("stored link = %+v (%v)", l, err)
+	}
+	res, err := f.h.personalLinkSlots(context.Background(), l, "UTC")
+	if err != nil || len(res.Slots) != check.TimesOffered {
+		t.Fatalf("the link offers %d times; the check said %d (%v)", len(res.Slots), check.TimesOffered, err)
+	}
+
+	// Changing the offer replaces the link: the old address stops working.
+	args := offerArgs(4, "13:00", "14:00")
+	args["replaces_link_id"] = made.LinkID
+	var changed createPersonalLinkOut
+	if err := json.Unmarshal([]byte(callJSON(t, cs, "create_personal_link", args)), &changed); err != nil {
+		t.Fatal(err)
+	}
+	if !changed.Replaced || changed.LinkID == made.LinkID {
+		t.Fatalf("changed = %+v", changed)
+	}
+	if old, _ := f.h.personalLinks().Get(context.Background(), f.userID, made.LinkID); old.Status != personallink.StatusReplaced {
+		t.Errorf("old link is %q; want replaced", old.Status)
+	}
+}
+
+// What an agent cannot do: offer a link with nothing in it, widen the owner's hours when the
+// owner's setting keeps to them, or name a meeting type the owner does not have.
+func TestMCPAssistant_createRefusals(t *testing.T) {
+	f := newOwnerFixture(t)
+	cs := connectMCPInternal(t, f.h)
+
+	if msg := toolError(t, cs, "create_personal_link", map[string]any{
+		"guest_name": "Ann", "event_type": "nope", "windows": []map[string]string{{"date": date(3), "start": "09:00", "end": "10:00"}},
+	}); !strings.Contains(msg, "intro") {
+		t.Errorf("an unknown meeting type did not list the real ones: %s", msg)
+	}
+	if msg := toolError(t, cs, "create_personal_link", offerArgs(3, "09:00", "09:15")); !strings.Contains(msg, "shorter than") {
+		t.Errorf("a window shorter than the meeting: %s", msg)
+	}
+
+	// Busy the whole window.
+	day, _ := time.Parse("2006-01-02", date(3))
+	f.cal.mu.Lock()
+	f.cal.busy = []slots.Interval{{Start: day.Add(8 * time.Hour), End: day.Add(12 * time.Hour)}}
+	f.cal.mu.Unlock()
+	if msg := toolError(t, cs, "create_personal_link", offerArgs(3, "09:00", "11:00")); !strings.Contains(msg, "busy the whole time") {
+		t.Errorf("a fully busy offer: %s", msg)
+	}
+	f.cal.mu.Lock()
+	f.cal.busy = nil
+	f.cal.mu.Unlock()
+
+	// The owner keeps links to their usual hours, and the day is closed: refused, and the
+	// agent is told it is the owner's setting, not something it can change.
+	if _, err := f.h.db.Exec(`UPDATE server_settings SET assistant_exceptions = 0 WHERE id = 1`); err != nil {
+		t.Fatal(err)
+	}
+	f.closeDay(t, 3)
+	var check mcpOfferCheck
+	if err := json.Unmarshal([]byte(callJSON(t, cs, "check_personal_link_offer", offerArgs(3, "09:00", "11:00"))), &check); err != nil {
+		t.Fatal(err)
+	}
+	if check.CanCreate || check.Windows[0].Verdict != "outside_hours" || !check.Windows[0].NeedsApproval {
+		t.Fatalf("check outside hours = %+v", check)
+	}
+	if msg := toolError(t, cs, "create_personal_link", offerArgs(3, "09:00", "11:00")); !strings.Contains(msg, "Allow exceptions") {
+		t.Errorf("outside hours with the setting off: %s", msg)
+	}
+	if n := f.count(t, `SELECT COUNT(*) FROM personal_links`); n != 0 {
+		t.Fatalf("%d links made by refused calls", n)
 	}
 }

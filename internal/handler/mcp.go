@@ -88,6 +88,7 @@ func (h *Handler) MCPServer() *mcp.Server {
 	}, h.mcpGetTranscript)
 
 	h.addAssistantTools(s)
+	h.addAssistantCreateTools(s)
 	return s
 }
 
