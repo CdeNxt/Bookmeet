@@ -556,3 +556,15 @@ func TestMCPAssistant_inPersonPlaceComesFromTheSearch(t *testing.T) {
 		t.Fatalf("stored place = %q / %q (%v)", l.PlaceName, l.PlaceAddress, err)
 	}
 }
+
+// The check needs no guest: an agent may look at times before it knows who they are for.
+func TestMCPAssistant_checkNeedsNoGuest(t *testing.T) {
+	f := newOwnerFixture(t)
+	cs := connectMCPInternal(t, f.h)
+	res := callJSON(t, cs, "check_personal_link_offer", map[string]any{
+		"event_type": "intro", "windows": []map[string]string{{"date": date(3), "start": "09:00", "end": "10:00"}},
+	})
+	if !strings.Contains(res, `"can_create":true`) {
+		t.Errorf("check without a guest = %s", res)
+	}
+}

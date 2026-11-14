@@ -241,9 +241,17 @@ func (h *Handler) checkOffer(ctx context.Context, o *mcpOwner, in mcpOfferIn) (*
 
 // ── check_personal_link_offer ────────────────────────────────────────────────
 
-// It takes create_personal_link's arguments, so an agent can send the same call twice: once
-// to check, once to create. The guest's name, email and topic are not needed to check.
-func (h *Handler) mcpCheckPersonalLinkOffer(ctx context.Context, _ *mcp.CallToolRequest, in createPersonalLinkIn) (*mcp.CallToolResult, mcpOfferCheck, error) {
+// checkPersonalLinkOfferIn is create_personal_link's arguments with nothing about the guest
+// required, so an agent can send the same call twice (once to check, once to create) or
+// check times before it knows who the guest is.
+type checkPersonalLinkOfferIn struct {
+	GuestName  string `json:"guest_name,omitempty" jsonschema:"not needed to check"`
+	GuestEmail string `json:"guest_email,omitempty" jsonschema:"not needed to check"`
+	Topic      string `json:"topic,omitempty" jsonschema:"not needed to check"`
+	mcpOfferIn
+}
+
+func (h *Handler) mcpCheckPersonalLinkOffer(ctx context.Context, _ *mcp.CallToolRequest, in checkPersonalLinkOfferIn) (*mcp.CallToolResult, mcpOfferCheck, error) {
 	o, err := h.mcpAssistantOwner(ctx)
 	if err != nil {
 		return nil, mcpOfferCheck{}, err
