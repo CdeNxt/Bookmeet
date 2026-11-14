@@ -1,14 +1,16 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import { afterNavigate } from '$app/navigation';
 	import { base } from '$app/paths';
 	import '../app.css';
 	import { api, type User } from '$lib/api';
 	import { currentUser, authStatus, type AuthStatus } from '$lib/stores';
 	import { prefs, prefsFromUser } from '$lib/prefs';
 	import { Toaster } from '$lib/components/ui/sonner';
-	import { buttonVariants } from '$lib/components/ui/button';
+	import { Button, buttonVariants } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import * as Sheet from '$lib/components/ui/sheet';
 	import DemoBanner from '$lib/components/demo-banner.svelte';
 	import BookingLinkBar from '$lib/components/booking-link-bar.svelte';
 	import type { Snippet } from 'svelte';
@@ -17,6 +19,10 @@
 
 	let checking = $state(true);
 	let reportOpen = $state(false);
+	// The phone-width navigation drawer. Below `md` the sidebar is not in the page at all;
+	// the same contents open in a Sheet from the top bar's menu button.
+	let navOpen = $state(false);
+	afterNavigate(() => (navOpen = false));
 	let recordingsConfigured = $state(false);
 	let assistantOn = $state(false);
 	let version = $state('');
@@ -198,6 +204,90 @@
 
 <Toaster position="bottom-right" />
 
+<!-- The sidebar's contents, drawn twice: in the fixed column on wide screens and in the
+     slide-in drawer on a phone (`drawer`: larger tap targets, room for the close button). -->
+{#snippet sidebarBody(drawer: boolean)}
+	<!-- User section -->
+	<a href="{base}/settings/profile" onclick={() => (navOpen = false)} class="flex items-center gap-3 border-b border-sidebar-border px-4 py-3 hover:bg-sidebar-accent/60 transition-colors {drawer ? 'pr-14' : ''}">
+		<!-- Fixed-size clip container: the image fills it and is clipped by the
+		     parent's overflow-hidden (not its own border-radius). A rounded,
+		     object-cover image on its own composited layer gets mis-painted by
+		     Chrome — a smeared tile over the sidebar — when the main panel
+		     repaints on scroll; clipping via the parent box prevents that. -->
+		<span class="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+			{#if $currentUser?.avatar_url}
+				<img src={$currentUser.avatar_url} alt={$currentUser.name} class="h-full w-full object-cover" />
+			{:else}
+				{initials($currentUser?.name ?? 'U')}
+			{/if}
+		</span>
+		<div class="min-w-0 flex-1">
+			<p class="truncate text-sm font-medium text-sidebar-foreground">{$currentUser?.name ?? ''}</p>
+		</div>
+	</a>
+
+	<!-- Nav -->
+	<nav class="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2">
+		{#each visibleNavItems as item, i}
+			{#if item.section && item.section !== visibleNavItems[i - 1]?.section}
+				<p class="mb-1 px-2.5 text-xs font-semibold uppercase tracking-wide text-sidebar-foreground/40 first:mt-0 mt-4">
+					{item.section}
+				</p>
+			{:else if !item.section && visibleNavItems[i - 1]?.section}
+				<div class="my-2 border-t border-sidebar-border"></div>
+			{/if}
+			{@const active = item.exact
+				? $page.url.pathname === item.href || $page.url.pathname === base
+				: $page.url.pathname.startsWith(item.href)}
+			<a
+				href={item.href}
+				onclick={() => (navOpen = false)}
+				class="flex items-center gap-2.5 rounded-md px-2.5 text-sm font-medium transition-colors {drawer ? 'py-2.5' : 'py-2'}
+					{active
+						? 'bg-sidebar-accent text-sidebar-accent-foreground'
+						: 'text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground'}"
+			>
+				<span class="shrink-0 {active ? 'opacity-100' : 'opacity-60'}">{@html item.icon}</span>
+				{item.label}
+			</a>
+		{/each}
+	</nav>
+
+	<!-- Footer -->
+	<div class="border-t border-sidebar-border p-2">
+		<button
+			onclick={() => { navOpen = false; reportOpen = true; }}
+			class="flex w-full items-center gap-2.5 rounded-md px-2.5 text-xs font-medium text-sidebar-foreground/45 {drawer ? 'py-2.5' : 'py-1.5'} transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-foreground/70"
+		>
+			<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
+				<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+			</svg>
+			Report an issue
+		</button>
+		<button
+			onclick={logout}
+			class="flex w-full items-center gap-2.5 rounded-md px-2.5 text-sm font-medium text-sidebar-foreground/60 {drawer ? 'py-2.5' : 'py-2'} transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+		>
+			<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
+				<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+				<polyline points="16 17 21 12 16 7"/>
+				<line x1="21" y1="12" x2="9" y2="12"/>
+			</svg>
+			Sign out
+		</button>
+		{#if version}
+			<a
+				href={RELEASES_URL}
+				target="_blank"
+				rel="noopener noreferrer"
+				class="mt-1 block px-2.5 py-1 text-xs text-sidebar-foreground/35 transition-colors hover:text-sidebar-foreground/60"
+			>
+				{version}
+			</a>
+		{/if}
+	</div>
+{/snippet}
+
 {#if isPublicRoute}
 	{@render children()}
 {:else if checking}
@@ -210,97 +300,43 @@
 		<DemoBanner />
 	{/if}
 	<div class="flex flex-1 overflow-hidden">
-		<!-- Sidebar -->
-		<aside class="flex w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
-			<!-- User section -->
-			<a href="{base}/settings/profile" class="flex items-center gap-3 border-b border-sidebar-border px-4 py-3 hover:bg-sidebar-accent/60 transition-colors">
-				<!-- Fixed-size clip container: the image fills it and is clipped by the
-				     parent's overflow-hidden (not its own border-radius). A rounded,
-				     object-cover image on its own composited layer gets mis-painted by
-				     Chrome — a smeared tile over the sidebar — when the main panel
-				     repaints on scroll; clipping via the parent box prevents that. -->
-				<span class="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-semibold text-primary-foreground">
-					{#if $currentUser?.avatar_url}
-						<img src={$currentUser.avatar_url} alt={$currentUser.name} class="h-full w-full object-cover" />
-					{:else}
-						{initials($currentUser?.name ?? 'U')}
-					{/if}
-				</span>
-				<div class="min-w-0 flex-1">
-					<p class="truncate text-sm font-medium text-sidebar-foreground">{$currentUser?.name ?? ''}</p>
-				</div>
-			</a>
-
-			<!-- Nav -->
-			<nav class="flex-1 space-y-0.5 p-2">
-				{#each visibleNavItems as item, i}
-					{#if item.section && item.section !== visibleNavItems[i - 1]?.section}
-						<p class="mb-1 px-2.5 text-xs font-semibold uppercase tracking-wide text-sidebar-foreground/40 first:mt-0 mt-4">
-							{item.section}
-						</p>
-					{:else if !item.section && visibleNavItems[i - 1]?.section}
-						<div class="my-2 border-t border-sidebar-border"></div>
-					{/if}
-					{@const active = item.exact
-						? $page.url.pathname === item.href || $page.url.pathname === base
-						: $page.url.pathname.startsWith(item.href)}
-					<a
-						href={item.href}
-						class="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors
-							{active
-								? 'bg-sidebar-accent text-sidebar-accent-foreground'
-								: 'text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground'}"
-					>
-						<span class="shrink-0 {active ? 'opacity-100' : 'opacity-60'}">{@html item.icon}</span>
-						{item.label}
-					</a>
-				{/each}
-			</nav>
-
-			<!-- Footer -->
-			<div class="border-t border-sidebar-border p-2">
-				<button
-					onclick={() => (reportOpen = true)}
-					class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-sidebar-foreground/45 transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-foreground/70"
-				>
-					<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
-						<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-					</svg>
-					Report an issue
-				</button>
-				<button
-					onclick={logout}
-					class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-				>
-					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
-						<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-						<polyline points="16 17 21 12 16 7"/>
-						<line x1="21" y1="12" x2="9" y2="12"/>
-					</svg>
-					Sign out
-				</button>
-				{#if version}
-					<a
-						href={RELEASES_URL}
-						target="_blank"
-						rel="noopener noreferrer"
-						class="mt-1 block px-2.5 py-1 text-xs text-sidebar-foreground/35 transition-colors hover:text-sidebar-foreground/60"
-					>
-						{version}
-					</a>
-				{/if}
-			</div>
+		<!-- Sidebar: a fixed column from `md` up; on a phone it is the drawer below. -->
+		<aside class="hidden w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
+			{@render sidebarBody(false)}
 		</aside>
 
 		<!-- Main content -->
-		<main class="flex-1 overflow-y-auto bg-background">
-			<BookingLinkBar />
-			<div class="mx-auto max-w-4xl px-8 pb-8 pt-3">
+		<main class="min-w-0 flex-1 overflow-y-auto bg-background">
+			<!-- On a phone this row is the top bar: it stays put while the page scrolls and
+			     holds the menu button. From `md` up it is only the booking link, as before. -->
+			<div class="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur md:static md:z-auto md:border-0 md:bg-transparent md:backdrop-blur-none">
+				<div class="mx-auto flex max-w-4xl items-center justify-between gap-3 px-3 py-2 md:justify-end md:px-8 md:pb-0 md:pt-4">
+					<Button
+						variant="ghost"
+						size="icon-lg"
+						class="size-10 md:hidden"
+						aria-label="Open menu"
+						aria-expanded={navOpen}
+						onclick={() => (navOpen = true)}
+					>
+						<svg class="size-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+					</Button>
+					<BookingLinkBar />
+				</div>
+			</div>
+			<div class="mx-auto max-w-4xl px-4 pb-8 pt-4 md:px-8 md:pt-3">
 				{@render children()}
 			</div>
 		</main>
 	</div>
 	</div>
+
+	<Sheet.Root bind:open={navOpen}>
+		<Sheet.Content side="left" class="w-72 max-w-[85vw] border-sidebar-border bg-sidebar" aria-describedby={undefined}>
+			<Sheet.Title class="sr-only">Menu</Sheet.Title>
+			{@render sidebarBody(true)}
+		</Sheet.Content>
+	</Sheet.Root>
 
 	<Dialog.Root bind:open={reportOpen}>
 		<Dialog.Content class="max-w-md">

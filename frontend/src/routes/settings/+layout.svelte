@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { base } from '$app/paths';
+	import { goto } from '$app/navigation';
+	import * as Select from '$lib/components/ui/select';
 	import { currentUser } from '$lib/stores';
 	import type { Snippet } from 'svelte';
 
@@ -21,17 +23,39 @@
 	];
 
 	const visibleNavItems = $derived(navItems.filter((item) => !item.adminOnly || $currentUser?.is_admin));
+	const sections = $derived([...new Set(visibleNavItems.map((item) => item.section))]);
+	const current = $derived(visibleNavItems.find((item) => $page.url.pathname.startsWith(item.href)));
 </script>
 
 <svelte:head><title>Settings — Bookmeet</title></svelte:head>
 
-<div class="mb-8">
+<div class="mb-5 md:mb-8">
 	<h1 class="text-2xl font-semibold tracking-tight">Settings</h1>
 	<p class="mt-1 text-sm text-muted-foreground">Manage your profile, preferences, and integrations.</p>
 </div>
 
+<!-- Phone: the sections are one full-width picker above the page, so the page keeps the
+     whole width. From `md` up they are the side column, as before. -->
+<div class="mb-5 md:hidden">
+	<Select.Root type="single" value={current?.href} onValueChange={(v) => { if (v && v !== current?.href) goto(v); }}>
+		<Select.Trigger class="h-11 w-full text-base font-medium" aria-label="Settings section">
+			{current?.label ?? 'Choose a section'}
+		</Select.Trigger>
+		<Select.Content class="w-(--bits-select-anchor-width) max-h-[min(70vh,var(--bits-select-content-available-height,100vh))]">
+			{#each sections as section}
+				<Select.Group>
+					<Select.GroupHeading>{section}</Select.GroupHeading>
+					{#each visibleNavItems.filter((item) => item.section === section) as item}
+						<Select.Item value={item.href} label={item.label} class="py-2.5 text-base">{item.label}</Select.Item>
+					{/each}
+				</Select.Group>
+			{/each}
+		</Select.Content>
+	</Select.Root>
+</div>
+
 <div class="flex gap-8">
-	<nav class="w-44 shrink-0">
+	<nav class="hidden w-44 shrink-0 md:block">
 		<ul class="space-y-0.5">
 			{#each visibleNavItems as item, i}
 				{#if item.section !== visibleNavItems[i - 1]?.section}

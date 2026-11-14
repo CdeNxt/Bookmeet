@@ -83,7 +83,7 @@
 {:else}
 	<div class="max-w-2xl space-y-6">
 		<!-- Native GA4 / GTM -->
-		<div class="rounded-lg border bg-card p-6">
+		<div class="rounded-lg border bg-card p-4 sm:p-6">
 			<h2 class="text-sm font-semibold">Google Analytics &amp; Tag Manager</h2>
 			<p class="mt-0.5 text-xs text-muted-foreground">
 				Enter an ID and Bookmeet loads the official tag on your booking page automatically — no snippet to
@@ -110,7 +110,7 @@
 		</div>
 
 		<!-- Code injection -->
-		<div class="rounded-lg border bg-card p-6">
+		<div class="rounded-lg border bg-card p-4 sm:p-6">
 			<h2 class="text-sm font-semibold">Code injection (head)</h2>
 			<p class="mt-0.5 text-xs text-muted-foreground">
 				Raw HTML/JS injected into the &lt;head&gt; of your public booking and manage pages — for any tag
@@ -134,7 +134,7 @@
 		</div>
 
 		<!-- dataLayer events -->
-		<div class="rounded-lg border bg-card p-6">
+		<div class="rounded-lg border bg-card p-4 sm:p-6">
 			<div class="flex items-start justify-between gap-4">
 				<div>
 					<h2 class="text-sm font-semibold">dataLayer events</h2>
@@ -152,7 +152,7 @@
 					<p class="text-xs font-medium text-muted-foreground">
 						Fields to include — untick anything you don't want exposed to the browser / GTM.
 					</p>
-					<div class="grid grid-cols-2 gap-x-4 gap-y-1">
+					<div class="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
 						{#each availableFields as key}
 							<label class="flex cursor-pointer items-center gap-2 font-mono text-sm">
 								<Checkbox checked={dlFields.includes(key)} onCheckedChange={() => toggleField(key)} />

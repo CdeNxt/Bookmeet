@@ -50,7 +50,7 @@
 		<p class="text-sm text-muted-foreground">Object storage is used in two places — database backups and meeting recordings. They share one bucket.</p>
 
 		{#if !settings?.backups_configured}
-		<div class="rounded-lg border bg-card p-6">
+		<div class="rounded-lg border bg-card p-4 sm:p-6">
 			<h2 class="mb-4 text-sm font-semibold">Setup instructions</h2>
 			<ol class="space-y-4 text-sm">
 				<li class="flex gap-3">
@@ -95,7 +95,7 @@
 		{/if}
 
 		<!-- Backups (read-only; configured via environment) -->
-		<div class="rounded-lg border bg-card p-6">
+		<div class="rounded-lg border bg-card p-4 sm:p-6">
 			<div class="mb-3 flex items-start justify-between gap-2">
 				<div>
 					<h2 class="text-sm font-semibold">Database backups (Litestream)</h2>
@@ -103,7 +103,7 @@
 				</div>
 				{#if settings}
 					{@const b = badge(settings.backups_configured)}
-					<span class="flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium {b.cls}">
+					<span class="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium {b.cls}">
 						<span class="h-1.5 w-1.5 rounded-full {b.dot}"></span>{b.text}
 					</span>
 				{/if}
@@ -119,7 +119,7 @@
 		</div>
 
 		<!-- Recordings -->
-		<div class="rounded-lg border bg-card p-6">
+		<div class="rounded-lg border bg-card p-4 sm:p-6">
 			<div class="mb-3 flex items-start justify-between gap-2">
 				<div>
 					<h2 class="text-sm font-semibold">Meeting recordings</h2>
@@ -127,7 +127,7 @@
 				</div>
 				{#if settings}
 					{@const b = badge(settings.recordings_storage_ready, 'Storage ready', 'No bucket')}
-					<span class="flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium {b.cls}">
+					<span class="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium {b.cls}">
 						<span class="h-1.5 w-1.5 rounded-full {b.dot}"></span>{b.text}
 					</span>
 				{/if}

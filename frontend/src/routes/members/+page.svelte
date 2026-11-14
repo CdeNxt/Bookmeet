@@ -357,7 +357,7 @@
 
 <svelte:head><title>Members — Bookmeet</title></svelte:head>
 
-<div class="mb-8 flex items-center justify-between">
+<div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between md:mb-8">
 	<div>
 		<h1 class="text-2xl font-semibold tracking-tight">Members</h1>
 		<p class="mt-1 text-sm text-muted-foreground">Manage workspace members, roles, and invites.</p>
@@ -370,7 +370,7 @@
 </div>
 
 {#if showInvite}
-	<div class="mb-6 rounded-lg border bg-card p-6">
+	<div class="mb-6 rounded-lg border bg-card p-4 sm:p-6">
 		<h2 class="mb-4 text-sm font-semibold">Invite a member</h2>
 
 		{#if inviteResult}
@@ -425,7 +425,7 @@
 			</div>
 		{:else}
 			<div class="rounded-lg border bg-card overflow-hidden">
-				<table class="w-full text-sm">
+				<table class="table-stack w-full text-sm">
 					<thead>
 						<tr class="border-b">
 							<th class="px-4 pb-3 pt-3 text-left text-xs font-medium text-muted-foreground">Name</th>
@@ -458,13 +458,13 @@
 										</div>
 									</div>
 								</td>
-								<td class="px-4 py-3">
+								<td data-label="Role" class="px-4 py-3">
 									<div class="flex items-center gap-1.5">
 										<Badge variant={roleVariant(m)}>{roleLabel(m)}</Badge>
 										{#if m.archived}<Badge variant="outline" class="text-xs text-muted-foreground">Archived</Badge>{/if}
 									</div>
 								</td>
-								<td class="px-4 py-3">
+								<td data-label="Teams" class="px-4 py-3">
 									<div class="flex gap-1.5 flex-wrap">
 										{#each m.teams as tm}
 											<Badge variant="secondary" class="text-xs">{tm.name}</Badge>
@@ -473,21 +473,21 @@
 										{/each}
 									</div>
 								</td>
-								<td class="px-4 py-3">
+								<td data-label="Page" class="px-4 py-3">
 									{#if m.handle}
 										<a href="/u/{m.handle}" target="_blank" rel="noopener noreferrer" class="text-xs text-primary hover:underline font-mono">/u/{m.handle}</a>
 									{:else}
 										<span class="text-xs text-muted-foreground/50" title="No public page — set a handle in their profile">—</span>
 									{/if}
 								</td>
-								<td class="px-4 py-3">
+								<td data-label="Auth" class="px-4 py-3">
 									<div class="flex gap-1.5 flex-wrap">
 										{#each authBadge(m) as b}
 											<Badge variant="outline" class="text-xs">{b}</Badge>
 										{/each}
 									</div>
 								</td>
-								<td class="px-4 py-3 text-sm text-muted-foreground">{fmtDate(m.created_at)}</td>
+								<td data-label="Joined" class="px-4 py-3 text-sm text-muted-foreground">{fmtDate(m.created_at)}</td>
 								{#if $currentUser?.is_admin}
 									<td class="px-4 py-3">
 										<div class="flex flex-wrap items-center justify-end gap-1">
@@ -547,7 +547,7 @@
 		<div>
 			<h2 class="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wide">Pending Invites</h2>
 			<div class="rounded-lg border bg-card overflow-hidden">
-				<table class="w-full text-sm">
+				<table class="table-stack w-full text-sm">
 					<thead>
 						<tr class="border-b">
 							<th class="px-4 pb-3 pt-3 text-left text-xs font-medium text-muted-foreground">Email</th>
@@ -559,7 +559,7 @@
 						{#each invites as inv}
 							<tr class="transition-colors hover:bg-muted/30">
 								<td class="px-4 py-3">{inv.email}</td>
-								<td class="px-4 py-3 text-muted-foreground">
+								<td data-label="Expires" class="px-4 py-3 text-muted-foreground">
 									{fmtDate(inv.expires_at)}
 									<span class="ml-1 text-xs">({daysLeft(inv.expires_at)}d left)</span>
 								</td>

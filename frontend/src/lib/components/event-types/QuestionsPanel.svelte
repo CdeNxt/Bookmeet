@@ -139,7 +139,8 @@
 		{#if qLoading}
 			<p class="px-4 py-4 text-sm text-muted-foreground">Loading…</p>
 		{:else if questions.length > 0}
-			<table class="w-full text-sm">
+			<div class="overflow-x-auto">
+			<table class="w-full min-w-[36rem] text-sm">
 				<thead>
 					<tr class="border-b">
 						<th class="px-4 pb-3 pt-3 text-left text-xs font-medium text-muted-foreground">#</th>
@@ -155,7 +156,7 @@
 							<tr class="bg-muted/20">
 								<td class="px-4 py-3 text-muted-foreground">{q.position + 1}</td>
 								<td colspan="3" class="px-4 py-3">
-									<div class="grid grid-cols-2 gap-3">
+									<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 										<div class="space-y-1.5">
 											<Label for="eq-label-{q.id}" class="text-xs text-muted-foreground">Label</Label>
 											<Input id="eq-label-{q.id}" bind:value={editQForm.label} />
@@ -174,12 +175,12 @@
 											</Select.Root>
 										</div>
 										{#if editQForm.type === 'select'}
-											<div class="col-span-2 space-y-1.5">
+											<div class="sm:col-span-2 space-y-1.5">
 												<Label for="eq-options-{q.id}" class="text-xs text-muted-foreground">Options (one per line)</Label>
 												<Textarea id="eq-options-{q.id}" bind:value={editQForm.options} rows={3} />
 											</div>
 										{/if}
-										<div class="col-span-2 flex items-center gap-2">
+										<div class="sm:col-span-2 flex items-center gap-2">
 											<Checkbox id="eq-required-{q.id}" bind:checked={editQForm.required} />
 											<Label for="eq-required-{q.id}" class="cursor-pointer font-normal">Required</Label>
 										</div>
@@ -240,13 +241,14 @@
 					{/each}
 				</tbody>
 			</table>
+			</div>
 		{:else}
 			<p class="px-4 py-4 text-sm text-muted-foreground">No questions yet.</p>
 		{/if}
 
 		<!-- Add question form -->
 		<div class="border-t px-4 py-4">
-			<div class="grid grid-cols-2 gap-3">
+			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 				<div class="space-y-1.5">
 					<Label for="q-label">Label</Label>
 					<Input id="q-label" bind:value={qForm.label} placeholder="e.g. What's the meeting about?" />
@@ -265,12 +267,12 @@
 					</Select.Root>
 				</div>
 				{#if qForm.type === 'select'}
-					<div class="col-span-2 space-y-1.5">
+					<div class="sm:col-span-2 space-y-1.5">
 						<Label for="q-options">Options (one per line)</Label>
 						<Textarea id="q-options" bind:value={qForm.options} rows={3} placeholder={"Option A\nOption B\nOption C"} />
 					</div>
 				{/if}
-				<div class="col-span-2 flex items-center gap-2">
+				<div class="sm:col-span-2 flex items-center gap-2">
 					<Checkbox id="q-required" bind:checked={qForm.required} />
 					<Label for="q-required" class="cursor-pointer font-normal">Required</Label>
 				</div>

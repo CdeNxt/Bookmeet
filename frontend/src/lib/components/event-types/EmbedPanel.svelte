@@ -27,7 +27,7 @@
 <div class="mt-8">
 	<h2 class="mb-1 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Embed</h2>
 	<p class="mb-3 text-sm text-muted-foreground">Drop this booking widget on your website — it renders inline, no iframe. Paste before <code>&lt;/body&gt;</code>.</p>
-	<div class="space-y-5 rounded-lg border bg-card p-6">
+	<div class="space-y-5 rounded-lg border bg-card p-4 sm:p-6">
 		{#each [{ key: 'inline', label: 'Inline', hint: 'Embeds the booking calendar directly in the page.', code: inlineSnippet }, { key: 'popup', label: 'Popup button', hint: 'A button that opens the booking widget in a modal.', code: popupSnippet }] as snip}
 			<div>
 				<div class="mb-1.5 flex items-center justify-between">

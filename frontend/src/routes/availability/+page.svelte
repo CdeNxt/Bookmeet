@@ -419,7 +419,7 @@
 		{#if overridesLoading}
 			<p class="px-4 py-4 text-sm text-muted-foreground">Loading…</p>
 		{:else if overrides.length > 0}
-			<table class="w-full text-sm">
+			<table class="table-stack w-full text-sm">
 				<thead>
 					<tr class="border-b">
 						<th class="px-4 pb-3 pt-3 text-left text-xs font-medium text-muted-foreground">Date</th>

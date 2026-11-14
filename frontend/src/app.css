@@ -140,3 +140,62 @@ body {
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 }
+
+/*
+ * Phone-width tables. A `table-stack` table drops its header row below `md` and lays each
+ * row out as a small card: the first cell is the title on its own line, the cells after it
+ * flow beneath with their column name in front (from `data-label`), and an unlabelled last
+ * cell (the row's action buttons) sits at the right. A cell that spans columns - an
+ * expanded detail row - keeps its own padding and takes the full width. From `md` up the
+ * class does nothing and the table is an ordinary table.
+ */
+@media (max-width: 767px) {
+	table.table-stack,
+	table.table-stack > tbody {
+		display: block;
+	}
+	table.table-stack > thead {
+		display: none;
+	}
+	table.table-stack > tbody > tr {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.375rem 1rem;
+		padding: 0.75rem 1rem;
+	}
+	table.table-stack > tbody > tr:has(> td[colspan]) {
+		padding: 0;
+	}
+	table.table-stack > tbody > tr > td {
+		display: block;
+		min-width: 0;
+	}
+	table.table-stack > tbody > tr > td:not([colspan]) {
+		padding: 0;
+	}
+	table.table-stack > tbody > tr > td:first-child,
+	table.table-stack > tbody > tr > td[colspan] {
+		flex: 1 0 100%;
+		max-width: 100%;
+	}
+	table.table-stack > tbody > tr > td[data-label] {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+	}
+	table.table-stack > tbody > tr > td[data-label]::before {
+		content: attr(data-label);
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: var(--muted-foreground);
+	}
+	table.table-stack > tbody > tr > td:last-child:not([data-label]):not([colspan]):not(:first-child) {
+		margin-left: auto;
+	}
+	/* Row actions are icon buttons; give a thumb a little more to hit. */
+	table.table-stack > tbody > tr > td:last-child:not([colspan]) button {
+		min-width: 2.5rem;
+		min-height: 2.5rem;
+	}
+}

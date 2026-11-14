@@ -196,7 +196,7 @@
 	<p class="py-8 text-sm text-muted-foreground">Loading…</p>
 {:else}
 	<div class="max-w-lg space-y-4">
-		<div class="rounded-lg border bg-card p-6">
+		<div class="rounded-lg border bg-card p-4 sm:p-6">
 			<div class="mb-4 flex items-start justify-between gap-2">
 				<div>
 					<h2 class="text-sm font-semibold">AI assistant</h2>
@@ -207,7 +207,7 @@
 					</p>
 				</div>
 				{#if settings !== null}
-					<span class="flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium {settings.active ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}">
+					<span class="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium {settings.active ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}">
 						<span class="h-1.5 w-1.5 rounded-full {settings.active ? 'bg-green-500' : 'bg-amber-400'}"></span>
 						{settings.active ? 'Active' : settings.configured ? 'Configured (off)' : 'Not configured'}
 					</span>
@@ -252,7 +252,7 @@
 		</div>
 
 		{#if assistant !== null}
-			<div class="rounded-lg border bg-card p-6">
+			<div class="rounded-lg border bg-card p-4 sm:p-6">
 				<div class="mb-4 flex items-start justify-between gap-2">
 					<div>
 						<h2 class="text-sm font-semibold">Personal booking assistant</h2>
@@ -261,7 +261,7 @@
 							for your guest and tells you what happens. It needs the AI model above.
 						</p>
 					</div>
-					<span class="flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium {assistant.active ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}">
+					<span class="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium {assistant.active ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}">
 						<span class="h-1.5 w-1.5 rounded-full {assistant.active ? 'bg-green-500' : 'bg-amber-400'}"></span>
 						{assistant.active ? 'Active' : assistant.enabled ? 'On, not ready' : 'Off'}
 					</span>
@@ -368,7 +368,7 @@
 			</div>
 		{/if}
 
-		<div class="rounded-lg border bg-card p-6">
+		<div class="rounded-lg border bg-card p-4 sm:p-6">
 			<h2 class="text-sm font-semibold">Assistant instructions</h2>
 			<p class="mt-0.5 text-xs text-muted-foreground">
 				Extra guidance — tone, business context, do's and don'ts. Appended to the built-in
