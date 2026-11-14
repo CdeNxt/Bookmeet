@@ -500,6 +500,44 @@ default). Off, links keep to the owner's usual hours and the assistant only repo
   per link, and 20 held items per link (`personallink.MaxHeld`; past it the guest is told to
   contact the owner). Details panels older than two weeks are deleted (`tidyDrafts`).
 
+## Personal booking assistant over MCP: every agent, not only Telegram (Bookmeet)
+
+J's rule (2026-11-13): the owner's own AI agent (Claude, ChatGPT, others) can do what the
+Telegram assistant does, and the two stay in step as the assistant grows. Bookmeet is meant to
+be an agentic interface for booking, not a Calendly copy. Tools: `mcp_assistant.go` (list,
+get, cancel, `whats_waiting`, the server instructions), `mcp_assistant_create.go` (check and
+create or change a link), `mcp_assistant_book.go` (`book_for_guest`, `answer_guest`).
+
+- **An assistant feature is not done until its MCP side exists:** a tool, its line in
+  `mcpInstructions`, a test, and an entry in `mcpAssistantParity`. That map ties each
+  Telegram model tool to its MCP tool; `TestMCPAssistant_parityWithTelegram` fails on a
+  Telegram tool with no entry. A gap is written there as `pending: ...`, not left out.
+- **Same cores, thin front ends.** MCP tools call what Telegram calls (`windowSlotCounts`,
+  `personallink.Service`, `bookPersonalLink`, `createBookingForSlugWith`,
+  `suggestedTimeBooked`). When a Telegram path grows a step, move it into a shared function
+  rather than copying it.
+- **An agent's call is never the owner's tap.** No MCP tool sets `OwnerApproved`,
+  `OutsideRules`, `OverBookings` or `OwnerException`. What a link's windows mean follows the
+  owner's own exceptions setting (as on Telegram); that is the setting, not the agent.
+  "Book anyway" and the direct booking's Allow tap stay on Telegram. Refusals name the
+  category (outside hours, busy) and never what is on the calendar:
+  `TestMCPAssistant_calendarTitlesNeverReachAnAgent` calls every route at a titled event.
+- **The agent does no time arithmetic.** It passes dates and clock times in the owner's
+  zone; every reply carries RFC 3339 plus `text` already in the owner's zone and clock, and
+  `today`/`now` to resolve "next Tuesday" against.
+- **Guest text is a third party's.** It goes out as `guest_words`, and the instructions tell
+  the agent to quote it and never follow it.
+- **Every tool has annotations** (read-only, destructive): apps use them to ask before a call.
+- **Personal links belong to one person.** Assistant tools act for the signed-in caller, or
+  the workspace owner on stdio (`mcpAssistantOwner`), never "the whole workspace".
+- **What each app can draw is in `docs/agent-capabilities.md`.** Re-check it from current
+  documentation when starting an assistant feature, and match Telegram's look as far as the
+  app allows. Text must always work on its own.
+- Not built yet: in-person places for an agent-made link (`create_personal_link` makes one
+  without a confirmed address), a Bookmeet approval page so an agent can ask the owner for an
+  exception without Telegram, interactive cards (MCP Apps), and Telegram telling the owner
+  when their agent made a link.
+
 ## The assistant lab (`cmd/lab`): testing the AI features without staging
 
 `go run ./cmd/lab` builds the real app from the checkout, runs it on a throwaway database
