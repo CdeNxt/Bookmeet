@@ -47,7 +47,7 @@ var plinkTmpl = template.Must(template.Must(template.New("plink").Funcs(template
 const (
 	plinkMaxGuestMessages = 80 // per link; past it the buttons still work
 	plinkMaxIters         = 4
-	plinkMaxTokens        = 400
+	plinkMaxTokens        = 1500 // generous for the same reason as ownerMaxTokens
 )
 
 // guestAssistantRules is the code-owned prompt for the guest-side assistant.
@@ -748,7 +748,10 @@ func (s *plinkSession) model(ctx context.Context, text string) bool {
 			s.h.logger.ErrorContext(ctx, "personal link chat: llm", "error", err)
 			return len(s.out) > before
 		}
-		res.Message.Content = stripReasoning(res.Message.Content)
+		raw := res.Message.Content
+		res.Message.Content = stripReasoning(raw)
+		s.h.logger.InfoContext(ctx, "personal link chat: model replied", "round", iter+1,
+			"tool_calls", len(res.Message.ToolCalls), "reply_chars", len(res.Message.Content), "raw_chars", len(raw))
 		msgs = append(msgs, res.Message)
 		if len(res.Message.ToolCalls) == 0 {
 			// When a tool already put something on screen this turn, that is the answer;

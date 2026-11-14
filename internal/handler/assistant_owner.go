@@ -35,9 +35,12 @@ import (
 // can book a meeting.
 
 const (
-	ownerMaxIters   = 5   // tool-loop iterations per owner message
-	ownerMaxTokens  = 600 // output tokens per model call
-	ownerHistory    = 16  // remembered messages fed back as context
+	ownerMaxIters = 5 // tool-loop iterations per owner message
+	// Output tokens per model call. A reasoning model spends these on its thinking before
+	// it writes a word, and a cap it hits mid-thought leaves a reply with nothing in it, so
+	// the cap is generous: the replies themselves are a sentence or two.
+	ownerMaxTokens  = 2000
+	ownerHistory    = 16 // remembered messages fed back as context
 	ownerRunTimeout = 90 * time.Second
 	ownerMaxWindows = 14
 	ownerDaysShown  = 10 // days offered in the panel's Days view
@@ -200,6 +203,12 @@ func (h *Handler) newOwnerSession(ctx context.Context, bot *telegram.Client, use
 }
 
 func (s *ownerSession) say(ctx context.Context, text string) {
+	// If the work ran out of time, the message saying so still has to get through.
+	if ctx.Err() != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+	}
 	if _, err := s.bot.Send(ctx, s.chatID, text, nil); err != nil {
 		s.h.logger.WarnContext(ctx, "assistant: send", "error", err)
 	}
@@ -430,6 +439,9 @@ func (h *Handler) ownerHandleMessage(ctx context.Context, bot *telegram.Client, 
 	msgs = append(msgs, llm.Message{Role: "user", Content: text})
 	s.remember(ctx, "user", text)
 
+	// The owner is never left with silence. A turn ends in the model's words, in something
+	// a tool put on screen, or in a line from the program saying what went wrong.
+	acted, retried := false, false
 	for iter := 0; iter < ownerMaxIters; iter++ {
 		res, err := client.Chat(ctx, llm.ChatRequest{Messages: msgs, Tools: ownerTools(), MaxTokens: ownerMaxTokens})
 		if err != nil {
@@ -437,16 +449,33 @@ func (h *Handler) ownerHandleMessage(ctx context.Context, bot *telegram.Client, 
 			s.say(ctx, "I couldn't reach the AI model just now. Try again in a moment.")
 			return
 		}
-		res.Message.Content = stripReasoning(res.Message.Content)
-		msgs = append(msgs, res.Message)
+		raw := res.Message.Content
+		res.Message.Content = stripReasoning(raw)
+		h.logger.InfoContext(ctx, "assistant: model replied", "round", iter+1,
+			"tool_calls", len(res.Message.ToolCalls), "reply_chars", len(res.Message.Content), "raw_chars", len(raw))
 		if len(res.Message.ToolCalls) == 0 {
-			if reply := strings.TrimSpace(res.Message.Content); reply != "" {
+			reply := strings.TrimSpace(res.Message.Content)
+			switch {
+			case reply != "":
 				s.say(ctx, reply)
 				s.remember(ctx, "assistant", reply)
+			case acted:
+				// A tool already showed the owner something; nothing more is needed.
+			case !retried:
+				// Nothing usable came back: an empty reply, or only reasoning that was cut
+				// off before the answer. Ask once more, plainly.
+				retried = true
+				msgs = append(msgs, llm.Message{Role: "user", Content: "[system] Your last reply was empty. Answer now in one or two short sentences, or call a tool. Do not think out loud."})
+				continue
+			default:
+				h.logger.WarnContext(ctx, "assistant: model gave no usable reply twice", "raw_chars", len(raw))
+				s.say(ctx, "I didn't manage to answer that. Say it again, maybe in different words, and I'll try once more.")
 			}
 			return
 		}
+		msgs = append(msgs, res.Message)
 		for _, tc := range res.Message.ToolCalls {
+			acted = true
 			result := s.runTool(ctx, tc.Function.Name, tc.Function.Arguments)
 			msgs = append(msgs, llm.Message{Role: "tool", ToolCallID: tc.ID, Name: tc.Function.Name, Content: result})
 		}
