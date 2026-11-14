@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,6 +28,7 @@ type bookForGuestIn struct {
 	EventType  string `json:"event_type" jsonschema:"slug of one of the owner's meeting types (list_event_types)"`
 	Date       string `json:"date" jsonschema:"the day, YYYY-MM-DD, in the owner's time zone"`
 	Time       string `json:"time" jsonschema:"the start, HH:MM 24-hour, in the owner's time zone"`
+	AskOwner   bool   `json:"ask_owner,omitempty" jsonschema:"if the time is outside the owner's hours: send the owner the details on Telegram to allow it with their own tap. Only after the owner says yes to asking"`
 }
 
 type bookForGuestOut struct {
@@ -78,7 +80,11 @@ func (h *Handler) mcpBookForGuest(ctx context.Context, _ *mcp.CallToolRequest, i
 	case errors.Is(err, errCalendarClash), errors.Is(err, booking.ErrDoubleBooked):
 		return nil, bookForGuestOut{}, fmt.Errorf("nothing was booked: the owner already has something at %s. Ask for another time, or offer a few with create_personal_link. Only the owner can book over their calendar, from the Bookmeet assistant on Telegram", o.when(start))
 	case errors.Is(err, errSlotUnavailable), errors.Is(err, errNoHostAvailable):
-		return nil, bookForGuestOut{}, fmt.Errorf("nothing was booked: %s is outside the times the owner takes meetings (their hours, notice or booking horizon). get_available_slots shows what is open. Only the owner can book outside their hours, from the Bookmeet assistant on Telegram", o.when(start))
+		if in.AskOwner {
+			// Not an error the agent can fix, but nothing was booked by this call either.
+			return nil, bookForGuestOut{}, errors.New(h.askOwnerToBookDirect(ctx, o, et, name, email, in.Date, minute, start))
+		}
+		return nil, bookForGuestOut{}, fmt.Errorf("nothing was booked: %s is outside the times the owner takes meetings (their hours, notice or booking horizon). get_available_slots shows what is open. Only the owner can book outside their hours: if they want to, call again with ask_owner set to true and they get the details on Telegram to allow it with a tap", o.when(start))
 	case errors.Is(err, errCalendarUnavailable):
 		return nil, bookForGuestOut{}, fmt.Errorf("the owner's calendar could not be checked just now, so nothing was booked. Try again in a moment")
 	case errors.As(err, &answerErr):
@@ -145,6 +151,9 @@ type answerGuestIn struct {
 	HeldID int64  `json:"held_id" jsonschema:"from get_personal_link's left_for_owner"`
 	Answer string `json:"answer" jsonschema:"book (one of the suggested times), none (none of the suggested times; the guest is not told), or handled (the owner will deal with it themselves)"`
 	At     string `json:"at,omitempty" jsonschema:"for book: one of the suggested times, exactly as its 'at' field gives it"`
+	// AskOwner hands a time that will not book under the owner's rules to the owner's own
+	// "Book anyway" tap on Telegram. It never books anything itself.
+	AskOwner bool `json:"ask_owner,omitempty" jsonschema:"for book: if the time is not free under the owner's rules, send the owner Telegram's Book anyway question to decide with their own tap. Only after the owner says yes to asking"`
 }
 
 type answerGuestOut struct {
@@ -219,10 +228,18 @@ func (h *Handler) mcpAnswerGuest(ctx context.Context, _ *mcp.CallToolRequest, in
 	case err == nil:
 	case errors.Is(err, personallink.ErrNotBookable):
 		return nil, answerGuestOut{}, fmt.Errorf("that link has already been used or closed, so nothing was booked")
-	case errors.Is(err, errCalendarClash), errors.Is(err, booking.ErrDoubleBooked):
-		return nil, answerGuestOut{}, fmt.Errorf("nothing was booked: the owner already has something at %s. Only the owner can book over it, with Book anyway on Telegram; or answer none", o.when(at))
-	case errors.Is(err, errSlotUnavailable), errors.Is(err, errNoHostAvailable):
-		return nil, answerGuestOut{}, fmt.Errorf("nothing was booked: %s is outside the times the owner takes meetings. Only the owner can book it, with Book anyway on Telegram; or answer none", o.when(at))
+	case errors.Is(err, errCalendarClash), errors.Is(err, booking.ErrDoubleBooked),
+		errors.Is(err, errSlotUnavailable), errors.Is(err, errNoHostAvailable):
+		why := fmt.Sprintf("the owner already has something at %s", o.when(at))
+		if !errors.Is(err, errCalendarClash) && !errors.Is(err, booking.ErrDoubleBooked) {
+			why = fmt.Sprintf("%s is outside the times the owner takes meetings", o.when(at))
+		}
+		if in.AskOwner {
+			if msg := h.askOwnerToBookSuggested(ctx, o, held, starts, at); msg != "" {
+				return nil, answerGuestOut{LinkID: l.ID, Result: msg}, nil
+			}
+		}
+		return nil, answerGuestOut{}, fmt.Errorf("nothing was booked: %s. Only the owner can book it anyway: if they want to, call again with ask_owner set to true and they get the question on Telegram to decide with a tap. Or answer none", why)
 	case errors.Is(err, errCalendarUnavailable):
 		return nil, answerGuestOut{}, fmt.Errorf("the owner's calendar could not be checked just now, so nothing was booked. Try again in a moment")
 	case errors.Is(err, booking.ErrBookingLimitReached):
@@ -262,4 +279,84 @@ func (h *Handler) addAssistantAnswerTools(s *mcp.Server) {
 			"A suggested time books only if it is free under the owner's own rules; otherwise it is refused and only the owner can book it anyway. Ask the owner before answering.",
 		Annotations: toolWrites,
 	}, h.mcpAnswerGuest)
+}
+
+// ── handing a decision to the owner's own tap ───────────────────────────────
+
+// ownerTelegramSession is the owner's Telegram assistant session, when they have a bot and a
+// linked chat; nil otherwise.
+func (h *Handler) ownerTelegramSession(ctx context.Context, userID string) *ownerSession {
+	bot, _ := h.getTelegram()
+	if bot == nil {
+		return nil
+	}
+	var chatID int64
+	if h.db.QueryRowContext(ctx, `SELECT chat_id FROM telegram_links WHERE user_id = ?`, userID).Scan(&chatID) != nil {
+		return nil
+	}
+	s, err := h.newOwnerSession(ctx, bot, userID, chatID)
+	if err != nil {
+		h.logger.WarnContext(ctx, "mcp: owner session", "error", err)
+		return nil
+	}
+	return s
+}
+
+// askOwnerToBookDirect puts Telegram's details panel for a direct booking in front of the
+// owner: the same panel, with its Allow and Book it buttons, that they would get by asking
+// the bot themselves. The agent's call books nothing; the owner's taps do. It returns the
+// message for the agent.
+func (h *Handler) askOwnerToBookDirect(ctx context.Context, o *mcpOwner, et *ownerEventType, name, email, date string, minute int, start time.Time) string {
+	if !h.assistantExceptions(ctx) {
+		return fmt.Sprintf("nothing was booked: %s is outside the times the owner takes meetings, and their setting \"Allow exceptions to my availability\" (Bookmeet, Settings → AI) is off, so it cannot be booked even with their approval", o.when(start))
+	}
+	if h.ownerTelegramSession(ctx, o.UserID) == nil {
+		return "nothing was booked, and the owner has no Telegram assistant connected to approve it with. They can book it themselves in Bookmeet"
+	}
+	h.assistantRun(o.UserID, func(ctx context.Context) {
+		s := h.ownerTelegramSession(ctx, o.UserID)
+		if s == nil {
+			return
+		}
+		if old := s.openDraft(ctx); old != nil {
+			s.retirePanel(ctx, old, "Replaced by a newer panel.")
+		}
+		d := &ownerDraft{GuestName: name, GuestEmail: email, EventTypeID: et.ID, Direct: true, BookDate: date, BookMinute: minute}
+		s.analyse(ctx, d)
+		s.say(ctx, fmt.Sprintf("Your AI app asked to book %s at a time outside your hours. Tap Allow, then Book it, if you want it.", name))
+		if err := s.showPanel(ctx, d); err != nil {
+			h.logger.ErrorContext(ctx, "mcp: show panel to owner", "error", err)
+		}
+		s.remember(ctx, "event", fmt.Sprintf("Through a connected AI app, the owner asked to book %s at %s, outside their hours. The details panel is waiting for their tap.", name, o.when(start)))
+	})
+	return fmt.Sprintf("nothing is booked yet. %s is outside the owner's hours, so the owner has been sent the details on Telegram to allow and book with their own tap. get_booking or list_bookings will show it once they do", o.when(start))
+}
+
+// askOwnerToBookSuggested sends the owner Telegram's own answer to tapping a suggested time
+// that will not book: what is in the way (by name, for the owner only) and Book anyway /
+// Leave it. It returns the message for the agent, or "" when it could not be sent.
+func (h *Handler) askOwnerToBookSuggested(ctx context.Context, o *mcpOwner, held *personallink.Held, starts []string, at time.Time) string {
+	index := -1
+	for i, s := range starts {
+		if t, err := time.Parse(time.RFC3339, s); err == nil && t.Equal(at) {
+			index = i
+		}
+	}
+	if index < 0 || h.ownerTelegramSession(ctx, o.UserID) == nil {
+		return ""
+	}
+	if !h.assistantExceptions(ctx) {
+		return "Nothing was booked. The owner's setting \"Allow exceptions to my availability\" is off, so this time cannot be booked even with their approval."
+	}
+	heldID := held.ID
+	h.assistantRun(o.UserID, func(ctx context.Context) {
+		s := h.ownerTelegramSession(ctx, o.UserID)
+		if s == nil {
+			return
+		}
+		if msg := s.tapHeld(ctx, heldID, "s", strconv.Itoa(index), 0); msg != "" {
+			s.say(ctx, msg)
+		}
+	})
+	return "Nothing is booked yet. The owner has been asked on Telegram whether to book " + o.when(at) + " anyway; their tap decides. get_personal_link will show it booked if they do."
 }

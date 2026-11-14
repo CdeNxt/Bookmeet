@@ -519,7 +519,10 @@ create or change a link), `mcp_assistant_book.go` (`book_for_guest`, `answer_gue
 - **An agent's call is never the owner's tap.** No MCP tool sets `OwnerApproved`,
   `OutsideRules`, `OverBookings` or `OwnerException`. What a link's windows mean follows the
   owner's own exceptions setting (as on Telegram); that is the setting, not the agent.
-  "Book anyway" and the direct booking's Allow tap stay on Telegram. Refusals name the
+  "Book anyway" and the direct booking's Allow tap stay the owner's: with `ask_owner`, the
+  agent hands the decision to Telegram (`askOwnerToBookDirect` shows the same panel;
+  `askOwnerToBookSuggested` runs the same `tapHeld` question), and only the tap books.
+  Refusals name the
   category (outside hours, busy) and never what is on the calendar:
   `TestMCPAssistant_calendarTitlesNeverReachAnAgent` calls every route at a titled event.
 - **The agent does no time arithmetic.** It passes dates and clock times in the owner's
@@ -534,8 +537,8 @@ create or change a link), `mcp_assistant_book.go` (`book_for_guest`, `answer_gue
   documentation when starting an assistant feature, and match Telegram's look as far as the
   app allows. Text must always work on its own.
 - Not built yet: in-person places for an agent-made link (`create_personal_link` makes one
-  without a confirmed address), a Bookmeet approval page so an agent can ask the owner for an
-  exception without Telegram, and interactive cards (MCP Apps).
+  without a confirmed address), a Bookmeet approval page so an owner without Telegram can
+  approve an exception, and interactive cards (MCP Apps).
 - **The bot hears what the agent did** (`agentDid`): a link made or cancelled, a booking, an
   answer to a guest is sent to the owner on Telegram and written to the Telegram assistant's
   memory, so the two front ends agree about what exists. Nothing from the calendar goes there.

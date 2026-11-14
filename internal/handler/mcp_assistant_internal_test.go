@@ -458,3 +458,62 @@ func TestMCPAssistant_theOwnerIsToldOnTelegram(t *testing.T) {
 		t.Errorf("the owner was not told about the cancel: %v", f.texts())
 	}
 }
+
+// Outside the owner's hours an agent cannot book, but it can hand the decision to the owner:
+// the Telegram panel arrives with its Allow and Book it buttons, and only the taps book.
+func TestMCPAssistant_askOwnerHandsADirectBookingToTheirTap(t *testing.T) {
+	f := newOwnerFixture(t)
+	f.closeDay(t, 3)
+	cs := connectMCPInternal(t, f.h)
+	args := map[string]any{"guest_name": "Ann Agent", "guest_email": "ann@example.com", "event_type": "intro", "date": date(3), "time": "09:00"}
+	if msg := toolError(t, cs, "book_for_guest", args); !strings.Contains(msg, "ask_owner") {
+		t.Errorf("the refusal does not offer to ask the owner: %s", msg)
+	}
+	args["ask_owner"] = true
+	if msg := toolError(t, cs, "book_for_guest", args); !strings.Contains(msg, "sent the details on Telegram") {
+		t.Errorf("asking the owner: %s", msg)
+	}
+	if n := f.count(t, `SELECT COUNT(*) FROM bookings`); n != 0 {
+		t.Fatalf("%d bookings before the owner tapped", n)
+	}
+	f.tap(t, "Allow outside my availability")
+	f.tap(t, "Book it")
+	if n := f.count(t, `SELECT COUNT(*) FROM bookings`); n != 1 {
+		t.Fatalf("%d bookings after the owner's taps; want 1", n)
+	}
+}
+
+// A guest's suggested time over something on the owner's calendar: the agent's answer books
+// nothing, but with ask_owner the owner gets Telegram's Book anyway question, by name.
+func TestMCPAssistant_askOwnerHandsASuggestedTimeToTheirTap(t *testing.T) {
+	f := newChatFixture(t)
+	f.throughDetails(t)
+	clash := f.at(21, 0)
+	f.cal.mu.Lock()
+	f.cal.busy = []slots.Interval{{Start: clash.Add(-30 * time.Minute), End: clash.Add(30 * time.Minute)}}
+	f.cal.titled = []calendar.BusyEvent{{Title: "Dentist", Start: clash.Add(-30 * time.Minute), End: clash.Add(30 * time.Minute)}}
+	f.cal.mu.Unlock()
+	links := f.h.personalLinks()
+	starts, _ := json.Marshal([]string{clash.UTC().Format(time.RFC3339)})
+	if err := links.Hold(context.Background(), f.link.ID, personallink.HeldSuggestions, string(starts)); err != nil {
+		t.Fatal(err)
+	}
+	items, _ := links.HeldItems(context.Background(), f.link.ID)
+	cs := connectMCPInternal(t, f.h)
+	res := callJSON(t, cs, "answer_guest", map[string]any{
+		"link_id": f.link.ID, "held_id": items[len(items)-1].ID, "answer": "book", "at": clash.UTC().Format(time.RFC3339), "ask_owner": true,
+	})
+	if !strings.Contains(res, "asked on Telegram") || strings.Contains(res, "Dentist") {
+		t.Fatalf("answer = %s", res)
+	}
+	if !f.anyText("Dentist") {
+		t.Errorf("the owner was not told what it clashes with: %v", f.texts())
+	}
+	if n := f.count(t, `SELECT COUNT(*) FROM bookings`); n != 0 {
+		t.Fatalf("%d bookings before the owner tapped", n)
+	}
+	f.tap(t, "Book anyway")
+	if n := f.count(t, `SELECT COUNT(*) FROM bookings`); n != 1 {
+		t.Fatalf("%d bookings after Book anyway; want 1", n)
+	}
+}
