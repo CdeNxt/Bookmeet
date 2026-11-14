@@ -60,11 +60,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	if cfg.GoogleClientID != "" {
-		slog.Info("Google OAuth configured", "client_id_prefix", cfg.GoogleClientID[:min(20, len(cfg.GoogleClientID))])
-	} else {
-		slog.Warn("Google OAuth NOT configured — GOOGLE_CLIENT_ID is empty")
-	}
+	// Whether Google sign-in is configured is reported by server.New, once it has
+	// checked the keys saved in Settings as well as GOOGLE_CLIENT_ID. Reporting it here,
+	// from the environment alone, said "NOT configured" on every copy that keeps its keys
+	// in Settings.
 
 	database, err := db.Open(cfg.DatabaseURL)
 	if err != nil {

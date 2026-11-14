@@ -83,7 +83,7 @@
 
 <svelte:head><title>API Keys — Bookmeet</title></svelte:head>
 
-<div class="mb-8 flex items-center justify-between">
+<div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between md:mb-8">
 	<div>
 		<h1 class="text-2xl font-semibold tracking-tight">API Keys</h1>
 		<p class="mt-1 text-sm text-muted-foreground">Authenticate CLI tools and integrations.</p>
@@ -104,7 +104,7 @@
 {/if}
 
 {#if showCreate}
-	<div class="mb-6 rounded-lg border bg-card p-6">
+	<div class="mb-6 rounded-lg border bg-card p-4 sm:p-6">
 		<h2 class="mb-4 text-sm font-semibold">New API key</h2>
 		{#if createError}<p class="mb-3 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{createError}</p>{/if}
 		<div class="mb-4 max-w-sm space-y-1.5">
@@ -126,13 +126,13 @@
 {#if loading}
 	<p class="py-8 text-sm text-muted-foreground">Loading…</p>
 {:else if items.length === 0}
-	<div class="rounded-lg border border-dashed bg-card p-12 text-center">
+	<div class="rounded-lg border border-dashed bg-card p-8 text-center sm:p-12">
 		<p class="text-sm font-medium">No API keys</p>
 		<p class="mt-1 text-sm text-muted-foreground">Create a key to authenticate CLI tools and integrations.</p>
 	</div>
 {:else}
 	<div class="rounded-lg border bg-card overflow-hidden">
-		<table class="w-full text-sm">
+		<table class="table-stack w-full text-sm">
 			<thead>
 				<tr class="border-b">
 					<th class="px-4 pb-3 pt-3 text-left text-xs font-medium text-muted-foreground">Name</th>
@@ -146,8 +146,8 @@
 					{#each items as k}
 						<tr class="transition-colors hover:bg-muted/30">
 							<td class="px-4 py-3 font-medium">{k.name}</td>
-							<td class="px-4 py-3 text-muted-foreground">{fmtDate(k.created_at)}</td>
-							<td class="px-4 py-3 text-muted-foreground">
+							<td data-label="Created" class="px-4 py-3 text-muted-foreground">{fmtDate(k.created_at)}</td>
+							<td data-label="Last used" class="px-4 py-3 text-muted-foreground">
 								{#if k.last_used_at}{fmtDate(k.last_used_at)}{:else}Never{/if}
 							</td>
 							<td class="px-4 py-3 text-right">

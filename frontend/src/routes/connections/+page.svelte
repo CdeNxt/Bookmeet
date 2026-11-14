@@ -127,7 +127,7 @@
 {#if loading}
 	<p class="py-8 text-sm text-muted-foreground">Loading…</p>
 {:else if items.length === 0}
-	<div class="rounded-lg border border-dashed bg-card p-12 text-center">
+	<div class="rounded-lg border border-dashed bg-card p-8 text-center sm:p-12">
 		<p class="text-sm font-medium">No connected apps</p>
 		<p class="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
 			Use the URL above to add Bookmeet to an MCP-capable app. Once you approve it, it shows up here.
@@ -135,7 +135,7 @@
 	</div>
 {:else}
 	<div class="overflow-hidden rounded-lg border bg-card">
-		<table class="w-full text-sm">
+		<table class="table-stack w-full text-sm">
 			<thead>
 				<tr class="border-b">
 					<th class="px-4 pb-3 pt-3 text-left text-xs font-medium text-muted-foreground">App</th>
@@ -149,8 +149,8 @@
 					{#each items as c}
 						<tr class="transition-colors hover:bg-muted/30">
 							<td class="px-4 py-3 font-medium">{c.client_name}</td>
-							<td class="px-4 py-3 text-muted-foreground">{fmtDate(c.created_at)}</td>
-							<td class="px-4 py-3 text-muted-foreground">
+							<td data-label="Connected" class="px-4 py-3 text-muted-foreground">{fmtDate(c.created_at)}</td>
+							<td data-label="Last used" class="px-4 py-3 text-muted-foreground">
 								{#if c.last_used_at}{fmtDate(c.last_used_at)}{:else}Never{/if}
 							</td>
 							<td class="px-4 py-3 text-right">

@@ -4,6 +4,7 @@ import { today, getLocalTimeZone } from '@internationalized/date';
 import Switch from '$lib/components/ui/switch/switch.svelte';
 import Checkbox from '$lib/components/ui/checkbox/checkbox.svelte';
 import Calendar from '$lib/components/ui/calendar/calendar.svelte';
+import SheetFixture from '$lib/components/ui/sheet/sheet-smoke-fixture.svelte';
 
 // Resolve a CSS value (e.g. `var(--primary)`) to the browser's computed color
 // string, so comparisons are exact and color-space-agnostic (same engine, same
@@ -69,5 +70,23 @@ describe('shadcn component state styling', () => {
 		const selected = container.querySelector('[data-bits-day][data-selected]')!;
 		expect(selected).toBeTruthy();
 		expect(getComputedStyle(selected).backgroundColor).toBe(resolveColor('var(--primary)'));
+	});
+
+	// The phone navigation drawer. Its slide-in hangs off `data-state="open"`; if that
+	// selector stops matching, the panel still opens but silently loses its animation.
+	// The content is portalled to <body>.
+	test('Sheet: open left panel is pinned to the left edge and slides in', async () => {
+		await render(SheetFixture, {});
+		const panel = document.querySelector('[data-slot="sheet-content"]') as HTMLElement;
+		expect(panel).toBeTruthy();
+		expect(panel.dataset.state).toBe('open');
+		const cs = getComputedStyle(panel);
+		expect(cs.position).toBe('fixed');
+		expect(cs.left).toBe('0px');
+		// test-setup.ts switches animations off, so read the slide-in's starting offset,
+		// which only applies when the `data-[state=open]` selector matches.
+		expect(cs.getPropertyValue('--tw-enter-translate-x').trim()).toBe('-100%');
+		const overlay = document.querySelector('[data-slot="sheet-overlay"]') as HTMLElement;
+		expect(getComputedStyle(overlay).position).toBe('fixed');
 	});
 });

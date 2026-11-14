@@ -424,15 +424,18 @@ The owner can let a meeting go outside their own rules. Everything here is behin
 Settings → AI → "Allow exceptions to my availability" (`assistant_exceptions`, on by
 default). Off, links keep to the owner's usual hours and the assistant only reports.
 
-- **A link's windows are the hours for that meeting.** With the setting on, a link offers
-  every time inside its windows that the owner is not busy for: no "outside your hours", no
-  Allow tap. `linkException` (link made so, OR the setting on now) feeds
-  `slotsWanted.OwnerException` in `personalLinkSlots` and `OutsideRules` when it books. It is
-  read each time, so turning the setting on fixes a link already sent. New links are stored
-  with `outside_availability` = the setting; migration 00091 set it on links open at the time.
-- **A direct booking (one exact time) still needs the Allow tap** outside the owner's hours.
-  That is deliberate: a link is a range the owner drew; a direct booking is a single time
-  that may be a slip.
+- **Days without times get the owner's usual hours.** The model passes a window with only a
+  date when the owner named days but no times; `toolShowDetails` fills it from
+  `usualHours` (the weekly rules for that meeting type, with date overrides) and leaves out
+  days the owner does not work. The model is told the usual week (`usualWeek`) but never
+  invents times. Only days off and no times is an error that tells the model to ask.
+- **Times the owner explicitly asks for outside those hours are confirmed first.** The panel
+  flags them ("outside the times you take meetings") and Create is refused until the Allow
+  tap. Once confirmed, the link's windows are the hours for that meeting: it offers every
+  time inside them the owner is not busy for. `linkException` (link made so, OR the setting
+  on now) feeds `slotsWanted.OwnerException` in `personalLinkSlots` and `OutsideRules` when
+  it books, read each time, so turning the setting on fixes a link already sent.
+- **A direct booking (one exact time) needs the Allow tap** outside the owner's hours too.
 - **When the setting is what blocks a meeting, the owner is told before any guest is**
   (`exceptionsOffHint`): on the panel, when Create is refused, and in the empty-link message.
   Keep that true for any new path where the setting can leave a link with nothing to offer.

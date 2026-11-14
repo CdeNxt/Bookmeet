@@ -287,14 +287,14 @@
 
 <svelte:head><title>Bookings — Bookmeet</title></svelte:head>
 
-<div class="mb-8 flex items-start justify-between gap-4">
+<div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 md:mb-8">
 	<div>
 		<h1 class="text-2xl font-semibold tracking-tight">Bookings</h1>
 		<p class="mt-1 text-sm text-muted-foreground">
 			{scope === 'all' ? 'All meetings across the workspace.' : 'Meetings you are hosting.'}
 		</p>
 	</div>
-	<div class="flex shrink-0 items-center gap-2">
+	<div class="flex shrink-0 flex-wrap items-center gap-2">
 		<Button variant="outline" size="sm" onclick={refresh} disabled={refreshing} aria-label="Refresh bookings">
 			<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class={refreshing ? 'animate-spin' : ''}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
 			Refresh
@@ -319,7 +319,7 @@
 <!-- "No bookings yet" is a claim about the workspace, so it must not be shown when the
      request failed and the counts are simply unknown - that reads as data loss. -->
 {#if counts.upcoming === 0 && counts.past === 0 && !hasFilters && !loading && !error}
-	<div class="rounded-lg border border-dashed bg-card p-12 text-center">
+	<div class="rounded-lg border border-dashed bg-card p-8 text-center sm:p-12">
 		<p class="text-sm font-medium">No bookings yet</p>
 		<p class="mt-1 text-sm text-muted-foreground">Bookings will appear here once attendees schedule time with you.</p>
 	</div>
@@ -392,7 +392,7 @@
 	{#if loading}
 		<p class="py-8 text-sm text-muted-foreground">Loading…</p>
 	{:else if items.length === 0}
-		<div class="rounded-lg border border-dashed bg-card p-12 text-center">
+		<div class="rounded-lg border border-dashed bg-card p-8 text-center sm:p-12">
 			<p class="text-sm text-muted-foreground">
 				{hasFilters ? 'No bookings match these filters.' : `No ${timeFilter} bookings.`}
 			</p>
@@ -402,7 +402,7 @@
 		</div>
 	{:else}
 	<div class="rounded-lg border bg-card overflow-hidden">
-		<table class="w-full text-sm">
+		<table class="table-stack w-full text-sm">
 			<thead>
 				<tr class="border-b">
 					<th class="px-4 pb-3 pt-3 text-left text-xs font-medium text-muted-foreground">Attendee</th>
@@ -424,9 +424,9 @@
 								<span class="text-muted-foreground">—</span>
 							{/if}
 						</td>
-						{#if scope === 'all'}<td class="px-4 py-3 text-muted-foreground">{b.host_name || '—'}</td>{/if}
-						<td class="px-4 py-3 font-mono text-xs text-muted-foreground">{b.event_type_slug ?? '—'}</td>
-						<td class="px-4 py-3 text-muted-foreground">{fmt(b.start_at)}</td>
+						{#if scope === 'all'}<td data-label="Host" class="px-4 py-3 text-muted-foreground">{b.host_name || '—'}</td>{/if}
+						<td data-label="Event" class="px-4 py-3 font-mono text-xs text-muted-foreground">{b.event_type_slug ?? '—'}</td>
+						<td data-label="Start" class="px-4 py-3 text-muted-foreground">{fmt(b.start_at)}</td>
 						<td class="px-4 py-3">
 							<div class="flex flex-wrap items-center gap-1.5">
 								{#if b.status === 'confirmed'}

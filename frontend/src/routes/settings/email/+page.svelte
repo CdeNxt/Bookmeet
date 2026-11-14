@@ -143,14 +143,14 @@
 	<p class="py-8 text-sm text-muted-foreground">Loading…</p>
 {:else}
 	<div class="max-w-lg">
-		<div class="rounded-lg border bg-card p-6">
+		<div class="rounded-lg border bg-card p-4 sm:p-6">
 			<div class="mb-4 flex items-start justify-between gap-2">
 				<div>
 					<h2 class="text-sm font-semibold">Email</h2>
 					<p class="mt-0.5 text-xs text-muted-foreground">How Bookmeet sends booking emails.</p>
 				</div>
 				{#if emailSettings !== null}
-					<span class="flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium {emailSettings.enabled ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}">
+					<span class="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium {emailSettings.enabled ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}">
 						<span class="h-1.5 w-1.5 rounded-full {emailSettings.enabled ? 'bg-green-500' : 'bg-amber-400'}"></span>
 						{emailSettings.transport === 'resend_api'
 							? 'Sending via Resend API'
@@ -212,7 +212,7 @@
 					</div>
 				</div>
 
-				<div class="grid grid-cols-2 gap-3">
+				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 					<div class="space-y-1.5">
 						<Label for="smtp-user">Username</Label>
 						<Input id="smtp-user" type="text" placeholder="you@example.com" bind:value={smtpUser} />
@@ -228,7 +228,7 @@
 					</div>
 				</div>
 
-				<div class="grid grid-cols-2 gap-3">
+				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 					<div class="space-y-1.5">
 						<Label for="email-from">From address</Label>
 						<Input id="email-from" type="email" placeholder="bookings@example.com" bind:value={emailFrom} />
@@ -269,7 +269,7 @@
 			</div>
 		</div>
 
-		<div class="mt-4 rounded-lg border bg-card p-6">
+		<div class="mt-4 rounded-lg border bg-card p-4 sm:p-6">
 			<div class="mb-4 flex items-start justify-between gap-2">
 				<div>
 					<h2 class="text-sm font-semibold">RSVP tracking</h2>
@@ -279,7 +279,7 @@
 					</p>
 				</div>
 				{#if emailSettings !== null}
-					<span class="flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium {emailSettings.rsvp_tracking ? 'bg-green-50 text-green-700' : 'bg-muted text-muted-foreground'}">
+					<span class="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium {emailSettings.rsvp_tracking ? 'bg-green-50 text-green-700' : 'bg-muted text-muted-foreground'}">
 						<span class="h-1.5 w-1.5 rounded-full {emailSettings.rsvp_tracking ? 'bg-green-500' : 'bg-muted-foreground/50'}"></span>
 						{emailSettings.rsvp_tracking ? 'On' : 'Off'}
 					</span>

@@ -540,7 +540,7 @@
 </script>
 
 {#snippet hostPickers(target: Target, idPrefix: string)}
-	<div class="grid grid-cols-2 gap-4">
+	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 		<div class="space-y-1.5">
 			<Label for="{idPrefix}-add-member">Add member</Label>
 			<Select.Root type="single" value="" onValueChange={(v) => addMember(target, v)}>
@@ -616,7 +616,7 @@
 		This event type is managed by its owner. Contact them to request changes.
 	{/if}
 </div>
-<div class="rounded-lg border bg-card p-6">
+<div class="rounded-lg border bg-card p-4 sm:p-6">
 	<dl class="grid grid-cols-[140px_1fr] gap-x-4 gap-y-3 text-sm">
 		<dt class="text-muted-foreground">Name</dt><dd class="font-medium">{et.name}</dd>
 		{#if et.description}<dt class="text-muted-foreground">Description</dt><dd class="whitespace-pre-line">{et.description}</dd>{/if}
@@ -656,8 +656,8 @@
 <!-- General Settings -->
 <div class="mb-8">
 	<h2 class="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">General</h2>
-	<div class="rounded-lg border bg-card p-6">
-		<div class="grid grid-cols-2 gap-4">
+	<div class="rounded-lg border bg-card p-4 sm:p-6">
+		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 			<div class="space-y-1.5">
 				<Label for="et-name">Name</Label>
 				<Input id="et-name" bind:value={form.name} />
@@ -667,7 +667,7 @@
 				<Input id="et-display-order" type="number" step="1" bind:value={form.display_order} />
 				<p class="text-xs text-muted-foreground">Orders this event on the public person and team pages only — not on the admin list or the booking page. Lower numbers come first; equal numbers sort by name.</p>
 			</div>
-			<div class="space-y-1.5 col-span-2">
+			<div class="space-y-1.5 sm:col-span-2">
 				<Label for="et-slug">Booking link</Label>
 				<div class="flex items-center gap-1.5">
 					<span class="text-sm text-muted-foreground whitespace-nowrap">/book/</span>
@@ -692,7 +692,7 @@
 					offer more start times, or higher to keep slots on the hour.
 				</p>
 			</div>
-			<div class="col-span-2 space-y-1.5">
+			<div class="sm:col-span-2 space-y-1.5">
 				<Label for="et-desc">Description</Label>
 				<Textarea id="et-desc" bind:value={form.description} placeholder="Optional — supports **bold** and *italic* markdown" rows={3} class="resize-y" />
 			</div>
@@ -750,7 +750,7 @@
                     <label class="flex items-center gap-3 text-sm"><input type="checkbox" bind:checked={inPersonVideo} /> Include the video link for in-person bookings</label>
                 {/if}
             </div>
-			<div class="grid grid-cols-2 gap-4">
+			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 				<div class="space-y-1.5">
 					<Label for="et-loc">Type</Label>
 					<Select.Root type="single" bind:value={form.location_type}>
@@ -820,7 +820,7 @@
 		<!-- Calendar invites -->
 		<div class="mt-6 border-t pt-5">
 			<p class="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Calendar invite</p>
-			<div class="grid grid-cols-2 gap-4">
+			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 				<div class="space-y-1.5">
 					<Label for="et-invite">Sent by</Label>
 					{#key inviteSelectReset}
@@ -871,7 +871,7 @@
 		<!-- Price -->
 		<div class="mt-6 border-t pt-5">
 			<p class="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Price</p>
-			<div class="grid grid-cols-2 gap-4">
+			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 				<div class="space-y-1.5">
 					<Label for="et-price">Amount</Label>
 					<Input id="et-price" type="number" min="0" step="0.01" bind:value={priceMajor} placeholder="0.00" />
@@ -890,7 +890,7 @@
 		<!-- Scheduling -->
 		<div class="mt-6 border-t pt-5">
 			<p class="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Scheduling</p>
-			<div class="grid grid-cols-2 gap-4">
+			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 				<div class="space-y-1.5">
 					<Label for="et-buf-before">Buffer before (min)</Label>
 					<Input id="et-buf-before" type="number" min="0" step="5" bind:value={form.buffer_before_minutes} />
@@ -902,7 +902,7 @@
 					<p class="text-xs text-muted-foreground">Blocked time after each meeting</p>
 				</div>
 				{#if allowInPerson}
-					<div class="col-span-2 space-y-3 rounded-md border p-3">
+					<div class="sm:col-span-2 space-y-3 rounded-md border p-3">
 						<p class="text-sm font-medium">In-person meetings</p>
 						<p class="text-xs text-muted-foreground">
 							Added to the basic buffers above, only when a guest chooses an in-person location.
@@ -928,7 +928,7 @@
 								{/if}
 							</p>
 						</div>
-						<div class="grid grid-cols-3 gap-3">
+						<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
 							<div class="space-y-1.5">
 								<Label for="et-ip-drive">{form.travel_mode === 'google' ? 'Fallback drive (min)' : 'Drive time (min)'}</Label>
 								<Input id="et-ip-drive" type="number" min="0" max="360" step="5" bind:value={form.fixed_drive_minutes} />
@@ -978,7 +978,7 @@
 {#if activeTab === 'hosts'}
 <div class="mb-8">
 	<h2 class="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Hosts</h2>
-	<div class="rounded-lg border bg-card p-6">
+	<div class="rounded-lg border bg-card p-4 sm:p-6">
 		<div>
 			<p class="-mt-1 mb-4 text-sm text-muted-foreground">Who can host this event, and how meetings are staffed.</p>
 
@@ -1132,7 +1132,7 @@
 <!-- Notifications -->
 <div class="mb-8">
 	<h2 class="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Notifications</h2>
-	<div class="rounded-lg border bg-card p-6 space-y-6">
+	<div class="rounded-lg border bg-card p-4 sm:p-6 space-y-6">
 
 		<!-- Reminders -->
 		<div>

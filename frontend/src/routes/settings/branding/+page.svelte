@@ -241,7 +241,7 @@
 	<p class="py-8 text-sm text-muted-foreground">Loading…</p>
 {:else}
 	<div class="max-w-2xl space-y-6">
-		<div class="rounded-lg border bg-card p-6">
+		<div class="rounded-lg border bg-card p-4 sm:p-6">
 			<h2 class="text-sm font-semibold">Branding</h2>
 			<p class="mt-0.5 text-xs text-muted-foreground">
 				Your logo appears at the top of booking confirmation emails and on your public booking and manage
@@ -352,7 +352,7 @@
 			</div>
 		</div>
 
-        <div class="rounded-lg border bg-card p-6">
+        <div class="rounded-lg border bg-card p-4 sm:p-6">
             <h2 class="text-sm font-semibold">Public page appearance</h2>
             <p class="mt-1 text-xs text-muted-foreground">The same interactive skin in a dark or light palette. Auto follows the visitor's device. Visitors can also change Appearance in the page header; their choice stays on that browser.</p>
             <div class="mt-4 space-y-2">
@@ -388,7 +388,7 @@
             </div>
             <p class="mt-3 text-xs text-muted-foreground">How see-through the panels on your booking, manage and directory pages are. Clear lets the moving background show through; Tinted makes the panels more solid and easier to read. Save to apply.</p>
         </div>
-        <div class="rounded-lg border bg-card p-6">
+        <div class="rounded-lg border bg-card p-4 sm:p-6">
             <h2 class="text-sm font-semibold">Available times</h2>
             <label class="mt-4 flex items-center justify-between gap-4 text-sm" for="group-times">
                 <span>Split times into Morning, Afternoon, and Evening</span>
@@ -396,7 +396,7 @@
             </label>
             <p class="mt-2 text-xs text-muted-foreground">Off shows all times for the day together in one scrollable panel. Applies to booking, rescheduling, and embedded booking pages. Save to apply.</p>
         </div>
-        <div class="rounded-lg border bg-card p-6">
+        <div class="rounded-lg border bg-card p-4 sm:p-6">
             <h2 class="text-sm font-semibold">A personal welcome</h2>
             <p class="mt-1 text-xs text-muted-foreground">Speak directly to the person booking with you. All copy below is plain text. Leave an eyebrow, message, or header note blank to hide it. Save applies your copy to every public page in this workspace.</p>
             {#each copyGroups as group}
@@ -415,7 +415,7 @@
             <Button type="button" variant="outline" size="sm" class="mt-4" onclick={() => { publicCopy = { ...defaultPublicCopy }; }}>Use the friendly defaults</Button>
             <p class="mt-2 text-xs text-muted-foreground">This resets the text above. Save to publish it. The calendar and reschedule/cancel controls handle the actions directly; redundant jump buttons are omitted.</p>
         </div>
-        <div class="rounded-lg border bg-card p-6">
+        <div class="rounded-lg border bg-card p-4 sm:p-6">
             <h2 class="text-sm font-semibold">A little whimsy</h2>
             <p class="mt-1 text-xs text-muted-foreground">A brief celebration after a successful booking, and a little farewell after cancellation. Effects appear on public pages, keep every button usable, and respect reduced motion.</p>
             <div class="mt-5 space-y-2">
@@ -438,7 +438,7 @@
             </div>
             <p class="mt-4 text-xs text-muted-foreground">Preview uses your current selection. Save to apply it for everyone. Animations are silent and finish within six seconds; email stays static.</p>
         </div>
-        <div class="rounded-lg border bg-card p-6">
+        <div class="rounded-lg border bg-card p-4 sm:p-6">
             <h2 class="text-sm font-semibold">Public attribution</h2>
             <label class="mt-4 flex items-center gap-3 text-sm" for="hide-attribution">
                 <input id="hide-attribution" type="checkbox" bind:checked={hideAttribution} />
@@ -446,7 +446,7 @@
             </label>
             <p class="mt-2 text-xs text-muted-foreground">Keeps your own legal links, language selector, and cookie controls available.</p>
         </div>
-		<div class="rounded-lg border bg-card p-6">
+		<div class="rounded-lg border bg-card p-4 sm:p-6">
 			<h2 class="text-sm font-semibold">Legal links</h2>
 			<p class="mt-0.5 text-xs text-muted-foreground">
 				Links to your own privacy policy and terms. They appear in your public booking page footer, and
@@ -467,7 +467,7 @@
 		</div>
 
 		{#if supportedLocales.length > 1}
-			<div class="rounded-lg border bg-card p-6">
+			<div class="rounded-lg border bg-card p-4 sm:p-6">
 				<h2 class="text-sm font-semibold">Language</h2>
 				<p class="mt-0.5 text-xs text-muted-foreground">
 					Your public booking pages and emails are translated per visitor — most see their

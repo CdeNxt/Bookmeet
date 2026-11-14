@@ -160,7 +160,7 @@
 	<p class="py-8 text-sm text-muted-foreground">Loading…</p>
 {:else}
 	<form onsubmit={(e) => { e.preventDefault(); save(); }} class="max-w-lg space-y-4">
-		<div class="rounded-lg border bg-card p-6">
+		<div class="rounded-lg border bg-card p-4 sm:p-6">
 			<h2 class="mb-4 text-sm font-semibold">Profile</h2>
 			<div class="space-y-4">
 				<div class="flex items-center gap-4">
@@ -238,7 +238,7 @@
 			</div>
 		</div>
 
-		<div class="rounded-lg border bg-card p-6">
+		<div class="rounded-lg border bg-card p-4 sm:p-6">
 			<h2 class="mb-4 text-sm font-semibold">Preferences</h2>
 			<div class="space-y-4">
 				<div class="space-y-1.5">

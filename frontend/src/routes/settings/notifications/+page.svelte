@@ -49,7 +49,7 @@
 	<p class="py-8 text-sm text-muted-foreground">Loading…</p>
 {:else}
 	<div class="max-w-lg space-y-4">
-		<div class="rounded-lg border bg-card p-6">
+		<div class="rounded-lg border bg-card p-4 sm:p-6">
 			<h2 class="mb-1 text-sm font-semibold">Notifications</h2>
 			<p class="mb-5 text-xs text-muted-foreground">Control which emails you and your attendees receive.</p>
 

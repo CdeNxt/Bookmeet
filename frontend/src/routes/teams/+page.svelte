@@ -158,7 +158,7 @@
 
 <svelte:head><title>Teams — Bookmeet</title></svelte:head>
 
-<div class="mb-8 flex items-center justify-between">
+<div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between md:mb-8">
 	<div>
 		<h1 class="text-2xl font-semibold tracking-tight">Teams</h1>
 		<p class="mt-1 text-sm text-muted-foreground">Group members for round-robin and group event types.</p>
@@ -167,7 +167,7 @@
 </div>
 
 {#if showCreate}
-	<div class="mb-6 rounded-lg border bg-card p-6">
+	<div class="mb-6 rounded-lg border bg-card p-4 sm:p-6">
 		<h2 class="mb-4 text-sm font-semibold">New team</h2>
 		<div class="flex items-end gap-3">
 			<div class="flex-1 space-y-1.5">
@@ -184,7 +184,7 @@
 {#if loading}
 	<p class="py-8 text-sm text-muted-foreground">Loading…</p>
 {:else if teams.length === 0}
-	<div class="rounded-lg border border-dashed bg-card p-12 text-center">
+	<div class="rounded-lg border border-dashed bg-card p-8 text-center sm:p-12">
 		<p class="text-sm font-medium">No teams yet</p>
 		<p class="mt-1 text-sm text-muted-foreground">Create a team to group members for round-robin or group scheduling.</p>
 	</div>

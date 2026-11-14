@@ -169,7 +169,7 @@
 
 <svelte:head><title>Webhooks — Bookmeet</title></svelte:head>
 
-<div class="mb-8 flex items-center justify-between">
+<div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between md:mb-8">
 	<div>
 		<h1 class="text-2xl font-semibold tracking-tight">Webhooks</h1>
 		<p class="mt-1 text-sm text-muted-foreground">Receive real-time notifications for booking events.</p>
@@ -180,7 +180,7 @@
 </div>
 
 {#if showCreate}
-	<div class="mb-6 rounded-lg border bg-card p-6">
+	<div class="mb-6 rounded-lg border bg-card p-4 sm:p-6">
 		<h2 class="mb-4 text-sm font-semibold">New webhook</h2>
 		{#if createError}<p class="mb-3 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{createError}</p>{/if}
 
@@ -214,7 +214,7 @@
 					<p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
 						{grp.group}{#if grp.pii}<span class="ml-1.5 font-normal normal-case text-amber-600">· personal data</span>{/if}
 					</p>
-					<div class="grid grid-cols-2 gap-x-4 gap-y-1">
+					<div class="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
 						{#each grp.fields as f}
 							<label class="flex cursor-pointer items-center gap-2 font-mono text-sm">
 								<Checkbox checked={form.fields.includes(f.key)} onCheckedChange={() => toggleField(f.key)} />
@@ -237,13 +237,13 @@
 {#if loading}
 	<p class="py-8 text-sm text-muted-foreground">Loading…</p>
 {:else if items.length === 0}
-	<div class="rounded-lg border border-dashed bg-card p-12 text-center">
+	<div class="rounded-lg border border-dashed bg-card p-8 text-center sm:p-12">
 		<p class="text-sm font-medium">No webhooks</p>
 		<p class="mt-1 text-sm text-muted-foreground">Add a webhook to receive real-time notifications for booking events.</p>
 	</div>
 {:else}
 	<div class="rounded-lg border bg-card overflow-hidden">
-		<table class="w-full text-sm">
+		<table class="table-stack w-full text-sm">
 			<thead>
 				<tr class="border-b">
 					<th class="px-4 pb-3 pt-3 text-left text-xs font-medium text-muted-foreground">URL</th>
@@ -259,7 +259,7 @@
 					{#each items as wh}
 						<tr class="transition-colors hover:bg-muted/30">
 							<td class="max-w-xs overflow-hidden text-ellipsis whitespace-nowrap px-4 py-3 font-mono text-xs">{wh.url}</td>
-							<td class="px-4 py-3 text-xs text-muted-foreground">{(wh.events ?? []).join(', ')}</td>
+							<td data-label="Events" class="px-4 py-3 text-xs text-muted-foreground">{(wh.events ?? []).join(', ')}</td>
 							<td class="px-4 py-3 text-xs text-muted-foreground">{(wh.fields ?? []).length} fields</td>
 							<td class="px-4 py-3">
 								{#if wh.is_active}
@@ -268,7 +268,7 @@
 									<Badge variant="secondary">Inactive</Badge>
 								{/if}
 							</td>
-							<td class="px-4 py-3 text-muted-foreground">{fmtDate(wh.created_at)}</td>
+							<td data-label="Created" class="px-4 py-3 text-muted-foreground">{fmtDate(wh.created_at)}</td>
 							<td class="px-4 py-3 text-right whitespace-nowrap">
 								<Tooltip.Root>
 									<Tooltip.Trigger class={buttonVariants({ variant: 'ghost', size: 'icon' })} onclick={() => toggleDeliveries(wh.id)}>
@@ -292,7 +292,7 @@
 									{:else if deliveries.length === 0}
 										<p class="text-xs text-muted-foreground">No deliveries yet for this webhook.</p>
 									{:else}
-										<table class="w-full text-xs">
+										<div class="overflow-x-auto"><table class="w-full min-w-[30rem] text-xs">
 											<thead>
 												<tr class="text-left text-muted-foreground">
 													<th class="py-1 pr-4 font-medium">Event</th>
@@ -315,7 +315,7 @@
 													</tr>
 												{/each}
 											</tbody>
-										</table>
+										</table></div>
 									{/if}
 								</td>
 							</tr>

@@ -144,14 +144,14 @@
 
 <svelte:head><title>Event Types — Bookmeet</title></svelte:head>
 
-<div class="mb-8 flex items-center justify-between">
+<div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between md:mb-8">
 	<div>
 		<h1 class="text-2xl font-semibold tracking-tight">Event Types</h1>
 		<p class="mt-1 text-sm text-muted-foreground">
 			{scope === 'all' ? 'Every event type in the workspace. As an admin you can edit any of them.' : 'Manage the types of meetings people can book with you.'}
 		</p>
 	</div>
-	<div class="flex shrink-0 items-center gap-2">
+	<div class="flex shrink-0 flex-wrap items-center gap-2">
 		{#if isAdmin}
 			<div class="inline-flex rounded-md border p-0.5">
 				<button
@@ -171,9 +171,9 @@
 </div>
 
 {#if showCreate}
-	<div class="mb-6 rounded-lg border bg-card p-6">
+	<div class="mb-6 rounded-lg border bg-card p-4 sm:p-6">
 		<h2 class="mb-4 text-sm font-semibold">New event type</h2>
-		<div class="mb-4 grid grid-cols-2 gap-4">
+		<div class="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
 			<div class="space-y-1.5">
 				<Label for="et-name">Name</Label>
 				<Input id="et-name" bind:value={form.name} placeholder="30-Minute Call" />
@@ -200,7 +200,7 @@
 {#if loading}
 	<p class="py-8 text-sm text-muted-foreground">Loading…</p>
 {:else if items.length === 0}
-	<div class="rounded-lg border border-dashed bg-card p-12 text-center">
+	<div class="rounded-lg border border-dashed bg-card p-8 text-center sm:p-12">
 		<p class="text-sm font-medium">No event types yet</p>
 		<p class="mt-1 text-sm text-muted-foreground">Create your first event type to start accepting bookings.</p>
 	</div>
@@ -210,12 +210,12 @@
 		<button type="button" class="rounded px-3 py-1 transition-colors {filter === 'archived' ? 'bg-muted font-medium' : 'text-muted-foreground hover:text-foreground'}" onclick={() => (filter = 'archived')}>Archived ({archivedCount})</button>
 	</div>
 	{#if visible.length === 0}
-		<div class="rounded-lg border border-dashed bg-card p-12 text-center">
+		<div class="rounded-lg border border-dashed bg-card p-8 text-center sm:p-12">
 			<p class="text-sm text-muted-foreground">No {filter === 'archived' ? 'archived' : 'active'} event types.</p>
 		</div>
 	{:else}
 	<div class="rounded-lg border bg-card overflow-hidden">
-		<table class="w-full text-sm">
+		<table class="table-stack w-full text-sm">
 			<thead>
 				<tr class="border-b">
 					<th class="px-4 pb-3 pt-3 text-left text-xs font-medium text-muted-foreground">Name</th>
@@ -238,9 +238,9 @@
 							</div>
 							<div class="text-xs text-muted-foreground">{et.slug}</div>
 						</td>
-						{#if scope === 'all'}<td class="px-4 py-3 text-muted-foreground">{ownerLabel(et)}</td>{/if}
-						<td class="px-4 py-3 text-muted-foreground">{et.duration_minutes} min</td>
-						<td class="px-4 py-3">
+						{#if scope === 'all'}<td data-label="Owner" class="px-4 py-3 text-muted-foreground">{ownerLabel(et)}</td>{/if}
+						<td data-label="Duration" class="px-4 py-3 text-muted-foreground">{et.duration_minutes} min</td>
+						<td data-label="Link" class="px-4 py-3">
 							<Tooltip.Provider>
 								<Tooltip.Root>
 									<Tooltip.Trigger
@@ -254,7 +254,7 @@
 								</Tooltip.Root>
 							</Tooltip.Provider>
 						</td>
-						<td class="px-4 py-3">
+						<td data-label="Active" class="px-4 py-3">
 							<Switch bind:checked={et.is_active} onCheckedChange={(v) => saveActive(et, v)} disabled={et.can_edit === false || et.archived} />
 						</td>
 						<td class="px-4 py-3">

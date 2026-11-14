@@ -246,7 +246,7 @@
 
 <svelte:head><title>Recordings — Bookmeet</title></svelte:head>
 
-<div class="mb-8 flex items-start justify-between gap-4">
+<div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 md:mb-8">
 	<div>
 		<h1 class="text-2xl font-semibold tracking-tight">Recordings</h1>
 		<p class="mt-1 text-sm text-muted-foreground">Meeting recordings captured from Bookmeet video calls. Files live in your storage bucket; links below are short-lived. Download filenames use the meeting's date in UTC.</p>

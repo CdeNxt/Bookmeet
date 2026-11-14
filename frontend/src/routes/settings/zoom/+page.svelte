@@ -46,7 +46,7 @@
 	<div class="max-w-lg space-y-4">
 
 		{#if !settings?.configured}
-		<div class="rounded-lg border bg-card p-6">
+		<div class="rounded-lg border bg-card p-4 sm:p-6">
 			<h2 class="mb-4 text-sm font-semibold">Setup instructions</h2>
 			<ol class="space-y-4 text-sm">
 				<li class="flex gap-3">
@@ -92,7 +92,7 @@
 		</div>
 		{/if}
 
-		<div class="rounded-lg border bg-card p-6">
+		<div class="rounded-lg border bg-card p-4 sm:p-6">
 			<div class="mb-4 flex items-start justify-between gap-2">
 				<div>
 					<h2 class="text-sm font-semibold">Zoom</h2>
@@ -102,7 +102,7 @@
 					</p>
 				</div>
 				{#if settings !== null}
-					<span class="flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium {settings.configured ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}">
+					<span class="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium {settings.configured ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}">
 						<span class="h-1.5 w-1.5 rounded-full {settings.configured ? 'bg-green-500' : 'bg-amber-400'}"></span>
 						{settings.configured ? 'Configured' : 'Not configured'}
 					</span>
