@@ -517,3 +517,42 @@ func TestMCPAssistant_askOwnerHandsASuggestedTimeToTheirTap(t *testing.T) {
 		t.Fatalf("%d bookings after Book anyway; want 1", n)
 	}
 }
+
+// In person, as on Telegram: the place is looked up, the owner picks one of the results, and
+// only a result can go on the link. An address the agent wrote itself is refused.
+func TestMCPAssistant_inPersonPlaceComesFromTheSearch(t *testing.T) {
+	f := newOwnerFixture(t)
+	if _, err := f.h.db.Exec(`UPDATE event_types SET allow_in_person = 1 WHERE id = ?`, f.etID); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BOOKMEET_GOOGLE_PLACES_KEY", "test-key")
+	old := searchPlaces
+	searchPlaces = func(context.Context, string, string) ([]string, error) {
+		return []string{"Equator Coffee, 100 Example Street, Mill Valley", "Equator Coffee, 220 Sample Avenue, Sausalito"}, nil
+	}
+	t.Cleanup(func() { searchPlaces = old })
+	cs := connectMCPInternal(t, f.h)
+
+	args := offerArgs(3, "09:00", "11:00")
+	args["place_query"] = "Equator Coffee"
+	var check mcpOfferCheck
+	if err := json.Unmarshal([]byte(callJSON(t, cs, "check_personal_link_offer", args)), &check); err != nil {
+		t.Fatal(err)
+	}
+	if check.CanCreate || len(check.PlaceOptions) != 2 || !strings.Contains(check.Advice, "place_options") {
+		t.Fatalf("check before picking a place = %+v", check)
+	}
+	args["place"] = "Equator Coffee, 1 Made Up Road"
+	if msg := toolError(t, cs, "create_personal_link", args); !strings.Contains(msg, "place_options") {
+		t.Errorf("a place the search did not return: %s", msg)
+	}
+	args["place"] = check.PlaceOptions[1]
+	var made createPersonalLinkOut
+	if err := json.Unmarshal([]byte(callJSON(t, cs, "create_personal_link", args)), &made); err != nil {
+		t.Fatal(err)
+	}
+	l, err := f.h.personalLinks().Get(context.Background(), f.userID, made.LinkID)
+	if err != nil || l.PlaceAddress != check.PlaceOptions[1] || l.PlaceName != "Equator Coffee" {
+		t.Fatalf("stored place = %q / %q (%v)", l.PlaceName, l.PlaceAddress, err)
+	}
+}

@@ -536,8 +536,11 @@ create or change a link), `mcp_assistant_book.go` (`book_for_guest`, `answer_gue
 - **What each app can draw is in `docs/agent-capabilities.md`.** Re-check it from current
   documentation when starting an assistant feature, and match Telegram's look as far as the
   app allows. Text must always work on its own.
-- Not built yet: in-person places for an agent-made link (`create_personal_link` makes one
-  without a confirmed address), a Bookmeet approval page so an owner without Telegram can
+- **In person:** the check looks `place_query` up (`searchPlaces`) and returns
+  `place_options`; create takes `place` only if it is one of them, exactly. The agent never
+  writes an address, the same rule as the Telegram model. No place key: taken as typed and
+  marked `place_unverified`, as on the panel.
+- Not built yet: a Bookmeet approval page so an owner without Telegram can
   approve an exception, and interactive cards (MCP Apps).
 - **The bot hears what the agent did** (`agentDid`): a link made or cancelled, a booking, an
   answer to a guest is sent to the owner on Telegram and written to the Telegram assistant's

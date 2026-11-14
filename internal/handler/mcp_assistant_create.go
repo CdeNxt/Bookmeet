@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -32,6 +33,8 @@ type mcpOfferIn struct {
 	EventType      string        `json:"event_type" jsonschema:"slug of one of the owner's meeting types (list_event_types)"`
 	Windows        []mcpWindowIn `json:"windows" jsonschema:"the times to offer, one entry per day and stretch. Different days can have different times. For one exact time, give a window exactly the meeting's length"`
 	ReplacesLinkID string        `json:"replaces_link_id,omitempty" jsonschema:"to change the offer on an existing link: its link_id. The old address stops working and the guest's email and phone carry over"`
+	PlaceQuery     string        `json:"place_query,omitempty" jsonschema:"for an in-person meeting: the place as the owner named it (\"Equator Coffee on Mission\"). The check looks it up and returns place_options"`
+	Place          string        `json:"place,omitempty" jsonschema:"for an in-person meeting: the option the owner picked, copied exactly from place_options. Never write an address yourself"`
 }
 
 type mcpWindowCheck struct {
@@ -44,14 +47,17 @@ type mcpWindowCheck struct {
 }
 
 type mcpOfferCheck struct {
-	OwnerTimezone string           `json:"owner_timezone"`
-	Today         string           `json:"today" jsonschema:"today's date in the owner's zone, YYYY-MM-DD"`
-	Meeting       string           `json:"meeting"`
-	Minutes       int              `json:"duration_minutes"`
-	Windows       []mcpWindowCheck `json:"windows"`
-	TimesOffered  int              `json:"times_offered" jsonschema:"start times offered across all windows"`
-	CanCreate     bool             `json:"can_create" jsonschema:"create_personal_link will accept this offer as it is"`
-	Advice        string           `json:"advice" jsonschema:"what to tell or ask the owner next"`
+	OwnerTimezone   string           `json:"owner_timezone"`
+	Today           string           `json:"today" jsonschema:"today's date in the owner's zone, YYYY-MM-DD"`
+	Meeting         string           `json:"meeting"`
+	Minutes         int              `json:"duration_minutes"`
+	Windows         []mcpWindowCheck `json:"windows"`
+	TimesOffered    int              `json:"times_offered" jsonschema:"start times offered across all windows"`
+	CanCreate       bool             `json:"can_create" jsonschema:"create_personal_link will accept this offer as it is"`
+	PlaceOptions    []string         `json:"place_options,omitempty" jsonschema:"places found for place_query; show them to the owner and pass the one they pick as place"`
+	Place           string           `json:"place,omitempty" jsonschema:"the confirmed place the link will carry"`
+	PlaceUnverified bool             `json:"place_unverified,omitempty" jsonschema:"this server has no place search, so the place is taken as typed and unchecked"`
+	Advice          string           `json:"advice" jsonschema:"what to tell or ask the owner next"`
 }
 
 // offerType is one of the owner's meeting types, as the Telegram assistant knows them.
@@ -131,7 +137,36 @@ func (h *Handler) checkOffer(ctx context.Context, o *mcpOwner, in mcpOfferIn) (*
 		windows[i] = personallink.Window{Start: w.start, End: w.end}
 	}
 
-	normal, exception, err := h.windowSlotCounts(ctx, et.Slug, o.zone(), windows, "")
+	// In person, as on the Telegram panel: the place is looked up, the owner picks one of
+	// the results, and the address always comes from the search, never from the model.
+	var placeOptions []string
+	place, placeUnverified := "", false
+	if q := strings.TrimSpace(in.PlaceQuery); q != "" {
+		if !et.AllowInPerson {
+			return nil, nil, nil, fmt.Errorf("the meeting type %q has no in-person option. Tell the owner, and ask whether they want a different meeting type", et.Name)
+		}
+		if key := strings.TrimSpace(os.Getenv("BOOKMEET_GOOGLE_PLACES_KEY")); key == "" {
+			place, placeUnverified = q, true
+		} else {
+			found, err := searchPlaces(ctx, key, q)
+			if err != nil {
+				h.logger.WarnContext(ctx, "mcp: place search", "error", err)
+			}
+			if len(found) > 5 {
+				found = found[:5]
+			}
+			placeOptions = found
+			for _, p := range found {
+				if p == strings.TrimSpace(in.Place) {
+					place = p
+				}
+			}
+		}
+	} else if strings.TrimSpace(in.Place) != "" {
+		return nil, nil, nil, fmt.Errorf("place must come from place_options: pass place_query as well, with the place as the owner named it")
+	}
+
+	normal, exception, err := h.windowSlotCounts(ctx, et.Slug, o.zone(), windows, place)
 	if err != nil {
 		if errors.Is(err, errCalendarUnavailable) {
 			return nil, nil, nil, fmt.Errorf("the owner's calendar could not be checked just now. Try again in a moment")
@@ -175,8 +210,11 @@ func (h *Handler) checkOffer(ctx context.Context, o *mcpOwner, in mcpOfferIn) (*
 		out.TimesOffered += offered
 		out.Windows = append(out.Windows, c)
 	}
-	// Like the Create tap: refused only when the link would offer nothing at all.
+	out.PlaceOptions, out.Place, out.PlaceUnverified = placeOptions, place, placeUnverified
+	// Like the Create tap: refused when the link would offer nothing at all, or when an
+	// in-person place has not been picked yet.
 	out.CanCreate = out.TimesOffered > 0
+	needsPlace := strings.TrimSpace(in.PlaceQuery) != "" && place == ""
 	hint := ""
 	for _, c := range out.Windows {
 		if c.NeedsApproval {
@@ -185,6 +223,12 @@ func (h *Handler) checkOffer(ctx context.Context, o *mcpOwner, in mcpOfferIn) (*
 		}
 	}
 	switch {
+	case needsPlace && len(placeOptions) == 0:
+		out.CanCreate = false
+		out.Advice = "No place was found for that place_query. Ask the owner to name it more fully (the business and the street or town)."
+	case needsPlace:
+		out.CanCreate = false
+		out.Advice = "Show the owner the place_options and ask which one; then pass it, copied exactly, as place."
 	case !out.CanCreate:
 		out.Advice = "Nothing in these windows can be offered: " + strings.Join(empty, "; ") + ". Ask the owner for other times." + hint
 	case len(empty) > 0:
@@ -259,8 +303,16 @@ func (h *Handler) mcpCreatePersonalLink(ctx context.Context, _ *mcp.CallToolRequ
 		return nil, createPersonalLinkOut{}, fmt.Errorf("no link was made. %s", check.Advice)
 	}
 
+	placeName, placeAddr := "", check.Place
+	if placeAddr != "" {
+		placeName = placeAddr
+		if i := strings.Index(placeAddr, ", "); i > 0 {
+			placeName = placeAddr[:i] // the same split the Telegram panel makes (placeParts)
+		}
+	}
 	params := personallink.CreateParams{
 		UserID: o.UserID, EventTypeID: et.ID, GuestName: name, GuestEmail: email, Topic: topic, Windows: windows,
+		PlaceName: placeName, PlaceAddress: placeAddr,
 		// The owner's setting, as on Telegram (createLink); not something the agent chose.
 		OutsideAvailability: h.assistantExceptions(ctx),
 	}
@@ -313,6 +365,7 @@ func (h *Handler) addAssistantCreateTools(s *mcp.Server) {
 		Description: "Make a single-use booking link for one named guest, limited to the windows given, and return its address and a message for the owner to send. " +
 			"Check the offer with check_personal_link_offer and confirm the days with the owner first. " +
 			"Refuses an offer with nothing in it. " +
+			"For an in-person meeting, pass place_query, show the owner the place_options the check returns, and pass the one they pick as place. " +
 			"To change an existing link's offer, pass replaces_link_id: the old address stops working. Never send the link to the guest yourself; the owner sends it.",
 		Annotations: toolWrites,
 	}, h.mcpCreatePersonalLink)
