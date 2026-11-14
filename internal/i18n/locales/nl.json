@@ -185,7 +185,7 @@
   "plink_times_intro": "%s kan op deze tijden. Komt er een uit?",
   "plink_times_again": "Deze tijden zijn vrij:",
   "plink_welcome_back": "Welkom terug. Deze tijden zijn vrij:",
-  "plink_times_head": "%[1]s · %[2]s · tijden in %[3]s",
+  "plink_times_head": "%[1]s · %[2]s · %[3]s",
   "plink_more_times": "Meer tijden",
   "plink_no_times": "Er zijn geen vrije tijden meer via deze link. %s neemt contact met je op.",
   "plink_confirm": "Bevestig je tijd",

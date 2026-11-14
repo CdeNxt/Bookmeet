@@ -371,9 +371,14 @@ section.
 - The module's switch governs links too: off, they stop opening.
 - **Not this page's job, and not a fourth calendar surface:** it has no month grid. Do not
   grow one here; the three calendar surfaces stay three.
-- **Wording is English only for now,** gathered in `plinkText` so moving it into the locale
-  files is one change. This is a public surface, so that move is owed before the feature
-  leaves staging. The page loads `/booking.css` (`.asst-*` and `.plink-*`) and the public skin.
+- **The guest's wording is translated; the owner's and the model's is not.** Everything the
+  guest reads comes from `plink_*` keys in the locale files through `plinkSession.t`, with
+  the locale's own day names and clock (`FormatDay`, `FormatTimeOfDay`), composed in Go as
+  everywhere else. The page is handed only the few labels it draws (`plinkPageKeys`).
+  Telegram messages to the owner and the model's prompt stay English (`whereIn(i18n.Default())`,
+  `plinkClock`, `zoneLabel`): do not route them through `t`. The guest's language is kept
+  on the link (`guest_locale`) for a card written when they are not there, and on the booking.
+  The page loads `/booking.css` (`.asst-*` and `.plink-*`) and the public skin.
 - Not built: intake questions asked in chat.
 
 ## Personal booking assistant: what the owner hears, and booking over a clash (Bookmeet)
@@ -445,6 +450,23 @@ default), and behind a tap each time. Off, the assistant only reports.
 - **Booking over another Bookmeet booking** needs `CreateParams.AllowOverlap`. Two bookings
   for one host still cannot start at the same instant (the unique index), and the owner is
   told when that is the reason.
+
+## Personal booking assistant: links that run out, and the admin list (Bookmeet)
+
+- **A link that runs out unused is announced to the owner once** (`sweepRanOut` →
+  `tellRanOut`, on the same one-minute sweep as the chats): which meeting, how far the guest
+  got, and a "New link" button. `MarkExpiryTold` is the once-only guard; it is taken before
+  the message is sent. A link that ran out more than three days ago is marked and never
+  announced, so connecting Telegram late does not bring a pile of old news. The button
+  (`l|n|<id>`) reopens the offer in the panel or asks for new times; it creates nothing.
+- **Admin → Personal links** (`personal_link_admin.go`, `frontend/src/routes/personal-links`)
+  is the same log, read-only apart from Cancel. The list never carries a token: the address
+  is fetched for one link on a click (`GET /v1/personal-links/{id}/url`) and only while the
+  link still works. Making and changing a link stays with the assistant, where the offer is
+  checked against the owner's availability first. The nav entry shows when the assistant is on.
+- **Limits:** the page 60 a minute and the chat 40 a minute per address, 80 typed messages
+  per link, and 20 held items per link (`personallink.MaxHeld`; past it the guest is told to
+  contact the owner). Details panels older than two weeks are deleted (`tidyDrafts`).
 
 ## Conventions
 

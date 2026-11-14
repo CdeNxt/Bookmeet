@@ -185,7 +185,7 @@
   "plink_times_intro": "%s tem estes horários disponíveis. Algum lhe serve?",
   "plink_times_again": "Estes horários estão disponíveis:",
   "plink_welcome_back": "Bem-vindo de volta. Estes horários estão disponíveis:",
-  "plink_times_head": "%[1]s · %[2]s · horários em %[3]s",
+  "plink_times_head": "%[1]s · %[2]s · %[3]s",
   "plink_more_times": "Mais horários",
   "plink_no_times": "Já não há horários disponíveis nesta ligação. %s entrará em contacto.",
   "plink_confirm": "Confirme o seu horário",

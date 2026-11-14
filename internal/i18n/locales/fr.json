@@ -185,7 +185,7 @@
   "plink_times_intro": "%s est disponible à ces horaires. L’un d’eux vous convient-il ?",
   "plink_times_again": "Ces horaires sont disponibles :",
   "plink_welcome_back": "Bon retour. Ces horaires sont disponibles :",
-  "plink_times_head": "%[1]s · %[2]s · horaires en %[3]s",
+  "plink_times_head": "%[1]s · %[2]s · %[3]s",
   "plink_more_times": "Plus d’horaires",
   "plink_no_times": "Il ne reste plus d’horaire disponible sur ce lien. %s vous recontactera.",
   "plink_confirm": "Confirmez votre horaire",

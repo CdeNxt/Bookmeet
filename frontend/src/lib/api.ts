@@ -263,6 +263,28 @@ export type AssistantSettings = {
 	link: { linked: boolean; telegram_name: string };
 };
 
+/** One personal booking link the assistant made for a named guest. */
+export type PersonalLink = {
+	id: string;
+	guest_name: string;
+	guest_email: string;
+	guest_phone: string;
+	event_type_name: string;
+	topic: string;
+	place: string;
+	windows: { start: string; end: string }[];
+	/** open, proposed, followup, booked, expired, cancelled or replaced. */
+	status: string;
+	/** the guest can still use it, so it can be copied and cancelled. */
+	active: boolean;
+	outside_availability: boolean;
+	booking_id?: string;
+	booked_start?: string;
+	last_opened_at?: string;
+	expires_at: string;
+	created_at: string;
+};
+
 export type LLMSettings = {
 	enabled: boolean;
 	endpoint: string;

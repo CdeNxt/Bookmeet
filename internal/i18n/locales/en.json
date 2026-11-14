@@ -192,7 +192,7 @@
   "plink_times_intro": "%s can do these times. Do any of them work?",
   "plink_times_again": "These times are open:",
   "plink_welcome_back": "Welcome back. These times are open:",
-  "plink_times_head": "%[1]s · %[2]s · times in %[3]s",
+  "plink_times_head": "%[1]s · %[2]s · %[3]s",
   "plink_more_times": "More times",
   "plink_no_times": "There are no open times left on this link. %s will be in touch.",
   "plink_confirm": "Confirm your time",

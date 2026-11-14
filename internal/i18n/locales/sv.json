@@ -185,7 +185,7 @@
   "plink_times_intro": "%s kan de här tiderna. Passar någon av dem?",
   "plink_times_again": "De här tiderna är lediga:",
   "plink_welcome_back": "Välkommen tillbaka. De här tiderna är lediga:",
-  "plink_times_head": "%[1]s · %[2]s · tider i %[3]s",
+  "plink_times_head": "%[1]s · %[2]s · %[3]s",
   "plink_more_times": "Fler tider",
   "plink_no_times": "Det finns inga lediga tider kvar på den här länken. %s hör av sig.",
   "plink_confirm": "Bekräfta din tid",

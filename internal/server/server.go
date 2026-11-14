@@ -433,6 +433,10 @@ func New(ctx context.Context, cfg *config.Config, db *sql.DB, logger *slog.Logge
 	mux.HandleFunc("PATCH /v1/settings/assistant", settingsRL(h.RequireAuth(h.PatchAssistantSettings)))
 	mux.HandleFunc("POST /v1/settings/assistant/telegram/link", settingsRL(h.RequireAuth(h.CreateTelegramLinkCode)))
 	mux.HandleFunc("DELETE /v1/settings/assistant/telegram/link", settingsRL(h.RequireAuth(h.DeleteTelegramLink)))
+	// The owner's personal links, for the admin app: look through, copy, cancel.
+	mux.HandleFunc("GET /v1/personal-links", h.RequireAuth(h.ListPersonalLinks))
+	mux.HandleFunc("GET /v1/personal-links/{id}/url", h.RequireAuth(h.GetPersonalLinkURL))
+	mux.HandleFunc("DELETE /v1/personal-links/{id}", h.RequireAuth(h.CancelPersonalLink))
 	// Telegram delivers the assistant bot's messages here. Public by necessity; the secret
 	// header Telegram was given at registration is what authenticates a delivery. All of
 	// Telegram's traffic comes from a handful of addresses, so the limit is per-source generous.

@@ -185,7 +185,7 @@
   "plink_times_intro": "%s kann zu diesen Zeiten. Passt eine davon?",
   "plink_times_again": "Diese Zeiten sind frei:",
   "plink_welcome_back": "Willkommen zurück. Diese Zeiten sind frei:",
-  "plink_times_head": "%[1]s · %[2]s · Zeiten in %[3]s",
+  "plink_times_head": "%[1]s · %[2]s · %[3]s",
   "plink_more_times": "Weitere Zeiten",
   "plink_no_times": "Über diesen Link sind keine freien Zeiten mehr verfügbar. %s meldet sich bei Ihnen.",
   "plink_confirm": "Zeit bestätigen",
