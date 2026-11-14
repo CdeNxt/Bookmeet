@@ -21,6 +21,10 @@ type Config struct {
 	// Empty means PublicBaseURL. Set it when that address sits behind a login Telegram cannot
 	// pass (TELEGRAM_WEBHOOK_BASE_URL).
 	TelegramWebhookBaseURL string
+	// TelegramAPIBaseURL replaces https://api.telegram.org as the address the bot's calls go
+	// to (TELEGRAM_API_BASE_URL). Empty in every real deployment. The local test lab
+	// (cmd/lab) sets it to its own stand-in, so the assistant can be driven with no Telegram.
+	TelegramAPIBaseURL string
 	LogLevel               slog.Level
 
 	// Email / SMTP
@@ -149,6 +153,7 @@ func Load() *Config {
 	// Unset → inherits BASE_URL, so single-domain deploys need only set BASE_URL.
 	cfg.PublicBaseURL = getEnv("PUBLIC_BASE_URL", cfg.BaseURL)
 	cfg.TelegramWebhookBaseURL = getEnv("TELEGRAM_WEBHOOK_BASE_URL", "")
+	cfg.TelegramAPIBaseURL = getEnv("TELEGRAM_API_BASE_URL", "")
 	cfg.LogLevel = parseLogLevel(getEnv("LOG_LEVEL", "info"))
 	cfg.CookieSecure = getBool("COOKIE_SECURE", strings.HasPrefix(cfg.BaseURL, "https://"))
 	cfg.DemoMode = getBool("DEMO_MODE", false)

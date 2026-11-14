@@ -89,6 +89,16 @@ func (h *Handler) SetTelegramWebhookBase(base string) {
 	h.telegramWebhookBase = strings.TrimRight(base, "/")
 }
 
+// SetTelegramAPIBase points the bot's calls at another address than api.telegram.org. It is
+// for the local test lab and tests; a real deployment leaves it unset.
+func (h *Handler) SetTelegramAPIBase(base string) {
+	h.telegramAPIBase = strings.TrimRight(base, "/")
+	h.telegramStandIn = h.telegramAPIBase != ""
+}
+
+// NewTelegramClient builds a client for a token, honouring SetTelegramAPIBase.
+func (h *Handler) NewTelegramClient(token string) *telegram.Client { return h.newTelegramClient(token) }
+
 // newTelegramClient builds a client for a token. Tests point it at a stand-in server.
 func (h *Handler) newTelegramClient(token string) *telegram.Client {
 	c := telegram.New(token)
@@ -262,7 +272,9 @@ func (h *Handler) connectTelegram(ctx context.Context, token string) error {
 		return &assistantSettingsError{"That doesn't look like a Telegram bot key. Copy the whole key BotFather gave you."}
 	}
 	hookURL := h.telegramWebhookURL()
-	if !strings.HasPrefix(hookURL, "https://") {
+	// Telegram itself only delivers to https. A stand-in for Telegram (the local test lab)
+	// delivers wherever it is told, so the rule is Telegram's, not the stand-in's.
+	if !strings.HasPrefix(hookURL, "https://") && !h.telegramStandIn {
 		return &assistantSettingsError{"Telegram can only deliver to a public https address, and this server's address is " + hookURL + "."}
 	}
 	bot := h.newTelegramClient(token)

@@ -19,7 +19,6 @@ import (
 	"github.com/calnode/calnode/internal/llm"
 	"github.com/calnode/calnode/internal/mailer"
 	"github.com/calnode/calnode/internal/secret"
-	"github.com/calnode/calnode/internal/telegram"
 
 	"github.com/calnode/calnode/internal/stripe"
 	"github.com/calnode/calnode/internal/webhook"
@@ -64,6 +63,10 @@ func BuildHandler(ctx context.Context, cfg *config.Config, db *sql.DB, logger *s
 	h.SetBaseURL(cfg.BaseURL)
 	h.SetPublicBaseURL(cfg.PublicBaseURL)
 	h.SetTelegramWebhookBase(cfg.TelegramWebhookBaseURL)
+	h.SetTelegramAPIBase(cfg.TelegramAPIBaseURL)
+	if cfg.TelegramAPIBaseURL != "" {
+		logger.Warn("Telegram calls go to a stand-in address, not Telegram (TELEGRAM_API_BASE_URL)", "address", cfg.TelegramAPIBaseURL)
+	}
 	// DATA_DIR, defaulting to the relative "data" every deployment has always used.
 	// The fallback is repeated here because tests build a Config literal that skips
 	// Load, and an empty dir would put uploads beside the binary.
@@ -239,7 +242,7 @@ func BuildHandler(ctx context.Context, cfg *config.Config, db *sql.DB, logger *s
 	if tg, err := handler.LoadTelegramFromDB(db, encKey); err != nil {
 		logger.Warn("telegram: could not load the bot connection", "error", err)
 	} else if tg != nil {
-		h.SetTelegram(telegram.New(tg.Token), tg.WebhookSecret)
+		h.SetTelegram(h.NewTelegramClient(tg.Token), tg.WebhookSecret)
 		logger.Info("Telegram bot connected", "bot", tg.Username)
 	}
 	// Tells owners when a guest's chat on a personal link has ended. It runs whether or not

@@ -48,6 +48,7 @@ type Handler struct {
 	telegramSecret      string           // the secret Telegram's deliveries must carry
 	telegramWebhookBase string           // optional override of the address Telegram delivers to
 	telegramAPIBase     string           // tests: a stand-in for api.telegram.org
+	telegramStandIn     bool             // the stand-in was set by configuration (the local test lab)
 	assistantInline     bool             // tests: run assistant work on the caller's goroutine
 	llmMu               sync.RWMutex
 	llm                 *llm.Client // nil when the optional LLM layer is off/unconfigured

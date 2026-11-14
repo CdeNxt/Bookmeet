@@ -73,3 +73,7 @@ __pycache__/
 /release/
 /packaging/home-assistant/calnode-bookmeet-arm64
 /packaging/home-assistant/invite-links.patch
+
+# Local test lab for the booking assistant (cmd/lab): its database, the model details
+# entered on the lab page, scenario files and run transcripts. Never shared.
+/.lab/

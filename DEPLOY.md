@@ -59,6 +59,7 @@ backup method. The email, calendar and other integration settings below still ap
 | `CALNODE_RECOVERY_SECRET` | recommended | — | Escrow secret so the data key can be recovered if the encryption key is rotated/lost. Store it somewhere separate. |
 | `BASE_URL` | **yes (prod)** | `http://localhost:3000` | Identity host — admin UI, OAuth callbacks, invite links. **Must include the scheme** (`https://booking.example.com`). The `https://` prefix flips the app into production mode (secure cookies, encryption-key enforcement). |
 | `PUBLIC_BASE_URL` | no | = `BASE_URL` | Booker-facing host for booking links/emails, if different from the identity host. |
+| `TELEGRAM_API_BASE_URL` | no | Telegram | Leave unset. The local test lab (`cmd/lab`) sets it to its stand-in for Telegram; with it set, the bot talks to that address instead of Telegram. |
 | `TELEGRAM_WEBHOOK_BASE_URL` | no | = `PUBLIC_BASE_URL` | Address Telegram delivers the booking assistant bot's messages to. Must be public https that needs no sign-in; set it when the public host sits behind a login (for example Cloudflare Access). |
 | `DATABASE_URL` | no | `sqlite://./data/calnode.db` | Point at the persistent volume, e.g. `sqlite:///data/calnode.db`. |
 | `PORT` | no | `3000` | The app listens on `$PORT`. Many platforms inject their own (Railway injects `8080`) — let them. |

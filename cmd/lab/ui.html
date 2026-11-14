@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bookmeet assistant lab</title>
+<style>
+:root { --bg:#f4f5f7; --panel:#fff; --ink:#15181d; --dim:#677080; --line:#dfe3e8; --accent:#3b6ef5; --bot:#eef1f5; --me:#d9e6ff; --ok:#177245; --bad:#b3261e; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#101216; --panel:#191c22; --ink:#e8eaee; --dim:#8b93a1; --line:#2a2f38; --accent:#7ea2ff; --bot:#232831; --me:#263a66; --ok:#5fd38d; --bad:#ff8a80; }
+}
+* { box-sizing: border-box; }
+body { margin:0; font:14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:var(--bg); color:var(--ink); height:100vh; display:flex; flex-direction:column; }
+header { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid var(--line); background:var(--panel); flex-wrap:wrap; }
+header h1 { font-size:15px; margin:0; }
+#status { color:var(--dim); flex:1; min-width:160px; }
+button, input, select, textarea { font:inherit; color:inherit; }
+button { border:1px solid var(--line); background:var(--panel); border-radius:7px; padding:6px 11px; cursor:pointer; }
+button:hover { border-color:var(--accent); }
+button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+button:disabled { opacity:.5; cursor:default; }
+input, select, textarea { border:1px solid var(--line); background:var(--bg); border-radius:7px; padding:6px 9px; width:100%; }
+main { flex:1; display:grid; grid-template-columns:minmax(320px, 440px) 1fr; min-height:0; }
+@media (max-width: 760px) { main { grid-template-columns:1fr; grid-auto-rows:minmax(320px, auto); } body { height:auto; } }
+section { display:flex; flex-direction:column; min-height:0; border-right:1px solid var(--line); }
+h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin:0; padding:10px 16px 6px; }
+#chat { flex:1; overflow-y:auto; padding:8px 16px; display:flex; flex-direction:column; gap:8px; }
+.msg { max-width:88%; padding:8px 11px; border-radius:12px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.msg.bot { background:var(--bot); align-self:flex-start; }
+.msg.owner { background:var(--me); align-self:flex-end; }
+a { color:var(--accent); }
+.keys { display:flex; flex-direction:column; gap:4px; margin-top:8px; }
+.keys .row { display:flex; gap:4px; }
+.keys button { flex:1; padding:5px 6px; font-size:13px; }
+.edited { color:var(--dim); font-size:11px; margin-top:3px; }
+#typing { color:var(--dim); padding:0 16px; height:20px; font-size:12px; }
+#notice { color:var(--accent); padding:0 16px; min-height:18px; font-size:12px; }
+form.say { display:flex; gap:8px; padding:10px 16px; border-top:1px solid var(--line); background:var(--panel); }
+.tabs { display:flex; gap:4px; padding:8px 16px 0; border-bottom:1px solid var(--line); background:var(--panel); flex-wrap:wrap; }
+.tabs button { border:none; border-bottom:2px solid transparent; border-radius:0; background:none; padding:7px 10px; color:var(--dim); }
+.tabs button.on { color:var(--ink); border-bottom-color:var(--accent); }
+.pane { flex:1; overflow-y:auto; padding:14px 16px; display:none; }
+.pane.on { display:block; }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:11px 13px; margin-bottom:10px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:8px; margin-bottom:8px; }
+label { display:block; font-size:12px; color:var(--dim); margin-bottom:3px; }
+.dim { color:var(--dim); }
+.bad { color:var(--bad); }
+.ok { color:var(--ok); }
+pre { white-space:pre-wrap; overflow-wrap:anywhere; background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:9px; margin:6px 0 0; font:12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; max-height:420px; overflow:auto; }
+details summary { cursor:pointer; }
+.tag { display:inline-block; font-size:11px; padding:1px 7px; border-radius:99px; border:1px solid var(--line); color:var(--dim); margin-right:6px; }
+.linkrow { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Bookmeet assistant lab</h1>
+  <span id="status">Starting…</span>
+  <a id="admin" target="_blank" rel="noopener">Open admin</a>
+  <button id="reset" title="Put the world back as it was when the lab started">Reset world</button>
+</header>
+<main>
+  <section>
+    <h2>Owner’s Telegram (stand-in)</h2>
+    <div id="chat"></div>
+    <div id="notice"></div>
+    <div id="typing"></div>
+    <form class="say" id="say">
+      <input id="text" placeholder="Message your assistant" autocomplete="off">
+      <button class="primary">Send</button>
+    </form>
+  </section>
+  <section style="border-right:none">
+    <div class="tabs" id="tabs">
+      <button data-pane="links" class="on">Guest links</button>
+      <button data-pane="calls">Model calls</button>
+      <button data-pane="runs">Scenarios</button>
+      <button data-pane="model">Model</button>
+      <button data-pane="about">About</button>
+    </div>
+    <div class="pane on" id="links">
+      <div id="problems"></div>
+      <div class="card">
+        <strong>Make a link for the guest’s side</strong>
+        <p class="dim" style="margin:4px 0 10px">Skips the owner’s assistant. Days are counted in weekdays from today, in the owner’s zone (Los Angeles); the owner works 9 to 5.</p>
+        <div class="grid">
+          <div><label>Guest</label><input id="lg" value="Bill Mathers"></div>
+          <div><label>Meeting type</label><select id="le"><option value="intro">Intro call (30 min)</option><option value="strategy">Strategy session (60 min)</option><option value="coffee">Coffee (45 min)</option></select></div>
+          <div><label>About</label><input id="lt" value="the contract"></div>
+          <div><label>Weekdays from today</label><input id="ld" type="number" value="2" min="1" max="20"></div>
+          <div><label>From</label><input id="ls" value="13:00"></div>
+          <div><label>To</label><input id="lz" value="15:00"></div>
+        </div>
+        <button id="mk">Make link</button> <span id="mkout" class="dim"></span>
+      </div>
+      <div id="linklist"></div>
+    </div>
+    <div class="pane" id="calls">
+      <p class="dim" style="margin-top:0">Every request the app made to the model, newest first, exactly as sent and answered. The model key is never recorded.</p>
+      <div id="calllist"></div>
+    </div>
+    <div class="pane" id="runs">
+      <div class="card">
+        <strong>Run scenarios</strong>
+        <p class="dim" style="margin:4px 0 10px">Each run resets the world first, so this chat and any links here are cleared. Files live in <code>.lab/scenarios/</code>.</p>
+        <div class="grid">
+          <div><label>Only those whose name contains</label><input id="only" placeholder="all"></div>
+          <div><label>Times each</label><input id="times" type="number" value="1" min="1" max="20"></div>
+        </div>
+        <button id="run" class="primary">Run</button>
+        <pre id="runout" hidden></pre>
+      </div>
+      <div class="card"><strong>Scenarios found</strong><div id="scenlist" class="dim"></div></div>
+    </div>
+    <div class="pane" id="model">
+      <div class="card">
+        <strong>AI model</strong>
+        <p class="dim" style="margin:4px 0 10px">Use the same address and model name as the live copy. The app is pointed at the lab, which passes every request on to this address and records it. The key is saved in <code>.lab/config.json</code> on this Mac only.</p>
+        <div class="grid">
+          <div><label>Address (OpenAI-compatible, ends in /v1)</label><input id="me" placeholder="https://api.example.com/v1"></div>
+          <div><label>Model name</label><input id="mm"></div>
+          <div><label>Key</label><input id="mk2" type="password" placeholder="leave blank to keep"></div>
+        </div>
+        <button id="msave" class="primary">Save and switch the assistant on</button> <span id="mout" class="dim"></span>
+      </div>
+    </div>
+    <div class="pane" id="about">
+      <div class="card">
+        <p style="margin-top:0">This is the real Bookmeet app built from this checkout, running on this Mac against a throwaway database. Only two things are stand-ins: Telegram (this page) and the route to the model (the lab passes it on and records it).</p>
+        <p><strong>The seeded world.</strong> Owner Jason Lab, Los Angeles time, weekdays 9 to 5. Meeting types: Intro call (30), Strategy session (60), Coffee (45, can be in person). Two bookings and one open link belong to other people; their names are markers, and a scenario fails if one ever reaches a guest’s page or the model on a guest’s behalf.</p>
+        <p><strong>Admin sign-in</strong> (new each time the lab starts): <span id="signin" class="dim"></span></p>
+        <p class="dim" style="margin-bottom:0">Not covered here: real Telegram delivery, Google Calendar and email. Use staging for those.</p>
+      </div>
+    </div>
+  </section>
+</main>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function post(path, body) {
+    return fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
+      .then(function (r) { return r.text().then(function (t) { if (!r.ok) throw new Error(t || r.status); return t ? JSON.parse(t) : {}; }); });
+  }
+  // Text with web addresses made clickable. Built from text nodes, never markup.
+  function linkify(parent, text) {
+    var re = /(https?:\/\/[^\s]+)/g, last = 0, m;
+    while ((m = re.exec(text))) {
+      parent.appendChild(document.createTextNode(text.slice(last, m.index)));
+      var a = el('a', null, m[1]); a.href = m[1]; a.target = '_blank'; a.rel = 'noopener';
+      parent.appendChild(a); last = m.index + m[1].length;
+    }
+    parent.appendChild(document.createTextNode(text.slice(last)));
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function (b) {
+    b.addEventListener('click', function () {
+      Array.prototype.forEach.call(document.querySelectorAll('#tabs button, .pane'), function (x) { x.classList.remove('on'); });
+      b.classList.add('on'); $(b.dataset.pane).classList.add('on');
+      if (b.dataset.pane === 'calls') loadCalls();
+    });
+  });
+
+  var version = -1, modelFilled = false, callsSeen = -1;
+  function drawChat(s) {
+    if (s.version === version) return;
+    version = s.version;
+    var box = $('chat'), stick = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+    box.textContent = '';
+    (s.chat || []).forEach(function (m) {
+      var d = el('div', 'msg ' + m.from);
+      linkify(d, m.text);
+      if (m.edited) d.appendChild(el('div', 'edited', 'edited'));
+      if (m.buttons && m.buttons.length) {
+        var keys = el('div', 'keys');
+        m.buttons.forEach(function (row) {
+          var r = el('div', 'row');
+          row.forEach(function (b) {
+            var k = el('button', null, b.text); k.type = 'button';
+            k.addEventListener('click', function () {
+              if (b.url) { window.open(b.url, '_blank', 'noopener'); return; }
+              post('/lab/api/tap', { message_id: m.id, data: b.data }).catch(function (e) { $('notice').textContent = e.message; });
+            });
+            r.appendChild(k);
+          });
+          keys.appendChild(r);
+        });
+        d.appendChild(keys);
+      }
+      box.appendChild(d);
+    });
+    if (stick) box.scrollTop = box.scrollHeight;
+  }
+
+  function poll() {
+    fetch('/lab/api/state').then(function (r) { return r.json(); }).then(function (s) {
+      $('status').textContent = s.status + (s.model.endpoint ? '  ·  model: ' + s.model.model : '  ·  no model set (see the Model tab)');
+      $('admin').href = s.sign_in.url;
+      $('signin').textContent = s.sign_in.email + ' / ' + s.sign_in.password;
+      $('typing').textContent = s.typing ? 'assistant is typing…' : '';
+      $('notice').textContent = s.notice || '';
+      drawChat(s);
+      var p = $('problems'); p.textContent = '';
+      (s.problems || []).forEach(function (x) { p.appendChild(el('div', 'card bad', x)); });
+      var ll = $('linklist'); ll.textContent = '';
+      (s.links || []).forEach(function (k) {
+        var row = el('div', 'card linkrow');
+        var left = el('div'); left.appendChild(el('strong', null, k.guest)); left.appendChild(el('span', 'dim', '  ' + k.status + (k.topic ? ' · ' + k.topic : '')));
+        row.appendChild(left);
+        if (k.url) { var a = el('a', null, 'Open guest page'); a.href = k.url; a.target = '_blank'; a.rel = 'noopener'; row.appendChild(a); }
+        ll.appendChild(row);
+      });
+      $('scenlist').textContent = s.scenario_error ? s.scenario_error : (s.scenarios || []).join('\n') || 'none';
+      $('scenlist').style.whiteSpace = 'pre-wrap';
+      if (!modelFilled) { modelFilled = true; $('me').value = s.model.endpoint || ''; $('mm').value = s.model.model || ''; if (s.model.key_set) $('mk2').placeholder = 'saved; leave blank to keep'; }
+      if (s.calls !== callsSeen && $('calls').classList.contains('on')) loadCalls();
+      callsSeen = s.calls;
+    }).catch(function () { $('status').textContent = 'The lab is not answering.'; });
+  }
+  setInterval(poll, 1000); poll();
+
+  function pretty(v) { try { return JSON.stringify(v, null, 2); } catch (e) { return String(v); } }
+  // One model call, laid out to be read: who was asking, the instructions, the turns, the tools on offer, the reply.
+  function loadCalls() {
+    fetch('/lab/api/calls?after=0').then(function (r) { return r.json(); }).then(function (d) {
+      var box = $('calllist'); box.textContent = '';
+      (d.calls || []).slice().reverse().forEach(function (c) {
+        var det = el('details', 'card');
+        var sum = el('summary');
+        sum.appendChild(el('span', 'tag', c.side));
+        var msgs = (c.request && c.request.messages) || [];
+        var lastUser = ''; msgs.forEach(function (m) { if (m.role === 'user' && typeof m.content === 'string') lastUser = m.content; });
+        sum.appendChild(document.createTextNode('#' + c.seq + '  ' + new Date(c.at).toLocaleTimeString() + '  ' + c.ms + ' ms  ' + (c.status === 200 ? '' : 'status ' + c.status + '  ') + lastUser.slice(0, 90)));
+        det.appendChild(sum);
+        msgs.forEach(function (m) {
+          det.appendChild(el('div', 'dim', m.role + (m.tool_calls ? ' (calls a tool)' : '')));
+          det.appendChild(el('pre', null, typeof m.content === 'string' && m.content ? m.content : pretty(m.tool_calls || m.content)));
+        });
+        if (c.request && c.request.tools) {
+          det.appendChild(el('div', 'dim', 'tools on offer'));
+          det.appendChild(el('pre', null, c.request.tools.map(function (t) { return t.function ? t.function.name : '?'; }).join(', ')));
+        }
+        det.appendChild(el('div', 'dim', 'reply'));
+        var reply = c.response && c.response.choices && c.response.choices[0] ? c.response.choices[0].message : c.response;
+        det.appendChild(el('pre', null, pretty(reply)));
+        box.appendChild(det);
+      });
+      if (!(d.calls || []).length) box.appendChild(el('p', 'dim', 'None yet.'));
+    });
+  }
+
+  $('say').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var t = $('text').value.trim(); if (!t) return;
+    $('text').value = '';
+    post('/lab/api/say', { text: t }).catch(function (err) { $('notice').textContent = err.message; });
+  });
+  $('reset').addEventListener('click', function () {
+    $('reset').disabled = true;
+    post('/lab/api/reset').catch(function (e) { alert(e.message); }).then(function () { $('reset').disabled = false; version = -1; });
+  });
+  $('mk').addEventListener('click', function () {
+    post('/lab/api/link', { guest: $('lg').value, event_type: $('le').value, topic: $('lt').value,
+      windows: [{ day: +$('ld').value, start: $('ls').value, end: $('lz').value }] })
+      .then(function (r) { $('mkout').textContent = ''; window.open(r.url, '_blank', 'noopener'); })
+      .catch(function (e) { $('mkout').textContent = e.message; });
+  });
+  $('msave').addEventListener('click', function () {
+    $('mout').textContent = 'Saving…'; $('msave').disabled = true;
+    post('/lab/api/model', { endpoint: $('me').value, model: $('mm').value, api_key: $('mk2').value })
+      .then(function () { $('mout').textContent = 'Saved.'; $('mk2').value = ''; $('mk2').placeholder = 'saved; leave blank to keep'; })
+      .catch(function (e) { $('mout').textContent = e.message; })
+      .then(function () { $('msave').disabled = false; });
+  });
+  $('run').addEventListener('click', function () {
+    var out = $('runout'); out.hidden = false; out.textContent = 'Running…\n'; $('run').disabled = true;
+    var q = '?n=' + encodeURIComponent($('times').value || 1) + ($('only').value.trim() ? '&only=' + encodeURIComponent($('only').value.trim()) : '');
+    fetch('/lab/api/run' + q, { method: 'POST' }).then(function (r) {
+      var reader = r.body.getReader(), dec = new TextDecoder(); out.textContent = '';
+      (function pump() { reader.read().then(function (x) { if (x.done) { $('run').disabled = false; version = -1; return; } out.textContent += dec.decode(x.value, { stream: true }); out.scrollTop = out.scrollHeight; pump(); }); })();
+    }).catch(function (e) { out.textContent = e.message; $('run').disabled = false; });
+  });
+})();
+</script>
+</body>
+</html>

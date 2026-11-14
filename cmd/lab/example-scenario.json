@@ -1,0 +1,26 @@
+[
+  {
+    "name": "guest-books-with-buttons-only",
+    "about": "The plain path, no typing beyond the email: details, pick the first time, confirm. Needs no model.",
+    "side": "guest",
+    "link": {
+      "guest": "Bill Mathers",
+      "topic": "the contract",
+      "event_type": "intro",
+      "windows": [{ "day": 2, "start": "13:00", "end": "15:00" }]
+    },
+    "timezone": "America/New_York",
+    "through_details": true,
+    "steps": [{ "pick": 0 }, { "confirm": true }],
+    "expect": { "bookings": 1, "stage": "booked" }
+  },
+  {
+    "name": "owner-asks-for-a-link-and-nothing-is-made-until-the-tap",
+    "about": "The owner describes a meeting. A panel appears; no link exists until Create is tapped.",
+    "side": "owner",
+    "steps": [
+      { "say": "Set up an intro call with Bill Mathers the day after tomorrow, between 1pm and 3pm. It's about the contract." }
+    ],
+    "expect": { "links_created": 0, "bookings": 0 }
+  }
+]
