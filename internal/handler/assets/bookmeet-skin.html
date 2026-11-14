@@ -24,15 +24,19 @@
 <style>
 html{background:#15161e;scroll-behavior:smooth;scroll-padding-top:28px;
  /* Liquid Glass. --bm-glass-t runs 0 (clear) to 1 (tinted); everything else derives from it. */
- --bm-glass-t:.5;--bm-glass-rgb:25 27 38;--bm-glass-a:calc(.26 + .66*var(--bm-glass-t));
- --bm-glass-filter:blur(26px) saturate(180%);--bm-glass-radius:26px;
+ --bm-glass-t:.5;--bm-glass-rgb:25 27 38;--bm-glass-a:calc(.02 + .88*var(--bm-glass-t));
+ /* The blur grows with the square of the level. The field behind is drawn in one-pixel
+    dots, which any real blur erases, so the clear end has to be almost sharp for the
+    animation to show through; the frosting arrives in the upper half of the slider. */
+ --bm-glass-blur:calc(var(--bm-glass-t)*var(--bm-glass-t)*26px);
+ --bm-glass-filter:blur(var(--bm-glass-blur)) saturate(180%);--bm-glass-radius:26px;
  --bm-glass-edge:#ffffff30;--bm-glass-sheen:linear-gradient(135deg,#ffffff24 0%,#ffffff08 34%,#ffffff00 60%,#ffffff12 100%);
  --bm-glass-shadow:0 24px 80px #00000052,0 2px 8px #0000002e,inset 0 1px 0 #ffffff4d,inset 0 -1px 0 #ffffff14,inset 1px 0 0 #ffffff12,inset -1px 0 0 #ffffff12;
  --bm-ease:cubic-bezier(.22,1,.36,1)}
-html[data-bm-theme="light"]{--bm-glass-rgb:255 255 255;--bm-glass-a:calc(.34 + .60*var(--bm-glass-t));
- --bm-glass-edge:#ffffffd9;--bm-glass-sheen:linear-gradient(135deg,#ffffffb3 0%,#ffffff33 34%,#ffffff00 60%,#ffffff59 100%);
+html[data-bm-theme="light"]{--bm-glass-rgb:255 255 255;--bm-glass-a:calc(.04 + .88*var(--bm-glass-t));
+ --bm-glass-edge:#ffffffd9;--bm-glass-sheen:linear-gradient(135deg,#ffffff66 0%,#ffffff1f 34%,#ffffff00 60%,#ffffff33 100%);
  --bm-glass-shadow:0 24px 70px #42456326,0 2px 8px #4245631a,inset 0 1px 0 #fff,inset 0 -1px 0 #ffffff80,inset 1px 0 0 #ffffff80,inset -1px 0 0 #ffffff80}
-@media(max-width:700px){html{--bm-glass-filter:blur(18px) saturate(170%);--bm-glass-radius:22px}}
+@media(max-width:700px){html{--bm-glass-blur:calc(var(--bm-glass-t)*var(--bm-glass-t)*18px);--bm-glass-radius:22px}}
 html body.bm-scene{color-scheme:dark;background:#15161e;color:#f2f2f7;padding:0 24px 36px;gap:0;min-height:100svh;overflow-x:hidden;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;--booking-accent:#5965e9!important;--booking-accent-text:#fff!important}
 .bm-scene #bm-field{position:fixed;inset:-20px;width:calc(100% + 40px);height:calc(100% + 40px);z-index:0;pointer-events:none;opacity:.82}
 @media(max-width:700px){.bm-scene #bm-field{height:calc(100lvh + 40px)}}
@@ -130,7 +134,7 @@ html body.bm-scene .card,html body.bm-scene .dir-card{position:relative;z-index:
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.bm-scene *{transition:none!important}}
 
 html[data-bm-theme="light"] body.bm-scene #bm-field{filter:invert(1)}
-.bm-nav-controls{display:flex;align-items:center;gap:22px}
+.bm-nav-controls{display:flex;align-items:center;gap:22px;margin-left:auto}
 .bm-theme-control{position:relative;display:inline-flex;align-items:center;flex-shrink:0;color:#d7dbef}
 .bm-theme-control select{appearance:none;-webkit-appearance:none;box-sizing:border-box;display:block;min-width:114px;height:42px;margin:0;font:inherit;font-size:12px;font-weight:500;line-height:20px;letter-spacing:.01em;color:inherit;background:#ffffff14;border:1px solid #ffffff2e;border-radius:999px;padding:10px 33px 10px 35px;cursor:pointer;box-shadow:inset 0 1px 0 #ffffff29;-webkit-backdrop-filter:blur(14px) saturate(170%);backdrop-filter:blur(14px) saturate(170%);transition:background .18s,border-color .18s}
 .bm-theme-control select:hover{background:#ffffff24;border-color:#ffffff4d}
@@ -373,8 +377,12 @@ html[data-bm-theme="light"] .bm-ver{color:#00000070}
   if(buildVersion&&buildVersion.slice(0,2)!=='__'){const ver=document.createElement('div');ver.className='bm-ver';ver.textContent=buildVersion;ver.setAttribute('aria-hidden','true');document.body.appendChild(ver)}
   let copy={};try{copy=JSON.parse(document.querySelector('meta[name="bookmeet-copy"]')?.content||'{}')}catch(_){}
   const text=key=>typeof copy[key]==='string'?copy[key]:'';
-  const header=document.querySelector('body > header');
-  if(header){
+  // The page only renders a header when the operator has set a logo or a business name.
+  // The Appearance control lives in it, so without one the visitor could not choose
+  // Light, Dark or Auto at all: make an empty header to hold the control.
+  let header=document.querySelector('body > header');
+  if(!header){header=document.createElement('header');document.body.prepend(header)}
+  {
    header.classList.add('bm-nav');
    const controls=document.createElement('div');controls.className='bm-nav-controls';
    if(text('nav_note')){const note=document.createElement('span');note.className='bm-nav-note';note.textContent=text('nav_note');controls.append(note)}

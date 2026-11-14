@@ -535,11 +535,11 @@
 	.glass-preview-bar { position: absolute; inset: 12px 12px auto; display: flex; gap: 8px; }
 	.glass-chip,
 	.glass-preview-panel {
-		background: linear-gradient(135deg, #ffffff38, #ffffff00 60%), rgb(25 27 38 / calc(0.26 + 0.66 * var(--t)));
+		background: linear-gradient(135deg, #ffffff38, #ffffff00 60%), rgb(25 27 38 / calc(0.02 + 0.88 * var(--t)));
 		border: 1px solid #ffffff40;
 		box-shadow: inset 0 1px 0 #ffffff59, 0 6px 20px #00000040;
-		-webkit-backdrop-filter: blur(10px) saturate(180%);
-		backdrop-filter: blur(10px) saturate(180%);
+		-webkit-backdrop-filter: blur(calc(var(--t) * var(--t) * 12px)) saturate(180%);
+		backdrop-filter: blur(calc(var(--t) * var(--t) * 12px)) saturate(180%);
 		color: #f2f3fb;
 	}
 	.glass-chip { display: inline-flex; align-items: center; height: 32px; border-radius: 999px; font-size: 12px; font-weight: 500; }
