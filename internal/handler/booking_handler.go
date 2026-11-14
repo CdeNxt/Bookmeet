@@ -585,6 +585,17 @@ type bookingExtras struct {
 	// Bookmeet booking in the way still refuses it. Only an owner's tap may set this; never
 	// a guest, a model or an agent.
 	OwnerApproved bool
+	// OutsideRules skips the owner's own rules - hours, minimum notice, how far ahead - and
+	// keeps the calendar check. It is what an exception on a personal link means: the owner
+	// offered times they do not normally take, and a time they are busy still does not book.
+	OutsideRules bool
+	// OverBookings lets the booking overlap another Bookmeet booking. Only with
+	// OwnerApproved, for a time the owner was shown the clash on and chose to book over.
+	OverBookings bool
+	// OwnerInvited marks a booking the owner asked for themselves: through a personal link
+	// they made for this guest, or by booking it directly. The limits that stop a guest
+	// booking too much for themselves do not apply to it.
+	OwnerInvited bool
 }
 
 // calendarClashError is errSlotUnavailable with one more fact for the program: the time
@@ -678,7 +689,7 @@ func (h *Handler) planBooking(ctx context.Context, slug string, startAt time.Tim
 	if len(candidates) == 0 {
 		return nil, none, errNoHostAvailable
 	}
-	if extras.OwnerApproved {
+	if extras.OwnerApproved || extras.OutsideRules {
 		// The owner's rules are theirs to waive for one meeting. A time already gone is not.
 		if !startAt.After(bookingNow()) {
 			return nil, none, errSlotUnavailable
@@ -717,7 +728,12 @@ func (h *Handler) planBooking(ctx context.Context, slug string, startAt time.Tim
 			return nil, none, err
 		}
 	}
+	maxActive, maxPerHour := et.MaxActiveBookings, maxBookingsPerEmailPerHour
+	if extras.OwnerInvited || extras.OwnerApproved {
+		maxActive, maxPerHour = 0, 0
+	}
 	return et, booking.CreateParams{
+		AllowOverlap:          extras.OwnerApproved && extras.OverBookings,
 		EventTypeID:           et.ID,
 		HostIDs:               candidates,
 		RoutingMode:           et.RoutingMode,
@@ -733,8 +749,8 @@ func (h *Handler) planBooking(ctx context.Context, slug string, startAt time.Tim
 		LocationType:          et.LocationType,
 		Organizer:             organizer,
 		Answers:               answers,
-		MaxActivePerInvitee:   et.MaxActiveBookings,
-		MaxBookingsPerHour:    maxBookingsPerEmailPerHour,
+		MaxActivePerInvitee:   maxActive,
+		MaxBookingsPerHour:    maxPerHour,
 		InviteDelivery:        et.InviteDelivery,
 	}, nil
 }

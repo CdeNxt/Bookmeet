@@ -86,6 +86,7 @@ type ownerEventType struct {
 	Minutes       int
 	LocationType  string
 	AllowInPerson bool
+	MaxFutureDays int // how far ahead the owner takes bookings; 0 = no limit
 }
 
 // draftWindow is one offered stretch, in the owner's own zone: a date and minutes after
@@ -121,6 +122,16 @@ type ownerDraft struct {
 	Place        string   `json:"place,omitempty"` // confirmed by the owner's tap
 	// PlaceUnverified marks a place taken as typed because this server has no place lookup.
 	PlaceUnverified bool `json:"place_unverified,omitempty"`
+
+	// Outside lists what the owner asked for that falls outside their own availability
+	// (their hours, or how far ahead they take bookings), in words for the panel. OutsideAll
+	// is true when nothing asked for is inside it. OutsideOK is the owner's tap allowing an
+	// exception for this one meeting. Busy lists what cannot be offered at all because the
+	// owner is already busy then.
+	Outside    []string `json:"outside,omitempty"`
+	OutsideAll bool     `json:"outside_all,omitempty"`
+	OutsideOK  bool     `json:"outside_ok,omitempty"`
+	Busy       []string `json:"busy,omitempty"`
 
 	ReplacesLinkID string `json:"replaces_link_id,omitempty"`
 	View           string `json:"view,omitempty"` // "", "type", "days", "times", "place"
@@ -169,10 +180,13 @@ type ownerSession struct {
 	prof   ownerProfile
 	types  []ownerEventType
 	now    time.Time
+	// exceptions: the owner lets the assistant make exceptions to their availability
+	// (Settings → AI). It still asks each time.
+	exceptions bool
 }
 
 func (h *Handler) newOwnerSession(ctx context.Context, bot *telegram.Client, userID string, chatID int64) (*ownerSession, error) {
-	s := &ownerSession{h: h, bot: bot, userID: userID, chatID: chatID, now: time.Now()}
+	s := &ownerSession{h: h, bot: bot, userID: userID, chatID: chatID, now: time.Now(), exceptions: h.assistantExceptions(ctx)}
 	var tz, timeFormat string
 	if err := h.db.QueryRowContext(ctx,
 		`SELECT name, iana_timezone, time_format FROM users WHERE id = ?`, userID).Scan(&s.prof.Name, &tz, &timeFormat); err != nil {
@@ -185,7 +199,7 @@ func (h *Handler) newOwnerSession(ctx context.Context, bot *telegram.Client, use
 	s.prof.Loc, s.prof.H24 = loc, timeFormat == "24h"
 
 	rows, err := h.db.QueryContext(ctx, `
-		SELECT id, slug, name, duration_minutes, location_type, allow_in_person
+		SELECT id, slug, name, duration_minutes, location_type, allow_in_person, max_future_days
 		FROM event_types WHERE user_id = ? AND is_active = 1 AND is_public = 1
 		ORDER BY name LIMIT 12`, userID)
 	if err != nil {
@@ -194,7 +208,7 @@ func (h *Handler) newOwnerSession(ctx context.Context, bot *telegram.Client, use
 	defer rows.Close()
 	for rows.Next() {
 		var et ownerEventType
-		if err := rows.Scan(&et.ID, &et.Slug, &et.Name, &et.Minutes, &et.LocationType, &et.AllowInPerson); err != nil {
+		if err := rows.Scan(&et.ID, &et.Slug, &et.Name, &et.Minutes, &et.LocationType, &et.AllowInPerson, &et.MaxFutureDays); err != nil {
 			return nil, err
 		}
 		s.types = append(s.types, et)
@@ -702,6 +716,7 @@ func (s *ownerSession) toolShowDetails(ctx context.Context, argsJSON string) str
 	if d.PlaceQuery != "" && d.Place == "" {
 		d.View = "place"
 	}
+	s.analyse(ctx, d)
 
 	if err := s.showPanel(ctx, d); err != nil {
 		s.h.logger.ErrorContext(ctx, "assistant: show panel", "error", err)
@@ -734,6 +749,82 @@ func (s *ownerSession) lookUpPlace(ctx context.Context, d *ownerDraft) {
 func (s *ownerSession) draftSummary(d *ownerDraft) string {
 	text, _ := s.renderPanel(d)
 	return text
+}
+
+// analyse checks what is on the panel against the owner's own availability and records what
+// falls outside it, so the panel can say so before anything is created. It reads the
+// calendar, so it runs when the times change, not on every redraw.
+func (s *ownerSession) analyse(ctx context.Context, d *ownerDraft) {
+	d.Outside, d.Busy, d.OutsideAll = nil, nil, false
+	et := s.typeByID(d.EventTypeID)
+	if et == nil {
+		return
+	}
+	_, place := s.placeParts(d)
+	clock := func(t time.Time) string { return s.clock(t.Hour()*60 + t.Minute()) }
+	if d.Direct {
+		start, ok := s.instant(d.BookDate, d.BookMinute)
+		if !ok {
+			return
+		}
+		v := s.h.timeVerdictFor(ctx, et.Slug, et.Minutes, start, place, s.userID)
+		when := s.day(d.BookDate) + " at " + s.clock(d.BookMinute)
+		if v.Outside {
+			d.Outside, d.OutsideAll = append(d.Outside, s.outsideReason(et, d.BookDate, when)), true
+		}
+		switch what := conflictsText(v, s.prof.Loc, clock); {
+		case v.Clash && what != "":
+			d.Busy = append(d.Busy, when+" clashes with "+what+".")
+		case v.Clash:
+			d.Busy = append(d.Busy, when+" clashes with something on your calendar.")
+		}
+	} else {
+		windows := make([]personallink.Window, 0, len(d.Windows))
+		for _, w := range d.Windows {
+			start, ok1 := s.instant(w.Date, w.Start)
+			end, ok2 := s.instant(w.Date, w.End)
+			if !ok1 || !ok2 {
+				return
+			}
+			windows = append(windows, personallink.Window{Start: start, End: end})
+		}
+		normal, exception, err := s.h.windowSlotCounts(ctx, et.Slug, s.prof.Loc.String(), windows, place)
+		if err != nil {
+			s.h.logger.WarnContext(ctx, "assistant: check availability", "error", err)
+			return
+		}
+		anyInside := false
+		for i, w := range d.Windows {
+			span := s.day(w.Date) + ", " + s.clock(w.Start) + " to " + s.clock(w.End)
+			switch {
+			case exception[i] == 0:
+				d.Busy = append(d.Busy, span+": you're busy the whole time, so nothing can be offered.")
+			case normal[i] == 0:
+				d.Outside = append(d.Outside, s.outsideReason(et, w.Date, span))
+			case normal[i] < exception[i]:
+				anyInside = true
+				d.Outside = append(d.Outside, span+": only part of this is inside the times you take meetings.")
+			default:
+				anyInside = true
+			}
+		}
+		d.OutsideAll = len(d.Outside) > 0 && !anyInside
+	}
+	if len(d.Outside) == 0 {
+		d.OutsideOK = false
+	}
+}
+
+// outsideReason says why a day or time is outside the owner's availability: too far ahead,
+// or outside their hours.
+func (s *ownerSession) outsideReason(et *ownerEventType, date, span string) string {
+	if et.MaxFutureDays > 0 {
+		horizon := s.now.In(s.prof.Loc).AddDate(0, 0, et.MaxFutureDays).Format("2006-01-02")
+		if date > horizon {
+			return fmt.Sprintf("%s is beyond the %d days ahead you take bookings.", span, et.MaxFutureDays)
+		}
+	}
+	return span + " is outside the times you take meetings."
 }
 
 // renderPanel is the panel as text plus its buttons, for whichever view is open.
@@ -785,6 +876,24 @@ func (s *ownerSession) renderPanel(d *ownerDraft) (string, telegram.Markup) {
 		}
 		last := d.Windows[len(d.Windows)-1]
 		fmt.Fprintf(&b, "Link: single use, expires %s %s", s.day(last.Date), s.clock(last.End))
+	}
+
+	if len(d.Outside)+len(d.Busy) > 0 {
+		b.WriteString("\n\nHeads up:")
+		for _, line := range append(append([]string{}, d.Outside...), d.Busy...) {
+			b.WriteString("\n- " + line)
+		}
+		switch {
+		case len(d.Outside) == 0:
+		case d.OutsideOK && d.Direct:
+			b.WriteString("\nAllowed: it will be booked outside your availability.")
+		case d.OutsideOK:
+			b.WriteString("\nAllowed: this link will offer those times anyway. Times you're busy are still left out.")
+		case !s.exceptions:
+			b.WriteString("\nExceptions to your availability are switched off in Settings → AI.")
+		default:
+			b.WriteString("\nTap Allow to make an exception for this one meeting.")
+		}
 	}
 
 	back := []telegram.Button{{Text: "Back", Data: cb("m")}}
@@ -856,6 +965,7 @@ func (s *ownerSession) renderPanel(d *ownerDraft) (string, telegram.Markup) {
 	var rows telegram.Markup
 	if d.Direct {
 		rows = append(rows, []telegram.Button{{Text: "Meeting type", Data: cb("ty")}})
+		rows = append(rows, s.allowRow(d, cb)...)
 		rows = append(rows, []telegram.Button{{Text: "Book it", Data: cb("go")}, {Text: "Discard", Data: cb("x")}})
 		return b.String(), rows
 	}
@@ -864,12 +974,26 @@ func (s *ownerSession) renderPanel(d *ownerDraft) (string, telegram.Markup) {
 	if et != nil && et.AllowInPerson && (d.PlaceQuery != "" || d.Place != "") {
 		rows = append(rows, []telegram.Button{{Text: "Place", Data: cb("pl")}})
 	}
+	rows = append(rows, s.allowRow(d, cb)...)
 	create := "Create link"
 	if d.ReplacesLinkID != "" {
 		create = "Create new link"
 	}
 	rows = append(rows, []telegram.Button{{Text: create, Data: cb("go")}, {Text: "Discard", Data: cb("x")}})
 	return b.String(), rows
+}
+
+// allowRow is the "Allow outside my availability" button: shown only when something on the
+// panel is outside it, and only when the owner has exceptions switched on.
+func (s *ownerSession) allowRow(d *ownerDraft, cb func(string) string) telegram.Markup {
+	if len(d.Outside) == 0 || !s.exceptions {
+		return nil
+	}
+	label := "Allow outside my availability"
+	if d.OutsideOK {
+		label = "✓ " + label
+	}
+	return telegram.Markup{{{Text: label, Data: cb("ex")}}}
 }
 
 // showPanel sends the panel as a new message at the bottom of the chat, retiring the buttons
@@ -976,7 +1100,13 @@ func (h *Handler) ownerHandleCallback(ctx context.Context, bot *telegram.Client,
 
 func (s *ownerSession) tapDraft(ctx context.Context, d *ownerDraft, op, arg string) string {
 	switch op {
+	case "ex":
+		if !s.exceptions {
+			return "Exceptions are switched off in Settings."
+		}
+		d.OutsideOK = !d.OutsideOK
 	case "m":
+		s.analyse(ctx, d) // the days may have changed
 		if d.PlaceQuery != "" && d.Place == "" {
 			d.View = "place"
 		} else {
@@ -1004,6 +1134,7 @@ func (s *ownerSession) tapDraft(ctx context.Context, d *ownerDraft, op, arg stri
 				d.Windows[i].End = d.Windows[i].Start + et.Minutes
 			}
 		}
+		s.analyse(ctx, d)
 		s.refreshPanel(ctx, d)
 		return notice
 	case "dy":
@@ -1059,6 +1190,7 @@ func (s *ownerSession) tapDraft(ctx context.Context, d *ownerDraft, op, arg stri
 			}
 		}
 		d.Windows, d.View = ws, ""
+		s.analyse(ctx, d)
 	case "pl":
 		if arg == "" {
 			d.View = "place"
@@ -1078,6 +1210,14 @@ func (s *ownerSession) tapDraft(ctx context.Context, d *ownerDraft, op, arg stri
 			d.View = "place"
 			s.refreshPanel(ctx, d)
 			return "Pick the place first."
+		}
+		// Nothing asked for is inside the owner's availability, and they have not allowed
+		// an exception: there would be nothing to offer, or nothing that books.
+		if d.OutsideAll && !d.OutsideOK {
+			if !s.exceptions {
+				return "That's outside your availability, and exceptions are switched off in Settings."
+			}
+			return "That's outside your availability. Tap Allow, or change the times."
 		}
 		if d.Direct {
 			return s.bookDirect(ctx, d)
@@ -1126,6 +1266,7 @@ func (s *ownerSession) createLink(ctx context.Context, d *ownerDraft) string {
 	params := personallink.CreateParams{
 		UserID: s.userID, EventTypeID: et.ID, GuestName: d.GuestName, GuestEmail: d.GuestEmail,
 		PlaceName: placeName, PlaceAddress: placeAddr, Topic: d.Topic, Windows: windows,
+		OutsideAvailability: d.OutsideOK && len(d.Outside) > 0 && s.exceptions,
 	}
 	links := s.h.personalLinks()
 	var l *personallink.Link
@@ -1192,7 +1333,7 @@ func (s *ownerSession) bookDirect(ctx context.Context, d *ownerDraft) string {
 	_, placeAddr := s.placeParts(d)
 	b, err := s.h.createBookingForSlugWith(ctx, et.Slug, start,
 		booking.Attendee{Name: d.GuestName, Email: d.GuestEmail, IANATimezone: s.prof.Loc.String()},
-		nil, bookingExtras{PhysicalLocation: placeAddr})
+		nil, bookingExtras{PhysicalLocation: placeAddr, OwnerInvited: true, OutsideRules: d.OutsideOK && len(d.Outside) > 0 && s.exceptions})
 	var answerErr *answerError
 	switch {
 	case errors.Is(err, errSlotUnavailable), errors.Is(err, booking.ErrDoubleBooked), errors.Is(err, errNoHostAvailable):
@@ -1391,6 +1532,11 @@ func (s *ownerSession) toolChangeLink(ctx context.Context, l *personallink.Link)
 		d.Windows = append(d.Windows, draftWindow{
 			Date: start.Format("2006-01-02"), Start: start.Hour()*60 + start.Minute(), End: end.Hour()*60 + end.Minute(),
 		})
+	}
+	d.OutsideOK = l.OutsideAvailability
+	s.analyse(ctx, d)
+	if l.OutsideAvailability && len(d.Outside) > 0 {
+		d.OutsideOK = true // analyse clears it only when nothing is outside any more
 	}
 	if len(d.Windows) == 0 {
 		return fmt.Sprintf("%s's old times have passed. Ask the owner which days and times to offer now, then call show_details with guest_name %q.", l.GuestName, l.GuestName)

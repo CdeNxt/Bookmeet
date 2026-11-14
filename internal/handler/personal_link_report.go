@@ -62,18 +62,28 @@ func (h *Handler) sweepChats(ctx context.Context) {
 	}
 }
 
-func verdictNote(v string) string {
-	switch v {
-	case timeClash:
-		return " · clashes with your calendar"
-	case timeOutside:
-		return " · outside your hours"
-	case timeTaken:
-		return " · taken by another booking"
-	case timeUnknown:
-		return " · calendar not checked"
+// conflictsText names what is in the way of a time, for the owner: “Dentist” (1:30 PM to
+// 2:30 PM). Empty when nothing could be named.
+func conflictsText(v timeVerdict, loc *time.Location, clock func(time.Time) string) string {
+	var parts []string
+	for i, c := range v.Conflicts {
+		if i == 3 {
+			parts = append(parts, "more")
+			break
+		}
+		parts = append(parts, fmt.Sprintf("“%s” (%s to %s)", c.Title, clock(c.Start.In(loc)), clock(c.End.In(loc))))
 	}
-	return ""
+	return strings.Join(parts, " and ")
+}
+
+// assistantExceptions reports whether the owner lets the assistant make exceptions to their
+// availability at all. On, it still asks each time; off, the option is never offered.
+func (h *Handler) assistantExceptions(ctx context.Context) bool {
+	var on int
+	if err := h.db.QueryRowContext(ctx, `SELECT assistant_exceptions FROM server_settings WHERE id = 1`).Scan(&on); err != nil {
+		return true
+	}
+	return on != 0
 }
 
 // reportChat sends the owner one message about a guest's chat that is over: which meeting it
@@ -158,6 +168,9 @@ func (h *Handler) reportChat(ctx context.Context, linkID string) {
 		}
 	}
 	var markup telegram.Markup
+	// named holds the lines that carry calendar titles. They go to the owner and nowhere
+	// else: not into the assistant's memory, which a model reads.
+	var named strings.Builder
 	ids := make([]int64, 0, len(fresh))
 	for _, item := range fresh {
 		ids = append(ids, item.ID)
@@ -172,8 +185,16 @@ func (h *Handler) reportChat(ctx context.Context, linkID string) {
 				continue
 			}
 			o := t.In(s.ownerLoc)
-			label := o.Format("Mon 2 Jan") + ", " + plinkClock(o) + " " + o.Format("MST") + verdictNote(h.suggestedTimeVerdict(ctx, l, t))
+			when := o.Format("Mon 2 Jan") + ", " + plinkClock(o) + " " + o.Format("MST")
+			v := h.suggestedTimeVerdict(ctx, l, t)
+			label := when + v.note()
+			if len(label) > 60 {
+				label = label[:57] + "…"
+			}
 			markup = append(markup, []telegram.Button{{Text: label, Data: fmt.Sprintf("h|%d|s|%d", suggestions.ID, i)}})
+			if what := conflictsText(v, s.ownerLoc, plinkClock); what != "" {
+				fmt.Fprintf(&named, "%s clashes with %s.\n", when, what)
+			}
 		}
 		markup = append(markup, []telegram.Button{{Text: "None of these", Data: fmt.Sprintf("h|%d|n", suggestions.ID)}})
 	}
@@ -197,7 +218,11 @@ func (h *Handler) reportChat(ctx context.Context, linkID string) {
 		}
 	}
 
-	messageID, err := bot.Send(ctx, chatID, strings.TrimRight(b.String(), "\n"), markup)
+	text := b.String()
+	if named.Len() > 0 {
+		text += "\n" + named.String()
+	}
+	messageID, err := bot.Send(ctx, chatID, strings.TrimRight(text, "\n"), markup)
 	if err != nil {
 		h.logger.WarnContext(ctx, "personal link report: send", "error", err)
 		return // not marked: the next sweep tries again
@@ -249,25 +274,40 @@ func (s *ownerSession) tapHeld(ctx context.Context, heldID int64, op, arg string
 			return ""
 		}
 		if op == "a" {
+			if !s.exceptions {
+				return "Exceptions are switched off in Settings."
+			}
 			return s.bookSuggested(ctx, held, l, start, true, messageID)
 		}
 		o := start.In(s.prof.Loc)
 		when := o.Format("Mon 2 Jan") + " at " + s.clock(o.Hour()*60+o.Minute())
-		var why string
-		switch s.h.suggestedTimeVerdict(ctx, l, start) {
-		case timeFree:
+		v := s.h.suggestedTimeVerdict(ctx, l, start)
+		if v.free() {
 			return s.bookSuggested(ctx, held, l, start, false, 0)
-		case timeTaken:
-			return "Another Bookmeet booking is at that time, so it can't be booked."
-		case timeClash:
-			why = "You already have something on your calendar on " + when + "."
-		case timeOutside:
-			why = when + " is outside the hours you take meetings."
-		default:
-			why = "Your calendar could not be checked for " + when + "."
 		}
-		_, err = s.bot.Send(ctx, s.chatID,
-			fmt.Sprintf("%s Book %s then anyway? Moving anything else is up to you.", why, first),
+		// Say everything that is in the way, by name where it can be named, and ask.
+		var why []string
+		if v.Outside {
+			why = append(why, when+" is outside the times you take meetings.")
+		}
+		clock := func(t time.Time) string { return s.clock(t.Hour()*60 + t.Minute()) }
+		switch what := conflictsText(v, s.prof.Loc, clock); {
+		case v.Clash && what != "":
+			why = append(why, "It clashes with "+what+".")
+		case v.Clash:
+			why = append(why, "It clashes with something on your calendar.")
+		case v.Unknown:
+			why = append(why, "Your calendar could not be checked for that time.")
+		}
+		if !s.exceptions {
+			s.say(ctx, strings.Join(why, " ")+" Exceptions to your availability are switched off in Settings → AI, so I can't book it.")
+			return ""
+		}
+		ask := fmt.Sprintf("Book %s then anyway?", first)
+		if v.Clash {
+			ask = fmt.Sprintf("Book %s over it anyway? Both stay on your calendar; moving the other one is up to you.", first)
+		}
+		_, err = s.bot.Send(ctx, s.chatID, strings.Join(why, " ")+" "+ask,
 			telegram.Markup{{
 				{Text: "Book anyway", Data: fmt.Sprintf("h|%d|a|%d", held.ID, i)},
 				{Text: "Leave it", Data: fmt.Sprintf("h|%d|b", held.ID)},
@@ -319,15 +359,27 @@ func (s *ownerSession) bookSuggested(ctx context.Context, held *personallink.Hel
 	case err == nil:
 	case errors.Is(err, personallink.ErrNotBookable):
 		return "That link has already been used or closed."
+	case errors.Is(err, booking.ErrDoubleBooked) && approved:
+		s.say(ctx, "Another Bookmeet booking starts at exactly that time, and two can't start at the same moment. Nothing was booked.")
+		return "Nothing booked."
 	case errors.Is(err, booking.ErrDoubleBooked):
 		return "Another booking has taken that time. Nothing was booked."
+	case errors.Is(err, booking.ErrBookingLimitReached):
+		s.say(ctx, "That guest has reached a booking limit on this meeting type. Nothing was booked.")
+		return "Nothing booked."
+	case errors.Is(err, errPaymentRequired):
+		s.say(ctx, "That meeting type takes payment, so it has to be booked on the booking page. Nothing was booked.")
+		return "Nothing booked."
+	case errors.Is(err, errCalendarUnavailable):
+		return "Your calendar could not be checked just now. Try again in a moment."
 	case errors.Is(err, errSlotUnavailable), errors.Is(err, errNoHostAvailable):
 		return "That time is no longer free. Nothing was booked."
 	case errors.As(err, &answerErr):
 		return "That meeting type has required questions, so it can't be booked from here."
 	default:
 		s.h.logger.ErrorContext(ctx, "assistant: book suggested time", "error", err)
-		return "The booking could not be made. Try again."
+		s.say(ctx, "The booking could not be made, and I don't have a clear reason. Nothing was booked. Try again in a moment.")
+		return "Nothing booked."
 	}
 	links := s.h.personalLinks()
 	_ = links.ResolveHeld(ctx, held.ID, "booked")

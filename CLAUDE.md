@@ -412,6 +412,40 @@ section.
 - **What the guest's note says is what they typed** (`lastText`), not the model's retelling.
 - A held item is answered once (`ResolveHeld`); a second tap is told so.
 
+## Personal booking assistant: exceptions to the owner's availability (Bookmeet)
+
+The owner can let one meeting go outside their own rules. Everything here is behind
+Settings → AI → "Allow exceptions to my availability" (`assistant_exceptions`, on by
+default), and behind a tap each time. Off, the assistant only reports.
+
+- **Three separate waivers, and only the owner sets any of them** (`bookingExtras`):
+  `OutsideRules` sets aside the owner's hours, minimum notice and booking horizon and KEEPS
+  the calendar check; `OwnerApproved` also books over what the calendar shows;
+  `OverBookings` (with `OwnerApproved`) lets it overlap another Bookmeet booking. Never set
+  one from a guest's action, a model's output or an agent's call.
+- **An exception on a link is `OutsideRules`, not more.** `personal_links.outside_availability`
+  makes `personalLinkSlots` ask the engine with `slotsWanted.OwnerException` (every hour of
+  every day, no notice, no horizon) and then narrows to the link's windows as always. A time
+  the owner is busy for is still left out and still does not book. No public or
+  agent-facing caller may set `OwnerException`.
+- **The panel checks before it creates** (`analyse`, via `windowSlotCounts`): for each window,
+  how many times the engine offers as things stand and how many with the rules set aside. It
+  says which windows are outside the owner's hours, beyond their booking horizon, or fully
+  busy. Nothing that is wholly outside is created without the Allow tap. `analyse` reads the
+  calendar, so it runs when the times change, not on every redraw.
+- **`OwnerInvited` lifts the per-guest booking limits** for a booking the owner asked for (a
+  personal link, a direct booking, an approved suggestion). Those limits stop guests
+  over-booking themselves; they were blocking the owner's own invitations.
+- **Conflicts are named for the owner only** (`timeVerdict.Conflicts`): another Bookmeet
+  booking by event type and guest, a calendar event by its title
+  (`calendar.BusyEventLister`, implemented for Google; other providers say "something on your
+  calendar"). A title is the only calendar content this program reads. It goes into the
+  owner's Telegram message and nowhere else: not the guest's chat, not a model's prompt, not
+  `assistant_messages` (`reportChat` keeps the named lines out of what it remembers).
+- **Booking over another Bookmeet booking** needs `CreateParams.AllowOverlap`. Two bookings
+  for one host still cannot start at the same instant (the unique index), and the owner is
+  told when that is the reason.
+
 ## Conventions
 
 - `pnpm` (not npm). Use `pnpm exec <tool>` for local binaries.

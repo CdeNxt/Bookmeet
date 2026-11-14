@@ -49,6 +49,17 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (*Booking, error) 
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
+	// overlaps is the double-booking guard. AllowOverlap turns it off for the one case that
+	// is meant to overlap: the owner looked at what is already there and chose to book over
+	// it. (The unique index on a host's start time still refuses two bookings that start at
+	// the same instant.)
+	overlaps := func(hostID string) (bool, error) {
+		if p.AllowOverlap {
+			return false, nil
+		}
+		return hostBusy(ctx, tx, hostID, busyStart, busyEnd, "")
+	}
+
 	// Select hosts. Round-robin picks one *free* candidate from the rotation pool
 	// per p.RRStrategy (free candidates stay in priority order). Any
 	// other mode requires every HostID free and all of them attend (Normal = one
@@ -59,7 +70,7 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (*Booking, error) 
 	if p.RoutingMode == "round_robin" {
 		// Fixed hosts always attend — all must be free.
 		for _, hostID := range p.RequiredHosts {
-			busy, err := hostBusy(ctx, tx, hostID, busyStart, busyEnd, "")
+			busy, err := overlaps(hostID)
 			if err != nil {
 				return nil, fmt.Errorf("booking: overlap check: %w", err)
 			}
@@ -71,7 +82,7 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (*Booking, error) 
 		// Rotation pool — pick exactly one free host by strategy.
 		var free []string
 		for _, hostID := range p.HostIDs {
-			busy, err := hostBusy(ctx, tx, hostID, busyStart, busyEnd, "")
+			busy, err := overlaps(hostID)
 			if err != nil {
 				return nil, fmt.Errorf("booking: overlap check: %w", err)
 			}
@@ -90,7 +101,7 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (*Booking, error) 
 		assigned = append(assigned, chosen)
 	} else {
 		for _, hostID := range p.HostIDs {
-			busy, err := hostBusy(ctx, tx, hostID, busyStart, busyEnd, "")
+			busy, err := overlaps(hostID)
 			if err != nil {
 				return nil, fmt.Errorf("booking: overlap check: %w", err)
 			}
@@ -107,7 +118,7 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (*Booking, error) 
 		if slices.Contains(assigned, hostID) {
 			continue
 		}
-		busy, err := hostBusy(ctx, tx, hostID, busyStart, busyEnd, "")
+		busy, err := overlaps(hostID)
 		if err != nil {
 			return nil, fmt.Errorf("booking: optional overlap check: %w", err)
 		}
@@ -369,6 +380,56 @@ func hostBusy(ctx context.Context, tx *sql.Tx, hostID, start, end, excludeBookin
 		          ELSE julianday(b.end_at, printf('+%d minutes', b.reserved_after_minutes)) END) > julianday(?)`,
 		hostID, hostID, excludeBookingID, end, start).Scan(&n)
 	return n > 0, err
+}
+
+// Overlap is another booking that covers some of a time.
+type Overlap struct {
+	BookingID     string
+	EventTypeName string
+	GuestName     string
+	StartAt       time.Time
+	EndAt         time.Time
+}
+
+// Overlapping returns the bookings any of the hosts already has between startAt and endAt,
+// so the host can be told what they would be booking over.
+func (s *Service) Overlapping(ctx context.Context, hostIDs []string, startAt, endAt time.Time) ([]Overlap, error) {
+	var out []Overlap
+	seen := map[string]bool{}
+	for _, hostID := range hostIDs {
+		rows, err := s.db.QueryContext(ctx, `
+			SELECT b.id, et.name, COALESCE((SELECT a.name FROM booking_attendees a WHERE a.booking_id = b.id AND a.is_organizer = 1 LIMIT 1), ''),
+			       b.start_at, b.end_at
+			FROM bookings b
+			JOIN booking_hosts bh ON bh.booking_id = b.id
+			JOIN event_types et ON et.id = b.event_type_id
+			WHERE bh.user_id = ? AND b.status != 'cancelled'
+			  AND julianday(b.start_at) < julianday(?) AND julianday(b.end_at) > julianday(?)
+			ORDER BY b.start_at`,
+			hostID, endAt.UTC().Format(time.RFC3339Nano), startAt.UTC().Format(time.RFC3339Nano))
+		if err != nil {
+			return nil, fmt.Errorf("booking: overlapping: %w", err)
+		}
+		for rows.Next() {
+			var o Overlap
+			var start, end string
+			if err := rows.Scan(&o.BookingID, &o.EventTypeName, &o.GuestName, &start, &end); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("booking: overlapping: %w", err)
+			}
+			o.StartAt, _ = time.Parse(time.RFC3339Nano, start)
+			o.EndAt, _ = time.Parse(time.RFC3339Nano, end)
+			if !seen[o.BookingID] {
+				seen[o.BookingID] = true
+				out = append(out, o)
+			}
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, fmt.Errorf("booking: overlapping: %w", err)
+		}
+	}
+	return out, nil
 }
 
 // HostsBusy reports whether any of the hosts already has a booking that overlaps the time,

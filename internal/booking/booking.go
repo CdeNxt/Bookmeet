@@ -123,4 +123,7 @@ type CreateParams struct {
 	// Stored on the booking so its reschedule and cancel follow the mode it was created
 	// with, not whatever the event type is set to by then.
 	InviteDelivery string
+	// AllowOverlap books even though a host already has a booking in the way. Only for a
+	// time the owner chose to book over, having been shown what is there.
+	AllowOverlap bool
 }

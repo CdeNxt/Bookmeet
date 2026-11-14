@@ -24,7 +24,16 @@ import (
 type inviteProvider struct {
 	mu      sync.Mutex
 	created []calendar.CreateEventParams
-	busy    []slots.Interval // what the host's calendar shows as taken; empty = free
+	busy    []slots.Interval     // what the host's calendar shows as taken; empty = free
+	titled  []calendar.BusyEvent // the same busy times, with names
+}
+
+// BusyEvents names what is on the host's calendar, for the tests that check the owner is
+// told what they would be booking over.
+func (p *inviteProvider) BusyEvents(context.Context, string, time.Time, time.Time) ([]calendar.BusyEvent, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.titled, nil
 }
 
 func (p *inviteProvider) Name() string                                           { return "google" }

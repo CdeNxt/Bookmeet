@@ -147,9 +147,10 @@ func (h *Handler) GetAssistantSettings(w http.ResponseWriter, r *http.Request) {
 		h.logger.ErrorContext(r.Context(), "assistant settings: link", "error", err)
 	}
 	h.writeJSON(w, http.StatusOK, map[string]any{
-		"enabled":   enabled != 0,
-		"active":    h.assistantActive(r.Context()),
-		"ai_active": h.getLLM() != nil,
+		"enabled":    enabled != 0,
+		"exceptions": h.assistantExceptions(r.Context()),
+		"active":     h.assistantActive(r.Context()),
+		"ai_active":  h.getLLM() != nil,
 		"telegram": map[string]any{
 			"configured":   tokenEnc != "",
 			"bot_username": username,
@@ -178,6 +179,8 @@ func (h *Handler) PatchAssistantSettings(w http.ResponseWriter, r *http.Request)
 	var req struct {
 		Enabled          *bool   `json:"enabled"`
 		TelegramBotToken *string `json:"telegram_bot_token"`
+		// Exceptions: may the assistant offer to go outside the owner's availability.
+		Exceptions *bool `json:"exceptions"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid JSON")
@@ -200,6 +203,19 @@ func (h *Handler) PatchAssistantSettings(w http.ResponseWriter, r *http.Request)
 		}
 		if err != nil {
 			h.logger.ErrorContext(ctx, "assistant settings: telegram", "error", err)
+			h.writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+	}
+
+	if req.Exceptions != nil {
+		v := 0
+		if *req.Exceptions {
+			v = 1
+		}
+		if _, err := h.db.ExecContext(ctx,
+			`UPDATE server_settings SET assistant_exceptions = ?, updated_at = datetime('now') WHERE id = 1`, v); err != nil {
+			h.logger.ErrorContext(ctx, "assistant settings: save exceptions", "error", err)
 			h.writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
