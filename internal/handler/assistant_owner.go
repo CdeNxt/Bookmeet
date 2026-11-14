@@ -926,7 +926,7 @@ func (s *ownerSession) renderPanel(d *ownerDraft) (string, telegram.Markup) {
 		case d.OutsideOK:
 			b.WriteString("\nAllowed: this link will offer those times anyway. Times you're busy are still left out.")
 		case !s.exceptions:
-			b.WriteString("\nExceptions to your availability are switched off in Settings → AI.")
+			b.WriteString("\n" + exceptionsOffHint)
 		default:
 			b.WriteString("\nTap Allow to make an exception for this one meeting.")
 		}
@@ -1018,6 +1018,11 @@ func (s *ownerSession) renderPanel(d *ownerDraft) (string, telegram.Markup) {
 	rows = append(rows, []telegram.Button{{Text: create, Data: cb("go")}, {Text: "Discard", Data: cb("x")}})
 	return b.String(), rows
 }
+
+// exceptionsOffHint tells the owner the one switch that lets a link offer times outside their
+// usual availability. It is said wherever that switch is what stops a meeting being booked,
+// so the owner learns it before a guest meets a link with nothing on it.
+const exceptionsOffHint = "These times are not offered while exceptions are off. To offer them, turn on \"Allow exceptions to my availability\" in Settings → AI, then tap the button again. Links you have already sent pick it up too."
 
 // allowRow is the "Allow outside my availability" button: shown only when something on the
 // panel is outside it, and only when the owner has exceptions switched on.
@@ -1253,7 +1258,8 @@ func (s *ownerSession) tapDraft(ctx context.Context, d *ownerDraft, op, arg stri
 		// an exception: there would be nothing to offer, or nothing that books.
 		if d.OutsideAll && !d.OutsideOK {
 			if !s.exceptions {
-				return "That's outside your availability, and exceptions are switched off in Settings."
+				s.say(ctx, "Nothing was made: those times are outside your availability, so the link would offer nothing. "+exceptionsOffHint)
+				return "Outside your availability. No link made."
 			}
 			return "That's outside your availability. Tap Allow, or change the times."
 		}
@@ -1266,6 +1272,12 @@ func (s *ownerSession) tapDraft(ctx context.Context, d *ownerDraft, op, arg stri
 		case !d.Checked:
 			s.refreshPanel(ctx, d)
 			return "Your calendar could not be checked just now, so no link was made. Try again in a moment."
+		case d.Offerable == 0 && !s.exceptions && len(d.Outside) > 0:
+			// The setting is what stands in the way, not the calendar: say so now, before a
+			// guest is sent a link that shows them nothing.
+			s.refreshPanel(ctx, d)
+			s.say(ctx, "Nothing was made: those times are outside your availability, so the link would offer nothing. "+exceptionsOffHint)
+			return "Outside your availability. No link made."
 		case d.Offerable == 0:
 			s.refreshPanel(ctx, d)
 			s.say(ctx, "Nothing on that panel can be offered: you're busy for all of it. Change the days or times, and I'll make the link.")

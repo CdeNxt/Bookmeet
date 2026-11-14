@@ -161,8 +161,9 @@ func TestOwnerAssistant_withExceptionsOffItOnlyReports(t *testing.T) {
 	}
 	f.closeDay(t, 3)
 	panel := f.askFor(t, 3, "09:00", "11:00")
-	if !strings.Contains(panel, "Exceptions to your availability are switched off") {
-		t.Fatalf("panel:\n%s", panel)
+	// The owner learns, before any guest could, which switch would let these times be offered.
+	if !strings.Contains(panel, `turn on "Allow exceptions to my availability" in Settings → AI`) {
+		t.Fatalf("the panel does not say which setting to turn on:\n%s", panel)
 	}
 	if _, ok := f.buttons()["Allow outside my availability"]; ok {
 		t.Fatal("an Allow button is offered with exceptions off")
@@ -170,6 +171,38 @@ func TestOwnerAssistant_withExceptionsOffItOnlyReports(t *testing.T) {
 	f.tap(t, "Create link")
 	if n := len(f.links(t)); n != 0 {
 		t.Fatalf("%d links created with exceptions off", n)
+	}
+	if !f.anyText(`Nothing was made: those times are outside your availability`) || !f.anyText("Settings → AI") {
+		t.Errorf("the refusal did not name the setting: %v", f.texts())
+	}
+}
+
+// A link made while exceptions were off offers only the owner's usual hours. Turning the
+// setting on is enough: the same link, already sent, offers its whole window.
+func TestPersonalLink_turningExceptionsOnFixesALinkAlreadySent(t *testing.T) {
+	f := newChatFixture(t)
+	if rec := f.patch(t, `{"exceptions":false}`); rec.Code != http.StatusOK {
+		t.Fatal(rec.Body.String())
+	}
+	weekday := int(f.day.Weekday())
+	if _, err := f.h.db.Exec(`DELETE FROM availability_rules WHERE day_of_week = ?`, weekday); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := f.h.personalLinkSlots(context.Background(), f.link, "UTC"); err != nil || len(res.Slots) != 0 {
+		t.Fatalf("with exceptions off the link offers %d times (err %v); want none on a closed day", len(res.Slots), err)
+	}
+	// Found empty, the owner is told why and which switch fixes it.
+	before := f.ownerMessages()
+	f.h.sweepEmptyLinks(context.Background())
+	told := f.tg.sent(ownerChat)
+	if len(told) != before+1 || !strings.Contains(told[len(told)-1], `Turn on "Allow exceptions to my availability" in Settings → AI`) {
+		t.Fatalf("the owner was not told about the setting: %v", told[before:])
+	}
+	if rec := f.patch(t, `{"exceptions":true}`); rec.Code != http.StatusOK {
+		t.Fatal(rec.Body.String())
+	}
+	if res, err := f.h.personalLinkSlots(context.Background(), f.link, "UTC"); err != nil || len(res.Slots) == 0 {
+		t.Fatalf("after turning exceptions on the link offers %d times (err %v)", len(res.Slots), err)
 	}
 }
 

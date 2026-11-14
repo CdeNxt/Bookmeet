@@ -204,10 +204,27 @@ func (h *Handler) tellLinkEmpty(ctx context.Context, l *personallink.Link, guest
 			text += " to " + z.Format("Mon 2 Jan")
 		}
 	}
-	if guestThere {
+	// When the switch is what hides the times, the fix is the owner's, and it is one tap away.
+	settingHides := false
+	if !l.OutsideAvailability && !h.assistantExceptions(ctx) {
+		withRule := *l
+		withRule.OutsideAvailability = true
+		if res, err := h.personalLinkSlots(ctx, &withRule, "UTC"); err == nil && len(res.Slots) > 0 {
+			settingHides = true
+		}
+	}
+	switch {
+	case settingHides && guestThere:
+		text += fmt.Sprintf("\n\n%s just opened it and found nothing to book: its times are outside your usual availability, and exceptions are switched off. I've asked which times suit them.", first)
+	case settingHides:
+		text += fmt.Sprintf("\n\nIts times are outside your usual availability, and exceptions are switched off, so it offers nothing. %s hasn't seen that yet.", first)
+	case guestThere:
 		text += fmt.Sprintf("\n\n%s just opened it and found nothing to book. I've asked which times suit them; you'll get those as soon as they send them.", first)
-	} else {
+	default:
 		text += fmt.Sprintf("\n\nEverything it offered is now busy or past. %s hasn't seen that yet.", first)
+	}
+	if settingHides {
+		text += "\nTurn on \"Allow exceptions to my availability\" in Settings → AI and this link offers its times again, or tap below to offer new ones."
 	}
 	markup := telegram.Markup{{{Text: "New times for " + first, Data: "l|n|" + l.ID}}}
 	if _, err := bot.Send(ctx, chatID, text, markup); err != nil {

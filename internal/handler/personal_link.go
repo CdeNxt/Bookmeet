@@ -75,7 +75,7 @@ func (h *Handler) personalLinkSlots(ctx context.Context, l *personallink.Link, t
 	}
 	// An exception the owner allowed on this link: their hours, notice and booking horizon
 	// are set aside inside its windows. Their calendar and bookings are not.
-	want.OwnerException = l.OutsideAvailability
+	want.OwnerException = h.linkException(ctx, l)
 	want.OwnerArranged = true // the owner chose these dates; their booking horizon is not for them
 	res, err := h.computeSlots(ctx, slug, tzName,
 		from.Format("2006-01-02"), last.UTC().AddDate(0, 0, 1).Format("2006-01-02"), want)
@@ -96,6 +96,13 @@ func (h *Handler) personalLinkSlots(ctx context.Context, l *personallink.Link, t
 	}
 	res.Slots = kept
 	return res, nil
+}
+
+// linkException reports whether a link's windows are the hours for its meeting: it was made
+// so, or the owner allows exceptions now. Read each time rather than only when the link was
+// made, so turning the setting on fixes a link already sent.
+func (h *Handler) linkException(ctx context.Context, l *personallink.Link) bool {
+	return l.OutsideAvailability || h.assistantExceptions(ctx)
 }
 
 // windowSlotCounts says, for each window an owner wants to offer, how many times the engine
@@ -298,8 +305,8 @@ func (h *Handler) bookPersonalLinkWith(ctx context.Context, l *personallink.Link
 	}
 	b, err := h.createBookingForSlugWith(ctx, slug, startAt, organizer, nil, bookingExtras{
 		PhysicalLocation: l.PlaceAddress,
-		OwnerInvited:     true,                  // the owner made this link for this guest
-		OutsideRules:     l.OutsideAvailability, // an exception the owner allowed on the link
+		OwnerInvited:     true,                    // the owner made this link for this guest
+		OutsideRules:     h.linkException(ctx, l), // the link's windows are the hours for this meeting
 		OwnerApproved:    ownerApproved,
 		OverBookings:     ownerApproved,
 	})
