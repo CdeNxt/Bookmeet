@@ -1,52 +1,57 @@
 <script lang="ts">
-	// The owner's main booking page link, pinned to the top of every admin page so it is
-	// always one click from the clipboard. The main page is /u/<handle>; without a handle
-	// there is no such page yet, so the bar says how to get one instead of showing nothing.
+	// The owner's main booking page link, as a quiet pill in the top-right corner of every
+	// admin page: one click copies it. The main page is /u/<handle>; without a handle there
+	// is no such page yet, so the pill links to where one is chosen instead.
 	import { base } from '$app/paths';
 	import { currentUser } from '$lib/stores';
 	import { Button, buttonVariants } from '$lib/components/ui/button';
 	import { toast } from 'svelte-sonner';
 
 	const handle = $derived(($currentUser?.handle ?? '').trim());
-	const url = $derived(
-		handle && typeof window !== 'undefined' ? `${window.location.origin}/u/${handle}` : ''
-	);
+	const origin = typeof window !== 'undefined' ? window.location.origin : '';
+	const url = $derived(handle && origin ? `${origin}/u/${handle}` : '');
+	// Shown without the scheme: shorter, and the scheme is not what anyone reads.
+	const shown = $derived(url.replace(/^https?:\/\//, ''));
 	let copied = $state(false);
 	let timer: ReturnType<typeof setTimeout> | undefined;
+	const pill = 'h-7 gap-1.5 rounded-full px-3 text-xs font-normal text-muted-foreground hover:text-foreground';
 
 	async function copy() {
 		try {
 			await navigator.clipboard.writeText(url);
 			copied = true;
 			clearTimeout(timer);
-			timer = setTimeout(() => (copied = false), 2000);
+			timer = setTimeout(() => (copied = false), 1600);
 		} catch {
-			toast.error('Could not copy. Select the link and copy it by hand.');
+			toast.error('Could not copy. Your booking page is ' + url);
 		}
 	}
 </script>
 
-<div class="sticky top-0 z-20 border-b bg-background/95 backdrop-blur">
-	<div class="mx-auto flex max-w-4xl flex-wrap items-center gap-x-3 gap-y-1.5 px-8 py-2.5 text-sm">
-		<span class="shrink-0 font-medium">Your booking page</span>
-		{#if url}
-			<a
-				href={url}
-				target="_blank"
-				rel="noopener noreferrer"
-				class="min-w-0 flex-1 truncate font-mono text-xs text-primary hover:underline"
-				id="booking-link-url">{url}</a
-			>
-			<Button variant="outline" size="sm" onclick={copy} aria-live="polite">
-				{copied ? 'Copied' : 'Copy link'}
-			</Button>
-		{:else}
-			<span class="min-w-0 flex-1 text-xs text-muted-foreground">
-				Choose a booking handle to get one link that lists all your meetings.
-			</span>
-			<a href={`${base}/settings/profile`} class={buttonVariants({ variant: 'outline', size: 'sm' })}>
-				Set handle
-			</a>
-		{/if}
-	</div>
+<div class="mx-auto flex max-w-4xl justify-end px-8 pt-4">
+	{#if url}
+		<Button
+			variant="outline"
+			size="sm"
+			class={pill}
+			onclick={copy}
+			id="booking-link-pill"
+			title="Copy your booking page link"
+			aria-label={copied ? 'Booking page link copied' : `Copy your booking page link, ${shown}`}
+		>
+			<span class="size-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden="true"></span>
+			<span class="max-w-[16rem] truncate font-mono">{copied ? 'Copied' : shown}</span>
+			<svg class="size-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+				{#if copied}
+					<path d="M5 12.5l4.5 4.5L19 7.5" />
+				{:else}
+					<rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V6a2 2 0 0 1 2-2h9" />
+				{/if}
+			</svg>
+		</Button>
+	{:else}
+		<a href={`${base}/settings/profile`} class={buttonVariants({ variant: 'outline', size: 'sm' }) + ' ' + pill} id="booking-link-pill">
+			Set a booking handle to get your link
+		</a>
+	{/if}
 </div>

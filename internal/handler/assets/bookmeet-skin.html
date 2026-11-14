@@ -436,7 +436,9 @@ html[data-bm-theme="light"] .bm-ver{color:#00000070}
    canvas.style.transform='translate3d('+(-px*10).toFixed(2)+'px,'+(-py*7).toFixed(2)+'px,0)';
    // One painter in both modes: the light canvas is its exact CSS color inverse.
    ctx.fillStyle='#15161e';ctx.fillRect(0,0,width,height);
-   const themeGain=document.documentElement.dataset.bmTheme==='light'?1.25:1.15;
+   // Light mode draws the same dots dark on a pale ground, where they read fainter, so they
+   // get more weight there (1.5 is 20% over the 1.25 it had).
+   const themeGain=document.documentElement.dataset.bmTheme==='light'?1.5:1.15;
    const particleGain=themeGain*(mobile?1.18:1);
    for(const s of mobile?phoneStars:stars){ctx.fillStyle='rgba(188,195,220,'+(s.a*particleGain)+')';ctx.fillRect(s.x*width+px*9,s.y*height+py*6,1,1)}
    // The figure keeps close to one size whatever the window is. It used to scale with the

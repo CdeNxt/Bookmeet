@@ -295,7 +295,7 @@
 		<!-- Main content -->
 		<main class="flex-1 overflow-y-auto bg-background">
 			<BookingLinkBar />
-			<div class="mx-auto max-w-4xl px-8 py-8">
+			<div class="mx-auto max-w-4xl px-8 pb-8 pt-3">
 				{@render children()}
 			</div>
 		</main>
