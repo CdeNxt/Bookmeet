@@ -284,6 +284,12 @@ func (h *Handler) mcpCreatePersonalLink(ctx context.Context, _ *mcp.CallToolRequ
 		return nil, createPersonalLinkOut{}, fmt.Errorf("create personal link: %w", err)
 	}
 	url := strings.TrimRight(h.publicURL(), "/") + "/i/" + token
+	lead := "a new link for " + l.GuestName
+	if replaces != "" {
+		lead = "a new link for " + l.GuestName + " (the old one no longer works)"
+	}
+	h.agentDid(ctx, o, fmt.Sprintf("%s, %s: %s.\n\n%s", lead, et.Name, offerWords(o, l), url),
+		fmt.Sprintf("the owner made %s, %s, offering %s.", lead, et.Name, offerWords(o, l)))
 	return nil, createPersonalLinkOut{
 		LinkID: l.ID, URL: url, MessageToSend: "Here's a link to grab a time with me: " + url,
 		Expires:  mcpTimeAt{At: rfc3339OrEmpty(l.ExpiresAt), Text: o.when(l.ExpiresAt)},

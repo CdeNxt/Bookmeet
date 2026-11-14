@@ -535,8 +535,10 @@ create or change a link), `mcp_assistant_book.go` (`book_for_guest`, `answer_gue
   app allows. Text must always work on its own.
 - Not built yet: in-person places for an agent-made link (`create_personal_link` makes one
   without a confirmed address), a Bookmeet approval page so an agent can ask the owner for an
-  exception without Telegram, interactive cards (MCP Apps), and Telegram telling the owner
-  when their agent made a link.
+  exception without Telegram, and interactive cards (MCP Apps).
+- **The bot hears what the agent did** (`agentDid`): a link made or cancelled, a booking, an
+  answer to a guest is sent to the owner on Telegram and written to the Telegram assistant's
+  memory, so the two front ends agree about what exists. Nothing from the calendar goes there.
 
 ## The assistant lab (`cmd/lab`): testing the AI features without staging
 

@@ -110,6 +110,8 @@ func (h *Handler) mcpBookForGuest(ctx context.Context, _ *mcp.CallToolRequest, i
 	default:
 		out.Invitation = "It is on the owner's calendar, but no invitation email will reach the guest (email is not set up), so the owner should tell them."
 	}
+	h.agentDid(ctx, o, fmt.Sprintf("Booked: %s\n%s\nWhen: %s to %s\nEmail: %s\n%s", name, et.Name, out.When.Text, o.clock(b.EndAt), email, out.Invitation),
+		fmt.Sprintf("the owner booked %s (%s) for %s, %s.", name, email, et.Name, out.When.Text))
 	if tok, err := h.bookingSvc.IssueManageToken(ctx, b.ID); err == nil {
 		out.ManageURL = strings.TrimRight(h.publicURL(), "/") + "/manage/" + tok
 	} else {
@@ -180,6 +182,8 @@ func (h *Handler) mcpAnswerGuest(ctx context.Context, _ *mcp.CallToolRequest, in
 		if l.Status == personallink.StatusProposed {
 			_ = links.SetStatus(ctx, l.ID, personallink.StatusOpen)
 		}
+		h.agentDid(ctx, o, fmt.Sprintf("none of %s's suggested times were booked. %s hasn't been told.", l.GuestName, firstName(l.GuestName)),
+			fmt.Sprintf("the owner chose none of %s's suggested times. The guest was not told.", l.GuestName))
 		out.Result = "None of the suggested times were booked. The guest has not been told, and the link still works for the times offered. The owner can reach out, or change the offer with create_personal_link and replaces_link_id."
 		return nil, out, nil
 	case "handled":
@@ -230,7 +234,8 @@ func (h *Handler) mcpAnswerGuest(ctx context.Context, _ *mcp.CallToolRequest, in
 	default:
 		return nil, answerGuestOut{}, fmt.Errorf("book suggested time: %w", err)
 	}
-	h.suggestedTimeBooked(ctx, held, l, at, b)
+	h.suggestedTimeBooked(ctx, held, l, at, b) // tells the owner on Telegram, as the tap does
+	h.rememberFor(ctx, o.UserID, "event", "Through a connected AI app, the owner booked a time "+l.GuestName+" suggested.")
 	booked := bookForGuestOut{
 		BookingID: b.ID, GuestName: l.GuestName, Meeting: h.eventTypeNames(ctx, o.UserID)[l.EventTypeID],
 		When: mcpTimeAt{At: rfc3339OrEmpty(b.StartAt), Text: o.when(b.StartAt)},

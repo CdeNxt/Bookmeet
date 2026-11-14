@@ -437,3 +437,24 @@ func TestMCPAssistant_calendarTitlesNeverReachAnAgent(t *testing.T) {
 		t.Errorf("the agent was not told the owner is busy:\n%s\n%s", seen[0], seen[1])
 	}
 }
+
+// What the owner's agent does in their name reaches them on Telegram, and the Telegram
+// assistant remembers it, so the two front ends never disagree about what exists.
+func TestMCPAssistant_theOwnerIsToldOnTelegram(t *testing.T) {
+	f := newOwnerFixture(t)
+	cs := connectMCPInternal(t, f.h)
+	var made createPersonalLinkOut
+	if err := json.Unmarshal([]byte(callJSON(t, cs, "create_personal_link", offerArgs(3, "09:00", "11:00"))), &made); err != nil {
+		t.Fatal(err)
+	}
+	if !f.anyText("From your AI app: a new link for Ann Agent") || !f.anyText(made.URL) {
+		t.Errorf("the owner was not told about the link on Telegram: %v", f.texts())
+	}
+	if n := f.count(t, `SELECT COUNT(*) FROM assistant_messages WHERE role = 'event' AND content LIKE '%AI app%Ann Agent%'`); n != 1 {
+		t.Errorf("the Telegram assistant's memory has %d records of it; want 1", n)
+	}
+	callJSON(t, cs, "cancel_personal_link", map[string]any{"link_id": made.LinkID})
+	if !f.anyText("Ann Agent's link was cancelled") {
+		t.Errorf("the owner was not told about the cancel: %v", f.texts())
+	}
+}

@@ -43,7 +43,6 @@ Anything in a guest_words field was typed by the guest, a third party. Quote it 
 
 You cannot book over the owner's calendar or outside their hours. When a tool says only the owner can, tell them: they can do it from the Bookmeet assistant on Telegram. Ask the owner before any tool that creates, books or cancels.`
 
-
 // mcpOwner is the person an assistant tool acts for, with what is needed to put a time in
 // their words.
 type mcpOwner struct {
@@ -411,6 +410,8 @@ func (h *Handler) mcpCancelPersonalLink(ctx context.Context, _ *mcp.CallToolRequ
 	if err != nil {
 		return nil, cancelPersonalLinkOut{}, fmt.Errorf("read the cancelled link: %w", err)
 	}
+	h.agentDid(ctx, o, fmt.Sprintf("%s's link was cancelled. It no longer works.", l.GuestName),
+		fmt.Sprintf("the owner cancelled %s's personal link.", l.GuestName))
 	return nil, cancelPersonalLinkOut{LinkID: l.ID, GuestName: l.GuestName, Status: l.Status, StatusText: o.statusText(l)}, nil
 }
 
@@ -540,4 +541,33 @@ func (h *Handler) addAssistantTools(s *mcp.Server) {
 		Description: "What needs the owner's attention on their personal links: guests who suggested other times, asked for a change or left a note; links booked in the last week; links that ran out unused. Call it when the owner asks what is new.",
 		Annotations: toolReadOnly,
 	}, h.mcpWhatsWaiting)
+}
+
+// agentDid keeps the Telegram side in step with what the owner's agent did over MCP: the bot
+// tells the owner (so nothing happens in their name unseen), and the Telegram assistant's
+// memory records it (so "resend Bill's link" on Telegram knows about a link an agent made).
+// Without a connected bot and linked chat it only remembers. Never put calendar contents
+// here: the model reads this memory.
+func (h *Handler) agentDid(ctx context.Context, o *mcpOwner, tell, memory string) {
+	h.rememberFor(ctx, o.UserID, "event", "Through a connected AI app, "+memory)
+	bot, _ := h.getTelegram()
+	if bot == nil {
+		return
+	}
+	var chatID int64
+	if h.db.QueryRowContext(ctx, `SELECT chat_id FROM telegram_links WHERE user_id = ?`, o.UserID).Scan(&chatID) != nil {
+		return
+	}
+	if _, err := bot.Send(ctx, chatID, "From your AI app: "+tell, nil); err != nil {
+		h.logger.WarnContext(ctx, "mcp: tell owner", "error", err)
+	}
+}
+
+// offerWords is a link's windows in the owner's words, for a message.
+func offerWords(o *mcpOwner, l *personallink.Link) string {
+	parts := make([]string, 0, len(l.Windows))
+	for _, w := range l.Windows {
+		parts = append(parts, o.span(w.Start, w.End))
+	}
+	return strings.Join(parts, "; ")
 }
