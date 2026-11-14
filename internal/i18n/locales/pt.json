@@ -230,5 +230,6 @@
   "plink_email_holder": "O seu endereço de e-mail",
   "plink_phone_holder": "Número de telefone (opcional)",
   "plink_zone": "hora de %[1]s (%[2]s)",
-  "plink_minutes": "%d minutos"
+  "plink_minutes": "%d minutos",
+  "plink_no_times_ask": "Lamento, já não está livre nenhum dos horários que %s ofereceu. Que horários lhe serviriam? Indique-me até três, com a hora de início exata, e eu transmito-os."
 }

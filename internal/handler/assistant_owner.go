@@ -134,6 +134,11 @@ type ownerDraft struct {
 	OutsideAll bool     `json:"outside_all,omitempty"`
 	OutsideOK  bool     `json:"outside_ok,omitempty"`
 	Busy       []string `json:"busy,omitempty"`
+	// Offerable is how many start times the link would offer as the panel stands, and
+	// Checked that the count is current (the calendar answered). A link is never created
+	// with nothing to offer.
+	Offerable int  `json:"offerable,omitempty"`
+	Checked   bool `json:"checked,omitempty"`
 
 	ReplacesLinkID string `json:"replaces_link_id,omitempty"`
 	View           string `json:"view,omitempty"` // "", "type", "days", "times", "place"
@@ -780,7 +785,7 @@ func (s *ownerSession) draftSummary(d *ownerDraft) string {
 // falls outside it, so the panel can say so before anything is created. It reads the
 // calendar, so it runs when the times change, not on every redraw.
 func (s *ownerSession) analyse(ctx context.Context, d *ownerDraft) {
-	d.Outside, d.Busy, d.OutsideAll = nil, nil, false
+	d.Outside, d.Busy, d.OutsideAll, d.Offerable, d.Checked = nil, nil, false, 0, false
 	et := s.typeByID(d.EventTypeID)
 	if et == nil {
 		return
@@ -818,12 +823,22 @@ func (s *ownerSession) analyse(ctx context.Context, d *ownerDraft) {
 			s.h.logger.WarnContext(ctx, "assistant: check availability", "error", err)
 			return
 		}
+		// With exceptions on, a link's windows are the hours for that meeting: it offers
+		// every time inside them the owner is not busy for, so "outside your hours" does
+		// not arise. With them off, the owner's own hours still decide.
 		anyInside := false
 		for i, w := range d.Windows {
 			span := s.day(w.Date) + ", " + s.clock(w.Start) + " to " + s.clock(w.End)
+			if s.exceptions {
+				d.Offerable += exception[i]
+			} else {
+				d.Offerable += normal[i]
+			}
 			switch {
 			case exception[i] == 0:
 				d.Busy = append(d.Busy, span+": you're busy the whole time, so nothing can be offered.")
+			case s.exceptions:
+				anyInside = true
 			case normal[i] == 0:
 				d.Outside = append(d.Outside, s.outsideReason(et, w.Date, span))
 			case normal[i] < exception[i]:
@@ -834,6 +849,7 @@ func (s *ownerSession) analyse(ctx context.Context, d *ownerDraft) {
 			}
 		}
 		d.OutsideAll = len(d.Outside) > 0 && !anyInside
+		d.Checked = true
 	}
 	if len(d.Outside) == 0 {
 		d.OutsideOK = false
@@ -1244,6 +1260,17 @@ func (s *ownerSession) tapDraft(ctx context.Context, d *ownerDraft, op, arg stri
 		if d.Direct {
 			return s.bookDirect(ctx, d)
 		}
+		// Count again at the tap: the calendar may have filled since the panel was drawn.
+		s.analyse(ctx, d)
+		switch {
+		case !d.Checked:
+			s.refreshPanel(ctx, d)
+			return "Your calendar could not be checked just now, so no link was made. Try again in a moment."
+		case d.Offerable == 0:
+			s.refreshPanel(ctx, d)
+			s.say(ctx, "Nothing on that panel can be offered: you're busy for all of it. Change the days or times, and I'll make the link.")
+			return "Nothing to offer. No link made."
+		}
 		return s.createLink(ctx, d)
 	default:
 		return ""
@@ -1288,7 +1315,8 @@ func (s *ownerSession) createLink(ctx context.Context, d *ownerDraft) string {
 	params := personallink.CreateParams{
 		UserID: s.userID, EventTypeID: et.ID, GuestName: d.GuestName, GuestEmail: d.GuestEmail,
 		PlaceName: placeName, PlaceAddress: placeAddr, Topic: d.Topic, Windows: windows,
-		OutsideAvailability: d.OutsideOK && len(d.Outside) > 0 && s.exceptions,
+		// The link's windows are the hours for this meeting, when the owner allows that.
+		OutsideAvailability: s.exceptions,
 	}
 	links := s.h.personalLinks()
 	var l *personallink.Link

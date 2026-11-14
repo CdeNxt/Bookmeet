@@ -41,10 +41,94 @@ func (f *ownerFixture) closeDay(t *testing.T, day int) {
 	}
 }
 
-// The owner asks for a day they do not take meetings. The panel says so before anything is
+// The owner asks for a day they do not take meetings. A link's windows are the hours for that
+// meeting, so there is no warning and no Allow tap: the link offers the times, minus the one
+// the owner is busy for, and one of them books.
+func TestOwnerAssistant_aLinksWindowsAreTheHoursForThatMeeting(t *testing.T) {
+	f := newOwnerFixture(t)
+	f.closeDay(t, 3)
+	// Something already in the diary inside the window: it must not be offered.
+	day, _ := time.Parse("2006-01-02", date(3))
+	lf := &linkFixture{inviteFixture: f.inviteFixture}
+	f.cal.mu.Lock()
+	f.cal.busy = []slots.Interval{{Start: day.Add(10 * time.Hour), End: day.Add(10*time.Hour + 30*time.Minute)}}
+	f.cal.mu.Unlock()
+
+	panel := f.askFor(t, 3, "09:00", "11:00")
+	if strings.Contains(panel, "outside the times you take meetings") || f.buttons()["Allow outside my availability"] != "" {
+		t.Fatalf("a link's own window was treated as outside the owner's hours:\n%s", panel)
+	}
+	f.tap(t, "Create link")
+	links := f.links(t)
+	if len(links) != 1 || !links[0].OutsideAvailability {
+		t.Fatalf("links = %+v; want one link offering its whole window", links)
+	}
+	res, err := f.h.personalLinkSlots(context.Background(), links[0], "UTC")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, s := range res.Slots {
+		st, _ := time.Parse(time.RFC3339, s.Start)
+		got = append(got, st.UTC().Format("15:04"))
+	}
+	if want := []string{"09:00", "09:30", "10:30"}; !sameStrings(got, want) {
+		t.Fatalf("the link offers %v; want %v (10:00 is busy)", got, want)
+	}
+	if _, err := f.h.bookPersonalLink(context.Background(), links[0], day.Add(9*time.Hour), lf.guest(), false); err != nil {
+		t.Fatalf("booking through the link: %v", err)
+	}
+}
+
+// A direct booking is one exact time, so outside the owner's hours it still needs the Allow
+// tap (that choice is kept on purpose: a link's windows are a range the owner drew).
+func TestOwnerAssistant_aDirectBookingOutsideHoursStillNeedsTheTap(t *testing.T) {
+	f := newOwnerFixture(t)
+	f.closeDay(t, 3)
+	f.model.calls("show_details", map[string]any{
+		"guest_name": "Bill Mathers", "guest_email": "bill@example.com", "event_type": "intro",
+		"book_at": map[string]string{"date": date(3), "time": "09:00"},
+	})
+	f.message(t, "book it")
+	if !strings.Contains(f.panel(), "outside the times you take meetings") || f.buttons()["Allow outside my availability"] == "" {
+		t.Fatalf("a direct booking outside hours did not ask:\n%s", f.panel())
+	}
+	f.tap(t, "Book it")
+	if n := f.count(t, `SELECT COUNT(*) FROM bookings`); n != 0 {
+		t.Fatalf("%d bookings without the Allow tap", n)
+	}
+}
+
+// Nothing is created when the link would offer nothing: the owner is busy for every window.
+func TestOwnerAssistant_aLinkWithNothingToOfferIsNotCreated(t *testing.T) {
+	f := newOwnerFixture(t)
+	day, _ := time.Parse("2006-01-02", date(3))
+	f.cal.mu.Lock()
+	f.cal.busy = []slots.Interval{{Start: day.Add(8 * time.Hour), End: day.Add(12 * time.Hour)}}
+	f.cal.mu.Unlock()
+	panel := f.askFor(t, 3, "09:00", "11:00")
+	if !strings.Contains(panel, "you're busy the whole time") {
+		t.Fatalf("the panel does not name the busy day:\n%s", panel)
+	}
+	f.tap(t, "Create link")
+	if n := len(f.links(t)); n != 0 {
+		t.Fatalf("%d links created with nothing to offer", n)
+	}
+	if !f.anyText("Nothing on that panel can be offered") {
+		t.Errorf("the owner was not told why: %v", f.texts())
+	}
+	// The calendar clears; the same panel now makes the link.
+	f.cal.mu.Lock()
+	f.cal.busy = nil
+	f.cal.mu.Unlock()
+	f.tap(t, "Create link")
+	if n := len(f.links(t)); n != 1 {
+		t.Fatalf("%d links once the day was free; want 1", n)
+	}
+}
+
 // How far ahead the owner takes bookings is a rule for the public booking page. A meeting the
-// owner sets up is not held to it: a day beyond it, inside their hours, needs no exception,
-// shows no warning, and the link offers it.
+// owner sets up is not held to it: a day beyond it shows no warning, and the link offers it.
 func TestOwnerAssistant_datesBeyondTheBookingWindowNeedNoException(t *testing.T) {
 	f := newOwnerFixture(t)
 	if _, err := f.h.db.Exec(`UPDATE event_types SET max_future_days = 3 WHERE id = ?`, f.etID); err != nil {
@@ -52,12 +136,12 @@ func TestOwnerAssistant_datesBeyondTheBookingWindowNeedNoException(t *testing.T)
 	}
 	panel := f.askFor(t, 20, "09:00", "10:00")
 	if strings.Contains(panel, "Heads up") || f.buttons()["Allow outside my availability"] != "" {
-		t.Fatalf("a day beyond the booking window, inside the owner's hours, drew a warning:\n%s", panel)
+		t.Fatalf("a day beyond the booking window drew a warning:\n%s", panel)
 	}
 	f.tap(t, "Create link")
 	links := f.links(t)
-	if len(links) != 1 || links[0].OutsideAvailability {
-		t.Fatalf("%d links (exception %v); want one ordinary link", len(links), len(links) == 1 && links[0].OutsideAvailability)
+	if len(links) != 1 {
+		t.Fatalf("%d links; want 1", len(links))
 	}
 	res, err := f.h.personalLinkSlots(context.Background(), links[0], "UTC")
 	if err != nil || len(res.Slots) != 2 {

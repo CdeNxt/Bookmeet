@@ -99,6 +99,7 @@ type Link struct {
 	ChatLeftAt     time.Time // when their page closed; zero while it is open
 	ChatReportedAt time.Time // when the owner was last told how the chat ended
 	ExpiryToldAt   time.Time // when the owner was told it ran out unused; zero until then
+	EmptyToldAt    time.Time // when the owner was told it has no open times left; zero until then
 	Status         string
 	BookingID      string
 	ReplacesID     string
@@ -320,7 +321,7 @@ func normalizeWindows(in []Window, now time.Time) ([]Window, error) {
 }
 
 const linkColumns = `id, user_id, event_type_id, guest_name, guest_email, guest_phone, place_name, place_address, topic, details_done, outside_availability, guest_timezone, guest_locale,
-	chat_mode, chat_active_at, chat_left_at, chat_reported_at, expiry_told_at,
+	chat_mode, chat_active_at, chat_left_at, chat_reported_at, expiry_told_at, empty_told_at,
 	status, COALESCE(booking_id, ''), COALESCE(replaces_id, ''), expires_at, COALESCE(last_opened_at, ''), created_at, updated_at`
 
 // ByToken finds the link a URL token belongs to. An unknown token and a malformed one are
@@ -376,10 +377,10 @@ func (s *Service) List(ctx context.Context, userID string) ([]*Link, error) {
 
 func (s *Service) load(ctx context.Context, query string, args ...any) (*Link, error) {
 	var l Link
-	var expires, opened, created, updated, active, left, reported, told string
+	var expires, opened, created, updated, active, left, reported, told, empty string
 	err := s.db.QueryRowContext(ctx, query, args...).Scan(
 		&l.ID, &l.UserID, &l.EventTypeID, &l.GuestName, &l.GuestEmail, &l.GuestPhone, &l.PlaceName, &l.PlaceAddress, &l.Topic, &l.DetailsDone, &l.OutsideAvailability, &l.GuestTimezone, &l.GuestLocale,
-		&l.ChatMode, &active, &left, &reported, &told,
+		&l.ChatMode, &active, &left, &reported, &told, &empty,
 		&l.Status, &l.BookingID, &l.ReplacesID, &expires, &opened, &created, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -389,6 +390,7 @@ func (s *Service) load(ctx context.Context, query string, args ...any) (*Link, e
 	}
 	l.ExpiresAt, l.LastOpenedAt, l.CreatedAt, l.UpdatedAt = parse(expires), parse(opened), parse(created), parse(updated)
 	l.ChatActiveAt, l.ChatLeftAt, l.ChatReportedAt, l.ExpiryToldAt = parse(active), parse(left), parse(reported), parse(told)
+	l.EmptyToldAt = parse(empty)
 
 	// Expiry is applied when a link is read rather than by a timer: nothing depends on the
 	// moment it flips, only on what a reader sees. A link waiting on the owner's answer to
@@ -566,6 +568,42 @@ func (s *Service) MarkExpiryTold(ctx context.Context, id string) (bool, error) {
 		`UPDATE personal_links SET expiry_told_at = ? WHERE id = ? AND expiry_told_at = ''`, stamp(s.now()), id)
 	if err != nil {
 		return false, fmt.Errorf("personal link: mark expiry told: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n == 1, nil
+}
+
+// OpenUnbooked returns the links a guest can still book from and whose owner has not been
+// told they have nothing left to offer: the ones worth watching for that.
+func (s *Service) OpenUnbooked(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id FROM personal_links
+		WHERE status IN (?, ?) AND expires_at > ? AND empty_told_at = ''
+		ORDER BY expires_at LIMIT 200`,
+		StatusOpen, StatusFollowUp, stamp(s.now()))
+	if err != nil {
+		return nil, fmt.Errorf("personal link: open unbooked: %w", err)
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("personal link: open unbooked: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// MarkEmptyTold records that the owner has been told the link has no open times left. It
+// reports whether this call was the one that recorded it, so the guest's chat and the sweep
+// cannot both send the message.
+func (s *Service) MarkEmptyTold(ctx context.Context, id string) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE personal_links SET empty_told_at = ? WHERE id = ? AND empty_told_at = ''`, stamp(s.now()), id)
+	if err != nil {
+		return false, fmt.Errorf("personal link: mark empty told: %w", err)
 	}
 	n, _ := res.RowsAffected()
 	return n == 1, nil

@@ -237,5 +237,6 @@
   "plink_email_holder": "Your email address",
   "plink_phone_holder": "Phone number (optional)",
   "plink_zone": "%[1]s time (%[2]s)",
-  "plink_minutes": "%d-minute"
+  "plink_minutes": "%d-minute",
+  "plink_no_times_ask": "None of the times %s offered are open any more, sorry. Which times would suit you? Give me up to three, with exact start times, and I’ll pass them on."
 }

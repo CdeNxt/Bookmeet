@@ -346,7 +346,7 @@ func (s *plinkSession) times(ctx context.Context, intro string) {
 		d.Slots = append(d.Slots, chatSlot{Start: start.UTC().Format(time.RFC3339), Label: s.clock(local)})
 	}
 	if len(days) == 0 {
-		s.say(ctx, s.t("no_times", s.ownerFirst()))
+		s.noTimes(ctx)
 		return
 	}
 	item := chatItem{
@@ -358,6 +358,15 @@ func (s *plinkSession) times(ctx context.Context, intro string) {
 		item.Foot = s.t("at_place", s.link.PlaceAddress)
 	}
 	s.add(ctx, item)
+}
+
+// noTimes is a link with nothing left to offer. The guest is not left at a dead end: they
+// are asked which times suit them, through the same path as "Suggest another time", and
+// the owner is told at once rather than when the chat ends.
+func (s *plinkSession) noTimes(ctx context.Context) {
+	s.setMode(ctx, personallink.ChatSuggesting)
+	s.say(ctx, s.t("no_times_ask", s.ownerFirst()))
+	s.h.tellLinkEmpty(ctx, s.link, true)
 }
 
 // offered reports whether start is one of the times the link offers right now.
@@ -634,6 +643,11 @@ func (s *plinkSession) sendSuggestions(ctx context.Context, raw []string) {
 		return
 	}
 	s.say(ctx, s.t("suggest_sent", s.ownerFirst(), s.link.GuestEmail))
+	// On a link with nothing left to offer, the guest's times are the only way forward, so
+	// they go to the owner now rather than when the chat ends.
+	if fresh, err := s.links.ByID(ctx, s.link.ID); err == nil && !fresh.EmptyToldAt.IsZero() {
+		s.h.reportChat(ctx, s.link.ID)
+	}
 	s.closing(ctx)
 }
 

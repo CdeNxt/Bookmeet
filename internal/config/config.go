@@ -25,7 +25,7 @@ type Config struct {
 	// to (TELEGRAM_API_BASE_URL). Empty in every real deployment. The local test lab
 	// (cmd/lab) sets it to its own stand-in, so the assistant can be driven with no Telegram.
 	TelegramAPIBaseURL string
-	LogLevel               slog.Level
+	LogLevel           slog.Level
 
 	// Email / SMTP
 	SMTPConnectHost string

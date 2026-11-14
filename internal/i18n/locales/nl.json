@@ -230,5 +230,6 @@
   "plink_email_holder": "Je e-mailadres",
   "plink_phone_holder": "Telefoonnummer (optioneel)",
   "plink_zone": "tijd in %[1]s (%[2]s)",
-  "plink_minutes": "%d minuten"
+  "plink_minutes": "%d minuten",
+  "plink_no_times_ask": "Sorry, geen van de tijden die %s aanbood is nog vrij. Welke tijden komen jou uit? Geef er maximaal drie, met exacte begintijd, en ik geef ze door."
 }

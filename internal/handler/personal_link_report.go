@@ -36,6 +36,9 @@ const (
 	ranOutNewsFor = 3 * 24 * time.Hour
 	// How long a details panel that was created, cancelled or abandoned is kept.
 	draftKeptFor = 14 * 24 * time.Hour
+	// How often, in sweeps, open links are counted for times left. Each count asks the
+	// scheduling engine (and the owner's calendar), so this is slower than the chat sweep.
+	emptyCheckEvery = 10
 )
 
 // StartPersonalLinkSweep watches for guest chats that have ended and tells their owners.
@@ -52,6 +55,9 @@ func (h *Handler) StartPersonalLinkSweep(ctx context.Context) {
 			case <-ticker.C:
 				h.sweepChats(ctx)
 				h.sweepRanOut(ctx)
+				if tick%emptyCheckEvery == 0 {
+					h.sweepEmptyLinks(ctx)
+				}
 				if tick%60 == 0 {
 					h.tidyDrafts(ctx)
 				}
@@ -141,8 +147,79 @@ func (h *Handler) tellRanOut(ctx context.Context, linkID string) {
 	s.remember(ctx, "event", fmt.Sprintf("%s's link (%s) ran out without a booking. %s", l.GuestName, kind, got))
 }
 
-// tapNewLink starts a new link for the guest of one that ran out. The old times have
-// passed, so the owner is asked for new ones; nothing is created until they tap Create.
+// sweepEmptyLinks tells owners about open links that have nothing left to offer, before a
+// guest finds that out: the calendar filled, or the times passed.
+func (h *Handler) sweepEmptyLinks(ctx context.Context) {
+	if !h.assistantEnabled(ctx) {
+		return
+	}
+	links := h.personalLinks()
+	ids, err := links.OpenUnbooked(ctx)
+	if err != nil {
+		h.logger.WarnContext(ctx, "personal link sweep: open links", "error", err)
+		return
+	}
+	for _, id := range ids {
+		l, err := links.ByID(ctx, id)
+		if err != nil || !l.Active() {
+			continue
+		}
+		res, err := h.personalLinkSlots(ctx, l, "UTC")
+		if err != nil {
+			continue // the calendar did not answer; look again next time
+		}
+		if len(res.Slots) == 0 {
+			h.tellLinkEmpty(ctx, l, false)
+		}
+	}
+}
+
+// tellLinkEmpty tells the owner, once per link, that it has no open times left, with a
+// button to offer new ones. guestThere says the guest is on the page now and has been asked
+// for times that suit them; otherwise the sweep noticed first and the guest has not seen it.
+func (h *Handler) tellLinkEmpty(ctx context.Context, l *personallink.Link, guestThere bool) {
+	bot, _ := h.getTelegram()
+	var chatID int64
+	if bot == nil || h.db.QueryRowContext(ctx, `SELECT chat_id FROM telegram_links WHERE user_id = ?`, l.UserID).Scan(&chatID) != nil {
+		return // nowhere to send it; the guest's side still works
+	}
+	links := h.personalLinks()
+	if first, err := links.MarkEmptyTold(ctx, l.ID); err != nil || !first {
+		return
+	}
+	s, err := h.newOwnerSession(ctx, bot, l.UserID, chatID)
+	if err != nil {
+		return
+	}
+	first := firstName(l.GuestName)
+	kind := "meeting"
+	if et := s.typeByID(l.EventTypeID); et != nil {
+		kind = et.Name
+	}
+	text := fmt.Sprintf("%s's link has no open times left\n%s", l.GuestName, kind)
+	if len(l.Windows) > 0 {
+		a, z := l.Windows[0].Start.In(s.prof.Loc), l.Windows[len(l.Windows)-1].End.In(s.prof.Loc)
+		text += " · offered " + a.Format("Mon 2 Jan")
+		if a.Format("2006-01-02") != z.Format("2006-01-02") {
+			text += " to " + z.Format("Mon 2 Jan")
+		}
+	}
+	if guestThere {
+		text += fmt.Sprintf("\n\n%s just opened it and found nothing to book. I've asked which times suit them; you'll get those as soon as they send them.", first)
+	} else {
+		text += fmt.Sprintf("\n\nEverything it offered is now busy or past. %s hasn't seen that yet.", first)
+	}
+	markup := telegram.Markup{{{Text: "New times for " + first, Data: "l|n|" + l.ID}}}
+	if _, err := bot.Send(ctx, chatID, text, markup); err != nil {
+		h.logger.WarnContext(ctx, "personal link: tell owner it is empty", "error", err)
+		return
+	}
+	s.remember(ctx, "event", fmt.Sprintf("%s's link (%s) has no open times left.", l.GuestName, kind))
+}
+
+// tapNewLink starts a new link for the guest of one that ran out or has nothing left to
+// offer. The owner is shown the old offer to change, or asked for new times; nothing is
+// created until they tap Create.
 func (s *ownerSession) tapNewLink(ctx context.Context, linkID string) string {
 	l, err := s.h.personalLinks().Get(ctx, s.userID, linkID)
 	if err != nil {
@@ -158,7 +235,7 @@ func (s *ownerSession) tapNewLink(ctx context.Context, linkID string) string {
 	default:
 		s.say(ctx, fmt.Sprintf("Which days and times should I offer %s now?", first))
 	}
-	s.remember(ctx, "event", fmt.Sprintf("The owner asked for a new link for %s to replace the one that ran out. When they give the days and times, call show_details with guest_name %q.", l.GuestName, l.GuestName))
+	s.remember(ctx, "event", fmt.Sprintf("The owner asked for a new link for %s to replace their old one. When they give the days and times, call show_details with guest_name %q.", l.GuestName, l.GuestName))
 	return ""
 }
 
@@ -258,9 +335,12 @@ func (h *Handler) reportChat(ctx context.Context, linkID string) {
 		b.WriteString("Topic: " + l.Topic + "\n")
 	}
 	if !booked {
-		if l.GuestEmail == "" {
+		switch {
+		case l.GuestEmail == "":
 			b.WriteString(first + " opened the link but gave no email.\n")
-		} else {
+		case !l.EmptyToldAt.IsZero():
+			b.WriteString(first + " gave an email; the link had no times left to offer.\n")
+		default:
 			b.WriteString(first + " gave an email and saw the times.\n")
 		}
 	}
@@ -325,6 +405,11 @@ func (h *Handler) reportChat(ctx context.Context, linkID string) {
 				{Text: "I'll handle it", Data: fmt.Sprintf("h|%d|i", item.ID)},
 			})
 		}
+	}
+
+	// A link with nothing left: the owner can also simply offer new times.
+	if !booked && !l.EmptyToldAt.IsZero() {
+		markup = append(markup, []telegram.Button{{Text: "New times for " + first, Data: "l|n|" + l.ID}})
 	}
 
 	text := b.String()

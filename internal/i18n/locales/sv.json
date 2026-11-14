@@ -230,5 +230,6 @@
   "plink_email_holder": "Din e-postadress",
   "plink_phone_holder": "Telefonnummer (valfritt)",
   "plink_zone": "tid i %[1]s (%[2]s)",
-  "plink_minutes": "%d minuter"
+  "plink_minutes": "%d minuter",
+  "plink_no_times_ask": "Tyvärr är ingen av tiderna som %s erbjöd ledig längre. Vilka tider skulle passa dig? Ge mig upp till tre, med exakt starttid, så för jag dem vidare."
 }
