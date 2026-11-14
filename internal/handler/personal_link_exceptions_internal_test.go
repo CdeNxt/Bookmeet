@@ -310,3 +310,26 @@ func TestPersonalLinkChat_theOwnerCanBookOverAnotherBookmeetMeeting(t *testing.T
 		t.Fatalf("%d bookings after booking over Kendall's; want 2", n)
 	}
 }
+
+// The date table the model reads is not the owner's booking window. It reaches months
+// ahead, the model is told it is no limit, and a request five weeks out (past the three
+// weeks the table once stopped at) reaches the panel, which is where the owner is asked.
+func TestOwnerAssistant_datesWeeksAheadReachThePanel(t *testing.T) {
+	f := newOwnerFixture(t)
+	if _, err := f.h.db.Exec(`UPDATE event_types SET max_future_days = 14 WHERE id = ?`, f.etID); err != nil {
+		t.Fatal(err)
+	}
+	panel := f.askFor(t, 35, "09:00", "10:00")
+	if !strings.Contains(panel, "is beyond the 14 days ahead you take bookings") || f.buttons()["Allow outside my availability"] == "" {
+		t.Fatalf("a day five weeks out did not reach the panel with the Allow button:\n%s", panel)
+	}
+
+	f.model.mu.Lock()
+	system := f.model.requests[len(f.model.requests)-1][0].Content
+	f.model.mu.Unlock()
+	for _, want := range []string{date(35), date(150), "says nothing about when the owner is free", "Never refuse"} {
+		if !strings.Contains(system, want) {
+			t.Errorf("the model's instructions are missing %q", want)
+		}
+	}
+}

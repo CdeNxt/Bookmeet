@@ -57,6 +57,8 @@ Do not guess anything the owner has not said or clearly implied. When something 
 
 Dates: read them from the calendar below. Do not work out a date any other way. Times are in the owner's time zone and written as 24-hour HH:MM in tool calls.
 
+The calendar below is only a table for turning what the owner says into dates. It says nothing about when the owner is free, their working hours, or how far ahead they take bookings, and you do not know any of those. Never refuse, question or shorten a request because a date is far ahead, at a weekend or at an unusual hour: pass exactly what the owner asked for to show_details. The program checks it against the owner's availability and asks the owner itself whether to allow an exception. A date later than the calendar shows is still fine if the owner gives it unambiguously ("12 March"): work it out from the last week listed, or ask for the date in full.
+
 One exact time: pass book_at. With guest_email it is booked directly once the owner taps; without an email the program makes a single-time link for the owner to send. If the owner names one exact time and has not said which they want, ask once whether they have the guest's email or would like a link.
 
 Place: pass what the owner said as place_query. The program looks it up and the owner picks the right location by tapping. Never write, guess or confirm an address yourself, and do not ask the owner for an address.
@@ -497,16 +499,39 @@ func (h *Handler) ownerHandleMessage(ctx context.Context, bot *telegram.Client, 
 	s.say(ctx, "That took me too many steps. Tell me again in one message: who, what kind of meeting, and when.")
 }
 
+// How much calendar the model is given to read dates from: three weeks a day to a line, then
+// half a year a week to a line. This is a table for turning words into dates and nothing
+// else; how far ahead the owner takes bookings is the program's business (analyse), and a
+// table that stopped at three weeks was read by the model as that limit.
+const (
+	ownerCalendarDays  = 21
+	ownerCalendarWeeks = 26
+)
+
 func (s *ownerSession) systemPrompt(ctx context.Context) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, ownerAssistantRules, s.prof.Name)
 	now := s.now.In(s.prof.Loc)
 	fmt.Fprintf(&b, "\n\nNow: %s (%s).\nCalendar:\n", now.Format("Mon 2 Jan 2006, 15:04"), s.prof.Loc.String())
-	for i := 0; i < 21; i++ {
+	for i := 0; i < ownerCalendarDays; i++ {
 		d := now.AddDate(0, 0, i)
 		fmt.Fprintf(&b, "%s = %s", d.Format("Mon 2 Jan 2006"), d.Format("2006-01-02"))
 		if i == 0 {
 			b.WriteString(" (today)")
+		}
+		b.WriteString("\n")
+	}
+	// Further out, a week to a line: enough to read any date in the next half year without
+	// the model counting days, at a fraction of the length.
+	b.WriteString("Later weeks:\n")
+	next := now.AddDate(0, 0, ownerCalendarDays)
+	for w := 0; w < ownerCalendarWeeks; w++ {
+		for i := 0; i < 7; i++ {
+			d := next.AddDate(0, 0, w*7+i)
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			fmt.Fprintf(&b, "%s %s", d.Format("Mon"), d.Format("2006-01-02"))
 		}
 		b.WriteString("\n")
 	}
