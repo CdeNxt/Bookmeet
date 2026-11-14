@@ -420,9 +420,22 @@ section.
 
 ## Personal booking assistant: exceptions to the owner's availability (Bookmeet)
 
-The owner can let one meeting go outside their own rules. Everything here is behind
+The owner can let a meeting go outside their own rules. Everything here is behind
 Settings → AI → "Allow exceptions to my availability" (`assistant_exceptions`, on by
-default), and behind a tap each time. Off, the assistant only reports.
+default). Off, links keep to the owner's usual hours and the assistant only reports.
+
+- **A link's windows are the hours for that meeting.** With the setting on, a link offers
+  every time inside its windows that the owner is not busy for: no "outside your hours", no
+  Allow tap. `linkException` (link made so, OR the setting on now) feeds
+  `slotsWanted.OwnerException` in `personalLinkSlots` and `OutsideRules` when it books. It is
+  read each time, so turning the setting on fixes a link already sent. New links are stored
+  with `outside_availability` = the setting; migration 00091 set it on links open at the time.
+- **A direct booking (one exact time) still needs the Allow tap** outside the owner's hours.
+  That is deliberate: a link is a range the owner drew; a direct booking is a single time
+  that may be a slip.
+- **When the setting is what blocks a meeting, the owner is told before any guest is**
+  (`exceptionsOffHint`): on the panel, when Create is refused, and in the empty-link message.
+  Keep that true for any new path where the setting can leave a link with nothing to offer.
 
 - **How far ahead the owner takes bookings (`max_future_days`) never applies to a meeting
   they arranged** - a personal link, a direct booking, a guest's suggestion they book. It is
@@ -436,16 +449,27 @@ default), and behind a tap each time. Off, the assistant only reports.
   the calendar check; `OwnerApproved` also books over what the calendar shows;
   `OverBookings` (with `OwnerApproved`) lets it overlap another Bookmeet booking. Never set
   one from a guest's action, a model's output or an agent's call.
-- **An exception on a link is `OutsideRules`, not more.** `personal_links.outside_availability`
-  makes `personalLinkSlots` ask the engine with `slotsWanted.OwnerException` (every hour of
-  every day, no notice, no horizon) and then narrows to the link's windows as always. A time
-  the owner is busy for is still left out and still does not book. No public or
-  agent-facing caller may set `OwnerException`.
-- **The panel checks before it creates** (`analyse`, via `windowSlotCounts`): for each window,
-  how many times the engine offers as things stand and how many with the rules set aside. It
-  says which windows are outside the owner's hours, beyond their booking horizon, or fully
-  busy. Nothing that is wholly outside is created without the Allow tap. `analyse` reads the
-  calendar, so it runs when the times change, not on every redraw.
+- **An exception on a link is `OutsideRules`, not more.** `slotsWanted.OwnerException` asks
+  the engine for every hour of every day, no notice, no horizon, and the result is then
+  narrowed to the link's windows as always. The windows filter the engine; they are never a
+  second source of availability. A time the owner is busy for is still left out and still
+  does not book. No public or agent-facing caller may set `OwnerException`; making it the
+  default for an owner-made link is the owner's own setting.
+- **No link is created with nothing to offer.** `analyse` (via `windowSlotCounts`) counts, per
+  window, the times the engine offers with and without the owner's rules, and sets
+  `Offerable` (what the link would really offer) and `Checked`. The Create tap runs `analyse`
+  again, because the calendar may have filled, and refuses when the calendar could not be
+  checked or `Offerable` is 0. The panel names fully busy days. `analyse` reads the calendar,
+  so it runs when the times change and at the tap, not on every redraw.
+- **A guest who still finds no times is never at a dead end.** `times()` → `noTimes`: the
+  guest is asked for up to three times (suggest mode, the usual suggestion path), and the
+  owner is told at once with a "New times" button (`tellLinkEmpty`). That is the one
+  exception to "tell the owner when the chat is over": the guest's suggested times on such a
+  link are reported straight away too (`reportChat` from `sendSuggestions`).
+- **Empty links are found before guests find them.** Every tenth sweep (`emptyCheckEvery`),
+  `sweepEmptyLinks` counts the open, unbooked links (`OpenUnbooked`) and tells the owner
+  once per link (`MarkEmptyTold`, `empty_told_at`) when one has nothing left. Each count asks
+  the engine and the calendar, which is why it is not every minute.
 - **`OwnerInvited` lifts the per-guest booking limits** for a booking the owner asked for (a
   personal link, a direct booking, an approved suggestion). Those limits stop guests
   over-booking themselves; they were blocking the owner's own invitations.
