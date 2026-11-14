@@ -35,6 +35,22 @@ const (
 	StatusReplaced  = "replaced"
 )
 
+// Chat modes: where the guest is, beyond the fixed email, phone and times steps.
+const (
+	ChatSuggesting = "suggest" // asked to name other times
+	ChatClosing    = "closing" // asked whether there is anything else
+	ChatEnded      = "ended"   // said there is nothing else
+)
+
+// Kinds of thing held for the owner until the chat is over.
+const (
+	HeldSuggestions = "suggestions" // content: a JSON array of RFC 3339 start times
+	HeldChange      = "change"      // the guest wants the meeting itself changed
+	HeldNote        = "note"
+	HeldFollowUp    = "followup" // the guest will sort it out with the owner
+	HeldCannot      = "cannot"   // the guest cannot meet after all
+)
+
 var (
 	ErrNotFound = errors.New("personal link: not found")
 	// ErrNotBookable is returned when a link cannot take a booking: already used,
@@ -72,14 +88,20 @@ type Link struct {
 	// DetailsDone: the guest has been through the email and phone step.
 	DetailsDone   bool
 	GuestTimezone string // the zone the guest's browser reported; empty until they open the link
-	Status        string
-	BookingID     string
-	ReplacesID    string
-	ExpiresAt     time.Time
-	LastOpenedAt  time.Time // zero until the guest first opens it
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-	Windows       []Window
+	// Where the guest's chat stands. ChatMode is one of the Chat* constants; the three
+	// times decide when the chat is over and whether the owner has been told how it ended.
+	ChatMode       string
+	ChatActiveAt   time.Time // the guest's last action; zero until they do something
+	ChatLeftAt     time.Time // when their page closed; zero while it is open
+	ChatReportedAt time.Time // when the owner was last told how the chat ended
+	Status         string
+	BookingID      string
+	ReplacesID     string
+	ExpiresAt      time.Time
+	LastOpenedAt   time.Time // zero until the guest first opens it
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	Windows        []Window
 }
 
 // Active reports whether the guest can still use the link.
@@ -290,6 +312,7 @@ func normalizeWindows(in []Window, now time.Time) ([]Window, error) {
 }
 
 const linkColumns = `id, user_id, event_type_id, guest_name, guest_email, guest_phone, place_name, place_address, topic, details_done, guest_timezone,
+	chat_mode, chat_active_at, chat_left_at, chat_reported_at,
 	status, COALESCE(booking_id, ''), COALESCE(replaces_id, ''), expires_at, COALESCE(last_opened_at, ''), created_at, updated_at`
 
 // ByToken finds the link a URL token belongs to. An unknown token and a malformed one are
@@ -304,6 +327,12 @@ func (s *Service) ByToken(ctx context.Context, token string) (*Link, error) {
 // Get returns one of the owner's links.
 func (s *Service) Get(ctx context.Context, userID, id string) (*Link, error) {
 	return s.load(ctx, `SELECT `+linkColumns+` FROM personal_links WHERE id = ? AND user_id = ?`, id, userID)
+}
+
+// ByID returns a link by its id alone. For the program's own background work, which starts
+// from a link and has no owner in hand; anything acting for a person uses Get.
+func (s *Service) ByID(ctx context.Context, id string) (*Link, error) {
+	return s.load(ctx, `SELECT `+linkColumns+` FROM personal_links WHERE id = ?`, id)
 }
 
 // List returns the owner's links, newest first: the log a lost link is resent from.
@@ -339,9 +368,10 @@ func (s *Service) List(ctx context.Context, userID string) ([]*Link, error) {
 
 func (s *Service) load(ctx context.Context, query string, args ...any) (*Link, error) {
 	var l Link
-	var expires, opened, created, updated string
+	var expires, opened, created, updated, active, left, reported string
 	err := s.db.QueryRowContext(ctx, query, args...).Scan(
 		&l.ID, &l.UserID, &l.EventTypeID, &l.GuestName, &l.GuestEmail, &l.GuestPhone, &l.PlaceName, &l.PlaceAddress, &l.Topic, &l.DetailsDone, &l.GuestTimezone,
+		&l.ChatMode, &active, &left, &reported,
 		&l.Status, &l.BookingID, &l.ReplacesID, &expires, &opened, &created, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -350,6 +380,7 @@ func (s *Service) load(ctx context.Context, query string, args ...any) (*Link, e
 		return nil, fmt.Errorf("personal link: load: %w", err)
 	}
 	l.ExpiresAt, l.LastOpenedAt, l.CreatedAt, l.UpdatedAt = parse(expires), parse(opened), parse(created), parse(updated)
+	l.ChatActiveAt, l.ChatLeftAt, l.ChatReportedAt = parse(active), parse(left), parse(reported)
 
 	// Expiry is applied when a link is read rather than by a timer: nothing depends on the
 	// moment it flips, only on what a reader sees. A link waiting on the owner's answer to
@@ -426,6 +457,148 @@ func (s *Service) SetDetailsDone(ctx context.Context, id string) error {
 func (s *Service) SetGuestTimezone(ctx context.Context, id, tz string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE personal_links SET guest_timezone = ? WHERE id = ?`, tz, id)
 	return err
+}
+
+// SetChatMode records where the guest's chat stands (one of the Chat* constants, or "").
+func (s *Service) SetChatMode(ctx context.Context, id, mode string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE personal_links SET chat_mode = ? WHERE id = ?`, mode, id)
+	return err
+}
+
+// Touch records that the guest just did something: the chat is live and their page is open.
+func (s *Service) Touch(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE personal_links SET chat_active_at = ?, chat_left_at = '' WHERE id = ?`, stamp(s.now()), id)
+	return err
+}
+
+// MarkLeft records that the guest's page closed; MarkBack that it is open again.
+func (s *Service) MarkLeft(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE personal_links SET chat_left_at = ? WHERE id = ?`, stamp(s.now()), id)
+	return err
+}
+
+func (s *Service) MarkBack(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE personal_links SET chat_left_at = '' WHERE id = ?`, id)
+	return err
+}
+
+// MarkReported records that the owner has been told how the chat ended (or that there was
+// nothing to tell), so the same chat is not looked at again until the guest does more.
+func (s *Service) MarkReported(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE personal_links SET chat_reported_at = ? WHERE id = ?`, stamp(s.now()), id)
+	return err
+}
+
+// ChatsOver returns the links whose guest chat is over and has something the owner has not
+// been told: the guest said they were done, their page has been closed for leftFor, or they
+// have been quiet for quietFor.
+func (s *Service) ChatsOver(ctx context.Context, quietFor, leftFor time.Duration) ([]string, error) {
+	now := s.now().UTC()
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id FROM personal_links l
+		WHERE chat_active_at != ''
+		  AND ( chat_reported_at < chat_active_at
+		     OR EXISTS (SELECT 1 FROM personal_link_held h WHERE h.link_id = l.id AND h.reported_at = '') )
+		  AND ( chat_mode = ?
+		     OR chat_active_at <= ?
+		     OR (chat_left_at != '' AND chat_left_at >= chat_active_at AND chat_left_at <= ?) )
+		ORDER BY chat_active_at LIMIT 50`,
+		ChatEnded, stamp(now.Add(-quietFor)), stamp(now.Add(-leftFor)))
+	if err != nil {
+		return nil, fmt.Errorf("personal link: chats over: %w", err)
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("personal link: chats over: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// Held is one thing a guest wanted passed on to the owner.
+type Held struct {
+	ID         int64
+	LinkID     string
+	Kind       string // one of the Held* constants
+	Content    string
+	CreatedAt  time.Time
+	ReportedAt time.Time // zero until it has gone to the owner
+	MessageID  int64     // the Telegram message that carries it
+	Outcome    string    // what the owner did with it; empty while it waits
+}
+
+// Hold keeps something for the owner until the chat is over.
+func (s *Service) Hold(ctx context.Context, linkID, kind, content string) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO personal_link_held (link_id, kind, content, created_at) VALUES (?, ?, ?, ?)`,
+		linkID, kind, content, stamp(s.now()))
+	return err
+}
+
+const heldColumns = `id, link_id, kind, content, created_at, reported_at, message_id, outcome`
+
+func scanHeld(row interface{ Scan(...any) error }) (Held, error) {
+	var h Held
+	var created, reported string
+	err := row.Scan(&h.ID, &h.LinkID, &h.Kind, &h.Content, &created, &reported, &h.MessageID, &h.Outcome)
+	h.CreatedAt, h.ReportedAt = parse(created), parse(reported)
+	return h, err
+}
+
+// HeldItems returns everything held on a link, oldest first.
+func (s *Service) HeldItems(ctx context.Context, linkID string) ([]Held, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+heldColumns+` FROM personal_link_held WHERE link_id = ? ORDER BY id`, linkID)
+	if err != nil {
+		return nil, fmt.Errorf("personal link: held: %w", err)
+	}
+	defer rows.Close()
+	var out []Held
+	for rows.Next() {
+		h, err := scanHeld(rows)
+		if err != nil {
+			return nil, fmt.Errorf("personal link: held: %w", err)
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}
+
+// HeldByID returns one held item, only if its link belongs to userID.
+func (s *Service) HeldByID(ctx context.Context, userID string, id int64) (*Held, error) {
+	h, err := scanHeld(s.db.QueryRowContext(ctx, `
+		SELECT `+heldColumns+` FROM personal_link_held
+		WHERE id = ? AND link_id IN (SELECT id FROM personal_links WHERE user_id = ?)`, id, userID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("personal link: held: %w", err)
+	}
+	return &h, nil
+}
+
+// MarkHeldReported records that these items went to the owner in the given message.
+func (s *Service) MarkHeldReported(ctx context.Context, ids []int64, messageID int64) error {
+	for _, id := range ids {
+		if _, err := s.db.ExecContext(ctx,
+			`UPDATE personal_link_held SET reported_at = ?, message_id = ? WHERE id = ?`, stamp(s.now()), messageID, id); err != nil {
+			return fmt.Errorf("personal link: held reported: %w", err)
+		}
+	}
+	return nil
+}
+
+// ResolveHeld records what the owner did with a held item. It succeeds once: a second
+// answer to the same item gets ErrNotBookable.
+func (s *Service) ResolveHeld(ctx context.Context, id int64, outcome string) error {
+	return s.transition(ctx,
+		`UPDATE personal_link_held SET outcome = ? WHERE id = ? AND outcome = ''`, outcome, id)
 }
 
 // Message is one entry in the guest's conversation on a link.

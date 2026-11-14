@@ -242,6 +242,9 @@ func BuildHandler(ctx context.Context, cfg *config.Config, db *sql.DB, logger *s
 		h.SetTelegram(telegram.New(tg.Token), tg.WebhookSecret)
 		logger.Info("Telegram bot connected", "bot", tg.Username)
 	}
+	// Tells owners when a guest's chat on a personal link has ended. It runs whether or not
+	// a bot is connected yet, since one can be connected later from Settings.
+	h.StartPersonalLinkSweep(ctx)
 
 	// Optional Zoom integration — each host connects their own Zoom account to
 	// auto-mint meeting links. DB settings take priority over env vars.

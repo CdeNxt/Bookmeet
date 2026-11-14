@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -926,6 +927,17 @@ func (h *Handler) ownerHandleCallback(ctx context.Context, bot *telegram.Client,
 			arg = parts[3]
 		}
 		notice = s.tapDraft(ctx, d, parts[2], arg)
+	case len(parts) >= 3 && parts[0] == "h":
+		// A button under an end-of-chat message: a suggested time, or a change request.
+		id, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			return
+		}
+		arg := ""
+		if len(parts) > 3 {
+			arg = parts[3]
+		}
+		notice = s.tapHeld(ctx, id, parts[2], arg, cq.Message.MessageID)
 	case len(parts) == 3 && parts[0] == "l" && parts[1] == "c":
 		notice = s.tapCancelLink(ctx, parts[2], cq.Message.MessageID)
 	case len(parts) == 2 && parts[0] == "l" && parts[1] == "k":
