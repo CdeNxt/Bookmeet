@@ -599,3 +599,38 @@ func TestOwnerAssistant_tapsFromElsewhereAndOnDeadPanelsDoNothing(t *testing.T) 
 		t.Errorf("tap on a dead panel answered %v", last)
 	}
 }
+
+// A reasoning model that runs out of room mid-thought returns nothing usable. The owner must
+// never be left looking at "typing…" with no answer: the assistant asks the model once more,
+// and if that fails too, says so itself.
+func TestOwnerAssistant_anEmptyReplyIsNeverSilence(t *testing.T) {
+	f := newOwnerFixture(t)
+	before := len(f.texts())
+
+	f.model.says("<think>The owner wants a meeting with Bill, so first I should work out")
+	f.model.says("Which days should I offer Bill?")
+	f.message(t, "set something up with Bill")
+	if got := f.lastText(); got != "Which days should I offer Bill?" {
+		t.Fatalf("after one empty reply the owner got %q; want the retry's answer", got)
+	}
+
+	f.model.says("<think>still thinking")
+	f.model.says("")
+	f.message(t, "next week")
+	if got := f.lastText(); !strings.Contains(got, "didn't manage to answer") {
+		t.Fatalf("after two empty replies the owner got %q; want the program to say so", got)
+	}
+	if n := len(f.texts()) - before; n != 2 {
+		t.Errorf("the owner got %d messages for two requests; want one each", n)
+	}
+
+	// A tool that already showed the owner something needs no closing line: an empty
+	// reply after it is fine, and gets no apology.
+	f.model.tool("list_links", map[string]any{})
+	f.model.says("")
+	count := len(f.texts())
+	f.message(t, "show my links")
+	if got := len(f.texts()) - count; got != 1 || strings.Contains(f.lastText(), "didn't manage") {
+		t.Errorf("after a tool spoke the owner got %d messages, ending %q; want just the tool's", got, f.lastText())
+	}
+}
