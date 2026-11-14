@@ -85,6 +85,9 @@ type Link struct {
 	PlaceName    string
 	PlaceAddress string
 	Topic        string // what the meeting is about, in the owner's words
+	// OutsideAvailability is an exception the owner allowed for this link: it offers times
+	// inside its windows even outside their hours, notice or booking horizon.
+	OutsideAvailability bool
 	// DetailsDone: the guest has been through the email and phone step.
 	DetailsDone   bool
 	GuestTimezone string // the zone the guest's browser reported; empty until they open the link
@@ -143,7 +146,9 @@ type CreateParams struct {
 	Topic        string
 	// DetailsDone carries "this guest already gave their details" onto a replacement link.
 	DetailsDone bool
-	Windows     []Window
+	// OutsideAvailability: see Link.
+	OutsideAvailability bool
+	Windows             []Window
 }
 
 // Create makes a link and returns it with its token. The token is the secret in the URL;
@@ -253,7 +258,8 @@ func (s *Service) insert(ctx context.Context, tx *sql.Tx, p CreateParams, replac
 		GuestName: name, GuestEmail: strings.TrimSpace(p.GuestEmail), GuestPhone: strings.TrimSpace(p.GuestPhone),
 		PlaceName: strings.TrimSpace(p.PlaceName), PlaceAddress: strings.TrimSpace(p.PlaceAddress),
 		Topic: strings.TrimSpace(p.Topic), DetailsDone: p.DetailsDone && strings.TrimSpace(p.GuestEmail) != "",
-		Status: StatusOpen, ReplacesID: replacesID,
+		OutsideAvailability: p.OutsideAvailability,
+		Status:              StatusOpen, ReplacesID: replacesID,
 		ExpiresAt: windows[len(windows)-1].End, CreatedAt: now, UpdatedAt: now, Windows: windows,
 	}
 	for _, w := range windows {
@@ -264,10 +270,10 @@ func (s *Service) insert(ctx context.Context, tx *sql.Tx, p CreateParams, replac
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO personal_links
 		  (id, user_id, event_type_id, token_hash, token_enc, guest_name, guest_email, guest_phone,
-		   place_name, place_address, topic, details_done, status, replaces_id, expires_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		   place_name, place_address, topic, details_done, outside_availability, status, replaces_id, expires_at, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		l.ID, l.UserID, l.EventTypeID, hashToken(token), enc, l.GuestName, l.GuestEmail, l.GuestPhone,
-		l.PlaceName, l.PlaceAddress, l.Topic, l.DetailsDone, l.Status, nullable(replacesID), stamp(l.ExpiresAt), stamp(now), stamp(now)); err != nil {
+		l.PlaceName, l.PlaceAddress, l.Topic, l.DetailsDone, l.OutsideAvailability, l.Status, nullable(replacesID), stamp(l.ExpiresAt), stamp(now), stamp(now)); err != nil {
 		return nil, "", fmt.Errorf("personal link: insert: %w", err)
 	}
 	for _, w := range windows {
@@ -311,7 +317,7 @@ func normalizeWindows(in []Window, now time.Time) ([]Window, error) {
 	return out, nil
 }
 
-const linkColumns = `id, user_id, event_type_id, guest_name, guest_email, guest_phone, place_name, place_address, topic, details_done, guest_timezone,
+const linkColumns = `id, user_id, event_type_id, guest_name, guest_email, guest_phone, place_name, place_address, topic, details_done, outside_availability, guest_timezone,
 	chat_mode, chat_active_at, chat_left_at, chat_reported_at,
 	status, COALESCE(booking_id, ''), COALESCE(replaces_id, ''), expires_at, COALESCE(last_opened_at, ''), created_at, updated_at`
 
@@ -370,7 +376,7 @@ func (s *Service) load(ctx context.Context, query string, args ...any) (*Link, e
 	var l Link
 	var expires, opened, created, updated, active, left, reported string
 	err := s.db.QueryRowContext(ctx, query, args...).Scan(
-		&l.ID, &l.UserID, &l.EventTypeID, &l.GuestName, &l.GuestEmail, &l.GuestPhone, &l.PlaceName, &l.PlaceAddress, &l.Topic, &l.DetailsDone, &l.GuestTimezone,
+		&l.ID, &l.UserID, &l.EventTypeID, &l.GuestName, &l.GuestEmail, &l.GuestPhone, &l.PlaceName, &l.PlaceAddress, &l.Topic, &l.DetailsDone, &l.OutsideAvailability, &l.GuestTimezone,
 		&l.ChatMode, &active, &left, &reported,
 		&l.Status, &l.BookingID, &l.ReplacesID, &expires, &opened, &created, &updated)
 	if errors.Is(err, sql.ErrNoRows) {

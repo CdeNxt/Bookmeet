@@ -254,6 +254,8 @@ export type StripeSettings = {
 /** Personal booking assistant: the switch, its Telegram bot, and the signed-in user's chat link. */
 export type AssistantSettings = {
 	enabled: boolean;
+	/** may the assistant offer exceptions to the owner's availability (it still asks each time). */
+	exceptions: boolean;
 	/** true when it can actually work: switched on, a bot connected, and the AI model live. */
 	active: boolean;
 	ai_active: boolean;

@@ -350,6 +350,20 @@
 							disabled={assistantFlag.active || (!assistant.enabled && (!assistant.telegram.configured || !assistant.ai_active))}
 							onCheckedChange={(v) => patchAssistant({ enabled: v }, v ? 'Assistant switched on' : 'Assistant switched off')} />
 					</div>
+
+					<div class="flex items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2">
+						<div>
+							<Label for="assistant-exceptions" class="text-sm">Allow exceptions to my availability</Label>
+							<p class="text-xs text-muted-foreground">
+								Lets the assistant offer or book a time outside your hours or booking window,
+								or over another meeting. It asks you each time and nothing happens without your tap.
+								When off, it only tells you the time isn't available.
+							</p>
+						</div>
+						<Switch id="assistant-exceptions" checked={assistant.exceptions}
+							disabled={assistantFlag.active}
+							onCheckedChange={(v) => patchAssistant({ exceptions: v }, v ? 'Exceptions allowed' : 'Exceptions switched off')} />
+					</div>
 				</div>
 			</div>
 		{/if}

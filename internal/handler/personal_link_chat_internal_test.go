@@ -627,7 +627,7 @@ func TestPersonalLinkChat_theOwnerSeesWhichSuggestionsClashAndTheGuestDoesNot(t 
 	if n := f.count(t, `SELECT COUNT(*) FROM bookings`); n != 0 {
 		t.Fatalf("a time outside the owner's hours was booked on the first tap")
 	}
-	if !strings.Contains(f.lastText(), "outside the hours you take meetings") {
+	if !strings.Contains(f.lastText(), "is outside the times you take meetings") {
 		t.Fatalf("the owner was not asked before booking it:\n%s", f.lastText())
 	}
 	f.tap(t, "Book anyway")
@@ -876,7 +876,7 @@ func TestPersonalLinkChat_aCalendarClashIsMarkedAndOnlyTheOwnerCanBookOverIt(t *
 	}
 
 	f.tap(t, clash)
-	if !strings.Contains(f.lastText(), "You already have something on your calendar") {
+	if !strings.Contains(f.lastText(), "It clashes with something on your calendar") {
 		t.Fatalf("the owner was not warned:\n%s", f.lastText())
 	}
 	if n := f.count(t, `SELECT COUNT(*) FROM bookings`); n != 0 {

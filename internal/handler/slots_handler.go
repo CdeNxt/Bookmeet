@@ -138,6 +138,15 @@ func (h *Handler) GetSlots(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, body)
 }
 
+// allDayRules is every hour of every day: a host's schedule with their own hours set aside.
+var allDayRules = func() []slots.AvailabilityRule {
+	out := make([]slots.AvailabilityRule, 0, 7)
+	for d := time.Sunday; d <= time.Saturday; d++ {
+		out = append(out, slots.AvailabilityRule{DayOfWeek: d, StartTime: "00:00", EndTime: "23:59"})
+	}
+	return out
+}()
+
 // slotsWanted selects the optional outputs of a slots computation. Both cost real work
 // and both are public-booking-surface concerns, so every caller says what it needs
 // rather than paying for the maximum.
@@ -158,6 +167,13 @@ type slotsWanted struct {
 	Taken bool
 	// NoticeGap asks which days the minimum-notice rule took a bookable start from.
 	NoticeGap bool
+	// OwnerException sets the owner's own rules aside for this computation: their weekly
+	// hours and date overrides, the minimum notice and how far ahead they take bookings.
+	// What they are busy for still removes times. It is for a personal link on which the
+	// owner allowed an exception, and for showing the owner what such an exception would
+	// offer; the caller narrows the result to the link's windows, so "any time" here never
+	// reaches a guest as that. No public or agent-facing caller may set it.
+	OwnerException bool
 }
 
 // computeSlots returns the bookable slots (and the candidate hosts' display map) for
@@ -178,6 +194,9 @@ func (h *Handler) computeSlots(ctx context.Context, slug, tzName, fromStr, toStr
 			travel = &travelQuery{Dest: want.Location, Fallback: et.FixedDriveMinutes}
 		}
 		et.useInPersonBuffers()
+	}
+	if want.OwnerException {
+		et.MinNoticeMinutes, et.MaxFutureDays = 0, 0
 	}
 	if tzName == "" {
 		tzName = "UTC"
@@ -243,6 +262,9 @@ func (h *Handler) computeSlots(ctx context.Context, slug, tzName, fromStr, toStr
 				return
 			}
 			ha.Role = ph.role
+			if want.OwnerException {
+				ha.Rules, ha.Overrides = allDayRules, nil
+			}
 			hostAvails[i] = ha
 			degradedByHost[i] = degraded
 		}(i, ph)
