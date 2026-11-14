@@ -600,5 +600,24 @@ main.plink-shell > .card.plink-card { flex: 0 0 auto; flex-direction: column; wi
 }
 @media (max-width: 520px) {
   .plink-shell { padding: 0; }
-  main.plink-shell > .card.plink-card { width: 100%; max-width: none; height: 100dvh; border-radius: 0; }
+  main.plink-shell > .card.plink-card { width: 100%; max-width: none; }
+}
+/* The chat page is exactly one screen tall, at every size. The card used to take the
+   whole viewport's height for itself (100dvh) while the page also had a header above it
+   and padding below, so the message box was pushed under the phone browser's address bar.
+   Now the page is the height of what is visible and the card takes what the header leaves.
+   100dvh follows the browser's bars by itself. --plink-vh is set by the page's script only
+   while an on-screen keyboard covers part of the page, and can only make it shorter. */
+html body:has(> main.plink-shell) {
+  height: 100vh; /* browsers without dvh */
+  height: min(var(--plink-vh, 100dvh), 100dvh);
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+}
+main.plink-shell { min-height: 0; }
+main.plink-shell > .card.plink-card { height: 100%; max-height: 760px; min-height: 0; }
+/* The version line and footer never take room from the conversation on a short screen. */
+@media (max-height: 620px) {
+  body:has(> main.plink-shell) > .bm-ver { display: none; }
 }
