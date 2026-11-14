@@ -100,10 +100,15 @@ func (h *Handler) mcpBookForGuest(ctx context.Context, _ *mcp.CallToolRequest, i
 	if b.PhysicalLocation != "" {
 		out.Where = b.PhysicalLocation
 	}
-	if b.InviteDelivery == booking.InviteByNone {
+	// Claim an invitation only when one will arrive (guestWillBeEmailed), the rule the
+	// guest's booked card follows: Bookmeet's email set up, or the host's calendar invites.
+	switch {
+	case b.InviteDelivery == booking.InviteByNone:
 		out.Invitation = "It is on the owner's calendar. This meeting type sends the guest no invitation, so the owner should tell them."
-	} else {
+	case h.guestWillBeEmailed(ctx, b):
 		out.Invitation = "It is on the owner's calendar, and the guest's calendar invitation is on its way to " + email + "."
+	default:
+		out.Invitation = "It is on the owner's calendar, but no invitation email will reach the guest (email is not set up), so the owner should tell them."
 	}
 	if tok, err := h.bookingSvc.IssueManageToken(ctx, b.ID); err == nil {
 		out.ManageURL = strings.TrimRight(h.publicURL(), "/") + "/manage/" + tok
