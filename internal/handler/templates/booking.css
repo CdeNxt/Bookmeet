@@ -142,7 +142,8 @@
 
 /* Timezone pill: a visible label (zone + offset) with the native <select> laid
  * invisibly over it, so the whole pill is the tap target and phones use their own picker. */
-.tz-label { margin-top: 1rem; }
+/* It sits at the top of the times area, above the day's header and the times. */
+.tz-label { margin: 0 0 .875rem; }
 .tz-pill {
   position: relative;
   display: inline-flex;

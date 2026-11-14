@@ -488,7 +488,9 @@ func New(ctx context.Context, cfg *config.Config, db *sql.DB, logger *slog.Logge
 	mux.HandleFunc("GET /v1/event-types/{slug}/public", cors(h.PublicEventType))
 
 	// unthrottled is a CPU + API-quota abuse vector on an openly-public page.
-	placesRL := RateLimit(12, time.Minute)
+	// Suggestions follow typing with a short pause, so one address takes several lookups;
+	// at 12 a minute a single visitor ran out mid-address and suggestions silently stopped.
+	placesRL := RateLimit(30, time.Minute)
 	mux.HandleFunc("POST /v1/event-types/{slug}/places", placesRL(h.SearchBookingPlaces))
 	slotsRL := RateLimit(60, time.Minute)
 	mux.HandleFunc("GET /v1/event-types/{slug}/slots", cors(slotsRL(h.GetSlots)))

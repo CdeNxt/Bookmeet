@@ -537,10 +537,10 @@
         el('span', { class: 'month-label', text: first.toLocaleDateString(this.locale, { month: 'long', year: 'numeric' }) }),
         prev, next,
       ]);
-      return el('section', { class: 'cal-col' }, [nav, grid, this.tzPill()]);
+      return el('section', { class: 'cal-col' }, [nav, grid]);
     }
 
-    // tzPill - the timezone dropdown under the calendar. Same markup and classes as the
+    // tzPill - the timezone dropdown at the top of the times area. Same markup and classes as the
     // pill in book.html / manage.html (styled once, in booking.css): a visible label over
     // an invisible native <select>. Starts on the device's zone; changing it reloads the
     // month, because day buckets and min-notice dates are both computed in TZ.
@@ -656,12 +656,12 @@
         if (st.degraded) {
           listEl.appendChild(el('p', { class: 'hint notice-hint', text: t(self.i18n, 'calendar_degraded_notice') }));
         }
-        inner = el('div', {}, [el('p', { class: 'slots-header', text: list[0] ? shortDay(list[0].start, self.locale) : this.dayHeader(st.day) }), listEl]);
+        inner = el('div', {}, [this.tzPill(), el('p', { class: 'slots-header', text: list[0] ? shortDay(list[0].start, self.locale) : this.dayHeader(st.day) }), listEl]);
       } else {
         // Before a day is chosen. The notice line belongs here as well as in the list: a
         // day the policy emptied completely is greyed out in the calendar, so this is the
         // only place the explanation can be reached.
-        var kids = [el('p', { class: 'hint', text: t(this.i18n, 'select_day_hint') })];
+        var kids = [this.tzPill(), el('p', { class: 'hint', text: t(this.i18n, 'select_day_hint') })];
         if (notice && st.noticeDates && st.noticeDates.length) {
           kids.push(el('p', { class: 'hint notice-hint', text: notice }));
         }

@@ -702,13 +702,22 @@
 					<Checkbox id="is-active" bind:checked={form.is_active} />
 					<Label for="is-active" class="cursor-pointer font-normal">Active (accepting bookings)</Label>
 				</div>
+				<p class="text-xs text-muted-foreground">
+					On: people can book this meeting. Off: nobody can book it and its link shows
+					"Page not found". Existing bookings are kept.
+				</p>
 			</div>
 			<div class="space-y-1.5">
 				<p class="text-sm font-medium">Visibility</p>
 				<div class="flex items-center gap-2">
 					<Checkbox id="is-public" bind:checked={form.is_public} />
-					<Label for="is-public" class="cursor-pointer font-normal">Public (visible in booking page)</Label>
+					<Label for="is-public" class="cursor-pointer font-normal">Listed on my booking page</Label>
 				</div>
+				<p class="text-xs text-muted-foreground">
+					On: this meeting appears on your main booking page for anyone to pick. Off: it is
+					left off that page, but its own link still works, so only people you send the
+					link to can book it.
+				</p>
 			</div>
 		</div>
 

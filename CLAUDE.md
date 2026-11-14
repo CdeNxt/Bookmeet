@@ -278,7 +278,8 @@ The naming is "personal link" throughout because `invites.go` already means cale
   follows `CreateBooking`'s in-person handling step for step. Keep the two in step. It needs
   an event type with `allow_in_person`.
 - Not handled yet: event types with required intake questions (the link books with no
-  answers), and private or inactive event types (`loadBookableEventType` refuses them).
+  answers), and inactive event types (`loadBookableEventType` refuses them). An unlisted
+  one (`is_public = 0`) is bookable by link: `is_public` means listed, not bookable.
 
 ## Personal booking assistant: switch and Telegram connection (Bookmeet)
 

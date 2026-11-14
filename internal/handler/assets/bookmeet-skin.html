@@ -269,7 +269,10 @@ html[data-bm-theme="light"] body.bm-scene .cookie-btn-primary{background:#5965e9
 .venue-input{position:relative;--venue-popup:#222636;--venue-line:#4a5069;--venue-highlight:#353e60;--venue-credit:#fff}
 html[data-bm-theme=light] .venue-input{--venue-popup:#fff;--venue-line:#d8dbea;--venue-highlight:#eef0fc;--venue-credit:#5e5e5e}
 html body.bm-scene .card:has(#venue-results:not([hidden])){overflow:visible}
-.venue-choice .venue-input input[type=text]{padding-inline-end:52px}
+.venue-choice .venue-input input[type=text]{padding-inline-end:46px;text-overflow:ellipsis}
+/* The field is narrow in the info column and its text must stay 16px (below that iOS zooms
+   the page), so the hint alone is set smaller to read in full. */
+.venue-choice .venue-input input[type=text]::placeholder{font-size:13px}
 .venue-map-icon{
  position:absolute;inset-block-start:50%;inset-inline-end:2px;transform:translateY(-50%);
  display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:8px;

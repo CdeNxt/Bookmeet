@@ -35,13 +35,14 @@ type answerJSON struct {
 
 // ListQuestions handles GET /v1/event-types/{slug}/questions (public).
 // Returns questions ordered by position for the booking form.
-// Only returns questions for active, public event types.
+// Only for active event types. An unlisted one (is_public = 0) is still reachable by its
+// own link, so its form needs its questions; see loadBookableEventType.
 func (h *Handler) ListQuestions(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
 
 	var etID string
 	err := h.db.QueryRowContext(r.Context(),
-		`SELECT id FROM event_types WHERE slug = ? AND is_active = 1 AND is_public = 1`, slug).Scan(&etID)
+		`SELECT id FROM event_types WHERE slug = ? AND is_active = 1`, slug).Scan(&etID)
 	if errors.Is(err, sql.ErrNoRows) {
 		h.writeError(w, http.StatusNotFound, "event type not found")
 		return

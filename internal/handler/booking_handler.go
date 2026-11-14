@@ -493,8 +493,15 @@ var errPaymentRequired = errors.New("this event requires payment; please book on
 // paths need. loadBookableEventType is their one shared query — createBookingForSlug,
 // CreateBooking, and computeSlots each used to hand-write their own column subset, which
 // is exactly how the API/MCP/assistant booking path ended up missing the is_public check
-// the direct booking page (book.go) always had. A future caller now gets both is_active
-// and is_public enforced by construction, not by remembering to add the check.
+// the direct booking page (book.go) always had. A future caller now gets the gate by
+// construction, not by remembering to add the check.
+//
+// What the gate is: is_active only. is_public means LISTED, not bookable. An unlisted event
+// type is left off the owner's booking page, the team page and every list handed to an agent
+// (directory.go, mcp.go, assistant_owner.go), but anyone holding its own link can open and
+// book it - that is what "Unlisted (link only)" in the admin promises, and it used to answer
+// 404. Switching an event type off is is_active's job. Keep the two apart: a new listing
+// query filters on is_public, a new slug-addressed path does not.
 type bookableEventType struct {
 	AllowPhoneCall        bool
 	AllowInPerson         bool
@@ -552,7 +559,9 @@ func (h *Handler) loadBookableEventType(ctx context.Context, slug string) (*book
 			&et.BufferBeforeMinutes, &et.BufferAfterMinutes, &et.InPersonBeforeMinutes, &et.InPersonAfterMinutes, &et.FixedDriveMinutes, &et.TravelMode, &et.MinNoticeMinutes, &et.MaxFutureDays,
 			&isActive, &isPublic, &showTaken, &et.MaxActiveBookings, &et.PriceCents, &et.Currency,
 			&et.InviteDelivery)
-	if err != nil || isActive == 0 || isPublic == 0 {
+	// is_public is read but does not gate: see the note on bookableEventType.
+	_ = isPublic
+	if err != nil || isActive == 0 {
 		return nil, errEventTypeNotFound
 	}
 	et.ShowTakenSlots = showTaken != 0

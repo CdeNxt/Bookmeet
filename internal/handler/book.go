@@ -376,7 +376,7 @@ func (h *Handler) PublicEventType(w http.ResponseWriter, r *http.Request) {
 		       et.price_cents, et.currency, et.msg_greeting, et.allow_phone_call, u.booking_accent, u.week_start
 		FROM event_types et
 		JOIN users u ON u.id = et.user_id
-		WHERE et.slug = ? AND et.is_active = 1 AND et.is_public = 1`,
+		WHERE et.slug = ? AND et.is_active = 1`,
 		slug).Scan(&etID, &name, &description, &durMins, &locType, &locValue, &maxDays, &minNotice, &routingMode, &hostName, &avatarURL, &priceCents, &currency, &msgGreeting, &allowPhoneCall, &accentColor, &weekStart)
 	if errors.Is(err, sql.ErrNoRows) {
 		h.writeError(w, http.StatusNotFound, "event type not found")
@@ -499,7 +499,7 @@ func (h *Handler) BookPage(w http.ResponseWriter, r *http.Request) {
 		       et.price_cents, et.currency, et.msg_greeting, et.allow_phone_call, u.booking_accent, et.allow_in_person, COALESCE(u.handle, ''), u.week_start
 		FROM event_types et
 		JOIN users u ON u.id = et.user_id
-		WHERE et.slug = ? AND et.is_active = 1 AND et.is_public = 1`,
+		WHERE et.slug = ? AND et.is_active = 1`,
 		slug).Scan(&etID, &name, &description, &durMins, &locType, &locValue, &maxDays, &minNotice, &routingMode, &hostName, &avatarURL, &priceCents, &currency, &msgGreeting, &allowPhoneCall, &accentColor, &allowInPerson, &ownerHandle, &weekStart)
 
 	if errors.Is(err, sql.ErrNoRows) {

@@ -139,17 +139,6 @@ body {
     {{template "eventMeta" .}}
     {{if .PhysicalLocation}}<p class="venue-address">{{.PhysicalLocation}}</p>{{end}}
     {{if .VideoURL}}<a class="back-btn" href="{{.VideoURL}}">Join video meeting</a>{{end}}
-    {{if and (not .TokenInvalid) (ne .Status "cancelled")}}
-    <p class="tz-label">
-      <span class="tz-pill">
-        <svg class="tz-globe" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.9 3.9 5.9 3.9 9s-1.3 6.1-3.9 9c-2.6-2.9-3.9-5.9-3.9-9S9.4 5.9 12 3Z"/></svg>
-        <span class="tz-text" id="tz-text" aria-hidden="true"></span>
-      <span class="tz-offset" id="tz-offset" aria-hidden="true"></span>
-        <svg class="tz-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
-        <select id="tz-select" aria-label="{{call .T "timezone_aria"}}"></select>
-      </span>
-    </p>
-    {{end}}
   </aside>
 
   {{if eq .Status "cancelled"}}
@@ -189,6 +178,16 @@ body {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
         {{call .T "back"}}
       </button>
+      <!-- Timezone: above the times it changes. -->
+      <p class="tz-label">
+        <span class="tz-pill">
+          <svg class="tz-globe" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.9 3.9 5.9 3.9 9s-1.3 6.1-3.9 9c-2.6-2.9-3.9-5.9-3.9-9S9.4 5.9 12 3Z"/></svg>
+          <span class="tz-text" id="tz-text" aria-hidden="true"></span>
+        <span class="tz-offset" id="tz-offset" aria-hidden="true"></span>
+          <svg class="tz-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+          <select id="tz-select" aria-label="{{call .T "timezone_aria"}}"></select>
+        </span>
+      </p>
       <p class="slots-header" id="slots-date">{{call .T "select_a_date"}}</p>
       <div id="slots-list" class="slots-list"><p class="hint">{{call .T "pick_day_hint"}}</p></div>
     </div>

@@ -25,7 +25,7 @@ func (h *Handler) SearchBookingPlaces(w http.ResponseWriter, r *http.Request) {
 	}
 	var enabled bool
 	err := h.db.QueryRowContext(r.Context(), `SELECT allow_in_person FROM event_types
-  WHERE slug = ? AND is_active = 1 AND is_public = 1`, r.PathValue("slug")).Scan(&enabled)
+  WHERE slug = ? AND is_active = 1`, r.PathValue("slug")).Scan(&enabled)
 	if err != nil || !enabled {
 		h.writeError(w, http.StatusNotFound, "place search is unavailable")
 		return

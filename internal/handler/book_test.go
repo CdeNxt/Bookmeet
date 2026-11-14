@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestBookPage_unknownSlug_returns404(t *testing.T) {
@@ -112,26 +113,52 @@ func TestBookPage_durationLabels(t *testing.T) {
 	}
 }
 
-func TestBookPage_privateEventType_returns404(t *testing.T) {
+// An unlisted event type (is_public = 0) is left off the owner's booking page but still
+// opens, offers times and takes its form's questions from its own link. It used to answer
+// 404, which made "Unlisted (link only)" in the admin a dead link. Switching one off
+// entirely is is_active's job, and that still answers 404.
+func TestBookPage_unlistedEventType_opensByItsLinkOnly(t *testing.T) {
 	h, apiKey, _ := setupWorkspace(t)
 	slug, _ := seedEventTypeHTTP(t, h, apiKey)
 
-	// Make the event type private.
-	patchReq := authReq(http.MethodPatch, "/v1/event-types/"+slug, `{"is_public":false}`, apiKey)
-	patchReq.SetPathValue("slug", slug)
-	patchRec := httptest.NewRecorder()
-	h.RequireAuth(h.PatchEventType)(patchRec, patchReq)
-	if patchRec.Code != http.StatusOK {
-		t.Fatalf("patch is_public=false: got %d — %s", patchRec.Code, patchRec.Body.String())
+	patch := func(body string) {
+		t.Helper()
+		req := authReq(http.MethodPatch, "/v1/event-types/"+slug, body, apiKey)
+		req.SetPathValue("slug", slug)
+		rec := httptest.NewRecorder()
+		h.RequireAuth(h.PatchEventType)(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("patch %s: got %d - %s", body, rec.Code, rec.Body.String())
+		}
+	}
+	get := func(handler http.HandlerFunc, path string) int {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.SetPathValue("slug", slug)
+		rec := httptest.NewRecorder()
+		handler(rec, req)
+		return rec.Code
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/book/"+slug, nil)
-	req.SetPathValue("slug", slug)
-	rec := httptest.NewRecorder()
-	h.BookPage(rec, req)
+	day := time.Now().AddDate(0, 0, 2).Format("2006-01-02")
+	patch(`{"is_public":false}`)
+	if code := get(h.BookPage, "/book/"+slug); code != http.StatusOK {
+		t.Errorf("unlisted booking page = %d; want 200", code)
+	}
+	if code := get(h.ListQuestions, "/v1/event-types/"+slug+"/questions"); code != http.StatusOK {
+		t.Errorf("unlisted questions = %d; want 200", code)
+	}
+	// The times come from the shared booking core, which has its own gate.
+	if code := get(h.GetSlots, "/v1/event-types/"+slug+"/slots?from="+day+"&to="+day+"&tz=UTC"); code != http.StatusOK {
+		t.Errorf("unlisted slots = %d; want 200", code)
+	}
 
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("status = %d; want 404 for private event type", rec.Code)
+	patch(`{"is_active":false}`)
+	if code := get(h.BookPage, "/book/"+slug); code != http.StatusNotFound {
+		t.Errorf("inactive booking page = %d; want 404", code)
+	}
+	if code := get(h.GetSlots, "/v1/event-types/"+slug+"/slots?from="+day+"&to="+day+"&tz=UTC"); code != http.StatusNotFound {
+		t.Errorf("inactive slots = %d; want 404", code)
 	}
 }
 
