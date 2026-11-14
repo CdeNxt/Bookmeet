@@ -436,29 +436,36 @@ html[data-bm-theme="light"] .bm-ver{color:#00000070}
    const themeGain=document.documentElement.dataset.bmTheme==='light'?1.25:1.15;
    const particleGain=themeGain*(mobile?1.18:1);
    for(const s of mobile?phoneStars:stars){ctx.fillStyle='rgba(188,195,220,'+(s.a*particleGain)+')';ctx.fillRect(s.x*width+px*9,s.y*height+py*6,1,1)}
-   const planes=mobile?18:48,half=mobile?width*.48:Math.max(width*.43,440),depth=half*.33;
+   // The figure keeps close to one size whatever the window is. It used to scale with the
+   // window: on a wide screen the same number of dots was spread over twice the length and
+   // the centre fade grew with it, so the field washed out; on a phone it shrank to a thin
+   // column. Now it may stretch a little, between fixed limits, and the fades follow the
+   // figure, not the window.
+   const clamp=(v,lo,hi)=>Math.min(hi,Math.max(lo,v));
+   const planes=mobile?18:48,half=mobile?clamp(width*.62,230,340):clamp(width*.43,440,520),depth=half*.33;
+   const spread=clamp(height*.70,half*.95,half*1.9),quietR=half*(mobile?.6:.87);
    for(let j=0;j<planes;j++){
     const z=(j/(planes-1)-.5)*2,angle=z*.64+sway*Math.sin(z*2.1+clock)+clock*.08+px*.22;
-    const span=half*(1+.14*Math.abs(z)),cy=height*.48+z*height*.70+py*20;
+    const span=half*(1+.14*Math.abs(z)),cy=height*.48+z*spread+py*20;
     const corners=[[-span,-depth],[span,-depth],[span,depth],[-span,depth]].map(([x,y])=>[width*.5+x*Math.cos(angle)-y*Math.sin(angle)+px*45,cy+(x*Math.sin(angle)+y*Math.cos(angle))*(.47+py*.025)]);
     for(let k=0;k<4;k++){
      const a=corners[k],b=corners[(k+1)%4];
      // Sample the unprojected edges, so dots keep their position as a plane rotates.
      const edge=k%2===0?span:depth;
-     const n=Math.min(mobile?52:125,Math.max(10,Math.round(edge/(k%2===0?(mobile?3:2):(mobile?3:4)))));
+     const n=Math.min(mobile?64:125,Math.max(10,Math.round(edge/(k%2===0?(mobile?3:2):(mobile?3:4)))));
      const edgeX=b[0]-a[0],edgeY=b[1]-a[1];
      for(let q=0;q<n;q++){
       const f=q/n;let x=a[0]+edgeX*f,y=a[1]+edgeY*f;
       if(x < -16 || x > width+16 || y < -16 || y > height+16)continue;
       const dx=x-pointerX,dy=y-pointerY,dist=Math.hypot(dx,dy),near=Math.max(0,1-dist/200);
       if(dist>1&&near>0){x+=dx/dist*near*14;y+=dy/dist*near*14}
-      const quiet=Math.min(1,.48+Math.abs(x-width*.5)/(width*.38));
+      const quiet=Math.min(1,.48+Math.abs(x-width*.5)/quietR);
       const alpha=(.20+.24*(.5+.5*Math.sin(q*.87+j*1.4+clock*2))+near*.24)*quiet;
       ctx.fillStyle='rgba(188,194,220,'+Math.min(1,alpha*particleGain)+')';const size=near>.1?1.15:mobile?.95:.8;ctx.fillRect(x,y,size,size);
      }
     }
    }
-   const shade=ctx.createRadialGradient(width*.5,height*.34,0,width*.5,height*.34,width*.54);shade.addColorStop(0,'rgba(21,22,30,.34)');shade.addColorStop(1,'rgba(21,22,30,0)');ctx.fillStyle=shade;ctx.fillRect(0,0,width,height);
+   const shade=ctx.createRadialGradient(width*.5,height*.34,0,width*.5,height*.34,half*(mobile?.9:1.25));shade.addColorStop(0,'rgba(21,22,30,.34)');shade.addColorStop(1,'rgba(21,22,30,0)');ctx.fillStyle=shade;ctx.fillRect(0,0,width,height);
   }
   function frame(now){
    raf=0;
