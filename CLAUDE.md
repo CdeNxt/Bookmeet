@@ -520,11 +520,16 @@ create or change a link), `mcp_assistant_book.go` (`book_for_guest`, `answer_gue
   `suggestedTimeBooked`). When a Telegram path grows a step, move it into a shared function
   rather than copying it.
 - **An agent's call is never the owner's tap.** No MCP tool sets `OwnerApproved`,
-  `OutsideRules`, `OverBookings` or `OwnerException`. What a link's windows mean follows the
-  owner's own exceptions setting (as on Telegram); that is the setting, not the agent.
+  `OutsideRules`, `OverBookings` or `OwnerException`. `checkOffer` applies the panel's rules
+  exactly: days without times get `usualHours`, and with exceptions on, any time outside the
+  owner's usual hours makes `needs_owner_approval` and no link is made. `answer_guest` asks
+  `suggestedTimeVerdict` before booking, as `tapHeld` does, because `bookPersonalLink` applies
+  `linkException` and skips the window check: booking a suggestion straight away would waive
+  the owner's hours with no tap. When Telegram's rules change, change these with them.
   "Book anyway" and the direct booking's Allow tap stay the owner's: with `ask_owner`, the
-  agent hands the decision to Telegram (`askOwnerToBookDirect` shows the same panel;
-  `askOwnerToBookSuggested` runs the same `tapHeld` question), and only the tap books.
+  agent hands the decision to Telegram (`askOwnerToBookDirect` and `askOwnerToConfirmLink`
+  show the same panel; `askOwnerToBookSuggested` runs the same `tapHeld` question), and only
+  the tap books or creates.
   Refusals name the
   category (outside hours, busy) and never what is on the calendar:
   `TestMCPAssistant_calendarTitlesNeverReachAnAgent` calls every route at a titled event.

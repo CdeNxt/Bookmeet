@@ -25,8 +25,8 @@ import (
 
 type mcpWindowIn struct {
 	Date  string `json:"date" jsonschema:"the day, YYYY-MM-DD, in the owner's time zone"`
-	Start string `json:"start" jsonschema:"HH:MM, 24-hour, in the owner's time zone"`
-	End   string `json:"end" jsonschema:"HH:MM, 24-hour, in the owner's time zone; 24:00 is not allowed, use 23:59"`
+	Start string `json:"start,omitempty" jsonschema:"HH:MM, 24-hour, in the owner's time zone. Omit start and end when the owner named the day but no times: the owner's usual hours that day are used"`
+	End   string `json:"end,omitempty" jsonschema:"HH:MM, 24-hour, in the owner's time zone; 24:00 is not allowed, use 23:59. Omit with start for the owner's usual hours"`
 }
 
 type mcpOfferIn struct {
@@ -35,6 +35,7 @@ type mcpOfferIn struct {
 	ReplacesLinkID string        `json:"replaces_link_id,omitempty" jsonschema:"to change the offer on an existing link: its link_id. The old address stops working and the guest's email and phone carry over"`
 	PlaceQuery     string        `json:"place_query,omitempty" jsonschema:"for an in-person meeting: the place as the owner named it (\"Equator Coffee on Mission\"). The check looks it up and returns place_options"`
 	Place          string        `json:"place,omitempty" jsonschema:"for an in-person meeting: the option the owner picked, copied exactly from place_options. Never write an address yourself"`
+	AskOwner       bool          `json:"ask_owner,omitempty" jsonschema:"create only: when some times are outside the owner's usual hours, send the owner the details on Telegram to confirm with their own tap. Only after the owner says yes to asking"`
 }
 
 type mcpWindowCheck struct {
@@ -54,6 +55,8 @@ type mcpOfferCheck struct {
 	Windows         []mcpWindowCheck `json:"windows"`
 	TimesOffered    int              `json:"times_offered" jsonschema:"start times offered across all windows"`
 	CanCreate       bool             `json:"can_create" jsonschema:"create_personal_link will accept this offer as it is"`
+	NeedsOwner      bool             `json:"needs_owner_approval" jsonschema:"some times are outside the owner's usual hours: only the owner can confirm them, with their own tap (create_personal_link with ask_owner)"`
+	SkippedDays     []string         `json:"skipped_days,omitempty" jsonschema:"days given without times that the owner does not usually work, left out"`
 	PlaceOptions    []string         `json:"place_options,omitempty" jsonschema:"places found for place_query; show them to the owner and pass the one they pick as place"`
 	Place           string           `json:"place,omitempty" jsonschema:"the confirmed place the link will carry"`
 	PlaceUnverified bool             `json:"place_unverified,omitempty" jsonschema:"this server has no place search, so the place is taken as typed and unchecked"`
@@ -109,24 +112,50 @@ func (h *Handler) checkOffer(ctx context.Context, o *mcpOwner, in mcpOfferIn) (*
 		return time.Date(d.Year(), d.Month(), d.Day(), minute/60, minute%60, 0, 0, o.Loc)
 	}
 	type win struct {
-		date       string
-		start, end time.Time
+		date             string
+		startMin, endMin int
+		start, end       time.Time
 	}
 	var ws []win
+	var skipped []string
+	usual := &ownerSession{h: h, userID: o.UserID, prof: ownerProfile{Name: o.Name, Loc: o.Loc, H24: o.H24}}
 	for _, w := range in.Windows {
 		date := strings.TrimSpace(w.Date)
-		startMin, ok1 := parseClock(w.Start)
-		endMin, ok2 := parseClock(w.End)
 		if _, err := time.ParseInLocation("2006-01-02", date, o.Loc); err != nil || date < today || date > horizon {
 			return nil, nil, nil, fmt.Errorf("window date %q must be YYYY-MM-DD, from today (%s) to a year ahead", w.Date, today)
 		}
+		if strings.TrimSpace(w.Start) == "" && strings.TrimSpace(w.End) == "" {
+			// Days without times: the owner's usual hours that day, and none on a day off,
+			// exactly as the Telegram panel fills them (usualHours).
+			spans, err := usual.usualHours(ctx, et.ID, date)
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("the owner's usual hours could not be read. Ask the owner which times to offer")
+			}
+			if len(spans) == 0 {
+				skipped = append(skipped, at(date, 12*60).Format("Mon 2 Jan"))
+			}
+			for _, sp := range spans {
+				if sp[1]-sp[0] >= et.Minutes {
+					ws = append(ws, win{date: date, startMin: sp[0], endMin: sp[1], start: at(date, sp[0]), end: at(date, sp[1])})
+				}
+			}
+			continue
+		}
+		startMin, ok1 := parseClock(w.Start)
+		endMin, ok2 := parseClock(w.End)
 		if !ok1 || !ok2 {
-			return nil, nil, nil, fmt.Errorf("the window on %s needs start and end as HH:MM, 24-hour", date)
+			return nil, nil, nil, fmt.Errorf("the window on %s needs start and end as HH:MM, 24-hour, or neither for the owner's usual hours", date)
 		}
 		if endMin-startMin < et.Minutes {
 			return nil, nil, nil, fmt.Errorf("the window on %s is shorter than the %d-minute meeting. Ask the owner for a longer one", date, et.Minutes)
 		}
-		ws = append(ws, win{date: date, start: at(date, startMin), end: at(date, endMin)})
+		ws = append(ws, win{date: date, startMin: startMin, endMin: endMin, start: at(date, startMin), end: at(date, endMin)})
+	}
+	if len(ws) == 0 && len(skipped) > 0 {
+		return nil, nil, nil, fmt.Errorf("none of those days are among the owner's usual working days (%s). Ask the owner whether they want to offer them anyway, and at what times", strings.Join(skipped, ", "))
+	}
+	if len(ws) > ownerMaxWindows {
+		return nil, nil, nil, fmt.Errorf("that is more than %d stretches of time. Ask the owner to narrow the days down", ownerMaxWindows)
 	}
 	sort.Slice(ws, func(i, j int) bool { return ws[i].start.Before(ws[j].start) })
 	if !ws[len(ws)-1].end.After(now) {
@@ -173,12 +202,14 @@ func (h *Handler) checkOffer(ctx context.Context, o *mcpOwner, in mcpOfferIn) (*
 		}
 		return nil, nil, nil, fmt.Errorf("check availability: %w", err)
 	}
-	// The owner's own setting decides what a link's windows mean, exactly as on Telegram
-	// (analyse): on, a link offers every time inside its windows the owner is not busy for;
-	// off, their usual hours still apply. The setting is the owner's; nothing the agent
-	// passes changes it. linkException reads it again whenever the link is used.
+	// The same rules as the Telegram panel (analyse and the Create tap): times outside the
+	// owner's usual hours are flagged, because the owner asked for them explicitly or not at
+	// all (days without times got the usual hours). With the exceptions setting on, they
+	// need the owner's own confirmation before a link is made, and then the link offers its
+	// whole windows. With it off, the owner's hours decide and only the inside part is
+	// offered. Nothing the agent passes changes either.
 	exceptions := h.assistantExceptions(ctx)
-	out := &mcpOfferCheck{OwnerTimezone: o.zone(), Today: today, Meeting: et.Name, Minutes: et.Minutes}
+	out := &mcpOfferCheck{OwnerTimezone: o.zone(), Today: today, Meeting: et.Name, Minutes: et.Minutes, SkippedDays: skipped}
 	var empty []string
 	for i, w := range ws {
 		c := mcpWindowCheck{
@@ -192,17 +223,22 @@ func (h *Handler) checkOffer(ctx context.Context, o *mcpOwner, in mcpOfferIn) (*
 		switch {
 		case exception[i] == 0:
 			c.Verdict, c.VerdictText = "busy_throughout", "the owner is busy the whole time, so nothing can be offered"
-		case exceptions:
-			c.Verdict, c.VerdictText = "open", "open"
 		case normal[i] == 0 && et.MaxFutureDays > 0 && w.date > now.In(o.Loc).AddDate(0, 0, et.MaxFutureDays).Format("2006-01-02"):
-			c.Verdict, c.VerdictText, c.NeedsApproval = "beyond_booking_horizon",
-				fmt.Sprintf("beyond the %d days ahead the owner takes bookings", et.MaxFutureDays), true
+			c.Verdict, c.VerdictText = "beyond_booking_horizon", fmt.Sprintf("beyond the %d days ahead the owner takes bookings", et.MaxFutureDays)
 		case normal[i] == 0:
-			c.Verdict, c.VerdictText, c.NeedsApproval = "outside_hours", "outside the times the owner takes meetings", true
+			c.Verdict, c.VerdictText = "outside_hours", "outside the times the owner takes meetings"
 		case normal[i] < exception[i]:
-			c.Verdict, c.VerdictText = "partly_outside_hours", "only the part inside the owner's hours will be offered"
+			c.Verdict, c.VerdictText = "partly_outside_hours", "only part of this is inside the times the owner takes meetings"
 		default:
 			c.Verdict, c.VerdictText = "open", "open"
+		}
+		outside := c.Verdict == "outside_hours" || c.Verdict == "beyond_booking_horizon" || c.Verdict == "partly_outside_hours"
+		c.NeedsApproval = outside && exceptions
+		if !exceptions && c.Verdict == "partly_outside_hours" {
+			c.VerdictText = "only the part inside the owner's hours will be offered"
+		}
+		if c.NeedsApproval {
+			out.NeedsOwner = true
 		}
 		if offered == 0 {
 			empty = append(empty, c.Text+" ("+c.VerdictText+")")
@@ -213,13 +249,15 @@ func (h *Handler) checkOffer(ctx context.Context, o *mcpOwner, in mcpOfferIn) (*
 	out.PlaceOptions, out.Place, out.PlaceUnverified = placeOptions, place, placeUnverified
 	// Like the Create tap: refused when the link would offer nothing at all, or when an
 	// in-person place has not been picked yet.
-	out.CanCreate = out.TimesOffered > 0
+	out.CanCreate = out.TimesOffered > 0 && !out.NeedsOwner
 	needsPlace := strings.TrimSpace(in.PlaceQuery) != "" && place == ""
 	hint := ""
-	for _, c := range out.Windows {
-		if c.NeedsApproval {
-			hint = " Times outside the owner's usual hours can be offered only if the owner switches on \"Allow exceptions to my availability\" in Bookmeet, Settings → AI; you cannot do that for them."
-			break
+	if !exceptions {
+		for _, c := range out.Windows {
+			if c.Verdict == "outside_hours" || c.Verdict == "beyond_booking_horizon" {
+				hint = " The owner keeps links to their usual hours (\"Allow exceptions to my availability\" is off in Bookmeet, Settings → AI), so times outside them are not offered; only the owner can change that."
+				break
+			}
 		}
 	}
 	switch {
@@ -229,6 +267,8 @@ func (h *Handler) checkOffer(ctx context.Context, o *mcpOwner, in mcpOfferIn) (*
 	case needsPlace:
 		out.CanCreate = false
 		out.Advice = "Show the owner the place_options and ask which one; then pass it, copied exactly, as place."
+	case out.NeedsOwner && out.TimesOffered > 0:
+		out.Advice = "Some of these times are outside the owner's usual hours (see verdict_text). Tell the owner which; if they want them anyway, call create_personal_link with ask_owner set to true and they confirm on Telegram with their own tap. Or change the times."
 	case !out.CanCreate:
 		out.Advice = "Nothing in these windows can be offered: " + strings.Join(empty, "; ") + ". Ask the owner for other times." + hint
 	case len(empty) > 0:
@@ -307,6 +347,9 @@ func (h *Handler) mcpCreatePersonalLink(ctx context.Context, _ *mcp.CallToolRequ
 	if err != nil {
 		return nil, createPersonalLinkOut{}, err
 	}
+	if !check.CanCreate && check.NeedsOwner && check.TimesOffered > 0 && in.AskOwner {
+		return nil, createPersonalLinkOut{}, errors.New(h.askOwnerToConfirmLink(ctx, o, et, name, email, topic, check, windows, strings.TrimSpace(in.ReplacesLinkID)))
+	}
 	if !check.CanCreate {
 		return nil, createPersonalLinkOut{}, fmt.Errorf("no link was made. %s", check.Advice)
 	}
@@ -377,4 +420,39 @@ func (h *Handler) addAssistantCreateTools(s *mcp.Server) {
 			"To change an existing link's offer, pass replaces_link_id: the old address stops working. Never send the link to the guest yourself; the owner sends it.",
 		Annotations: toolWrites,
 	}, h.mcpCreatePersonalLink)
+}
+
+// askOwnerToConfirmLink puts the Telegram details panel for this link in front of the owner,
+// with its Allow and Create link buttons, because some of its times are outside their usual
+// hours and only they can confirm that. The agent's call makes nothing; the owner's taps do.
+func (h *Handler) askOwnerToConfirmLink(ctx context.Context, o *mcpOwner, et *ownerEventType, name, email, topic string, check *mcpOfferCheck, windows []personallink.Window, replaces string) string {
+	if h.ownerTelegramSession(ctx, o.UserID) == nil {
+		return "no link was made, and the owner has no Telegram assistant connected to confirm times outside their usual hours with. Offer times inside their hours instead"
+	}
+	draft := make([]draftWindow, 0, len(windows))
+	for _, w := range windows {
+		s, e := w.Start.In(o.Loc), w.End.In(o.Loc)
+		draft = append(draft, draftWindow{Date: s.Format("2006-01-02"), Start: s.Hour()*60 + s.Minute(), End: e.Hour()*60 + e.Minute()})
+	}
+	h.assistantRun(o.UserID, func(ctx context.Context) {
+		s := h.ownerTelegramSession(ctx, o.UserID)
+		if s == nil {
+			return
+		}
+		if old := s.openDraft(ctx); old != nil {
+			s.retirePanel(ctx, old, "Replaced by a newer panel.")
+		}
+		d := &ownerDraft{GuestName: name, GuestEmail: email, EventTypeID: et.ID, Topic: topic, Windows: draft,
+			Place: check.Place, PlaceUnverified: check.PlaceUnverified, ReplacesLinkID: replaces}
+		if check.Place != "" {
+			d.PlaceQuery = check.Place
+		}
+		s.analyse(ctx, d)
+		s.say(ctx, fmt.Sprintf("Your AI app asked for a link for %s with some times outside your usual hours. Tap Allow, then Create link, if you want it.", name))
+		if err := s.showPanel(ctx, d); err != nil {
+			h.logger.ErrorContext(ctx, "mcp: show panel to owner", "error", err)
+		}
+		s.remember(ctx, "event", fmt.Sprintf("Through a connected AI app, the owner asked for a link for %s with times outside their usual hours. The details panel is waiting for their tap.", name))
+	})
+	return "no link is made yet. Some times are outside the owner's usual hours, so the owner has been sent the details on Telegram to confirm with their own tap. list_personal_links will show the link once they do; they get the address there"
 }

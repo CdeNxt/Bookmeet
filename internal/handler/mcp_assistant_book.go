@@ -82,7 +82,7 @@ func (h *Handler) mcpBookForGuest(ctx context.Context, _ *mcp.CallToolRequest, i
 	case errors.Is(err, errSlotUnavailable), errors.Is(err, errNoHostAvailable):
 		if in.AskOwner {
 			// Not an error the agent can fix, but nothing was booked by this call either.
-			return nil, bookForGuestOut{}, errors.New(h.askOwnerToBookDirect(ctx, o, et, name, email, in.Date, minute, start))
+			return nil, bookForGuestOut{}, errors.New(h.askOwnerToBookDirect(ctx, o, et, name, email, strings.TrimSpace(in.Date), minute, start))
 		}
 		return nil, bookForGuestOut{}, fmt.Errorf("nothing was booked: %s is outside the times the owner takes meetings (their hours, notice or booking horizon). get_available_slots shows what is open. Only the owner can book outside their hours: if they want to, call again with ask_owner set to true and they get the details on Telegram to allow it with a tap", o.when(start))
 	case errors.Is(err, errCalendarUnavailable):
@@ -220,6 +220,29 @@ func (h *Handler) mcpAnswerGuest(ctx context.Context, _ *mcp.CallToolRequest, in
 	}
 	if !match {
 		return nil, answerGuestOut{}, fmt.Errorf("at must be one of the guest's suggested times, exactly as get_personal_link gives it")
+	}
+	// First the verdict, as tapHeld asks it: a suggested time books straight away only when
+	// it is free under the owner's own rules. bookPersonalLink applies the link's exception
+	// (linkException) and skips the window check, so without this an agent could book a
+	// time outside the owner's hours that Telegram would have asked them about. Only the
+	// booleans are used; v.Conflicts (calendar titles) never leaves this function.
+	if v := h.suggestedTimeVerdict(ctx, l, at); !v.free() {
+		why := fmt.Sprintf("the owner's calendar could not be checked for %s", o.when(at))
+		switch {
+		case v.Clash:
+			why = fmt.Sprintf("the owner already has something at %s", o.when(at))
+		case v.Outside:
+			why = fmt.Sprintf("%s is outside the times the owner takes meetings", o.when(at))
+		}
+		if v.Unknown && !v.Clash && !v.Outside {
+			return nil, answerGuestOut{}, fmt.Errorf("nothing was booked: %s. Try again in a moment", why)
+		}
+		if in.AskOwner {
+			if msg := h.askOwnerToBookSuggested(ctx, o, held, starts, at); msg != "" {
+				return nil, answerGuestOut{LinkID: l.ID, Result: msg}, nil
+			}
+		}
+		return nil, answerGuestOut{}, fmt.Errorf("nothing was booked: %s. Only the owner can book it anyway: if they want to, call again with ask_owner set to true and they get the question on Telegram to decide with a tap. Or answer none", why)
 	}
 	organizer := booking.Attendee{Name: l.GuestName, Email: l.GuestEmail, IANATimezone: l.GuestTimezone, Locale: l.GuestLocale}
 	b, err := h.bookPersonalLink(ctx, l, at, organizer, true)

@@ -301,7 +301,9 @@ func TestMCPAssistant_createRefusals(t *testing.T) {
 	if err := json.Unmarshal([]byte(callJSON(t, cs, "check_personal_link_offer", offerArgs(3, "09:00", "11:00"))), &check); err != nil {
 		t.Fatal(err)
 	}
-	if check.CanCreate || check.Windows[0].Verdict != "outside_hours" || !check.Windows[0].NeedsApproval {
+	// With the setting off the owner cannot approve it either, so it is not offered as needing
+	// approval: it is simply not offered.
+	if check.CanCreate || check.Windows[0].Verdict != "outside_hours" || check.Windows[0].NeedsApproval || check.NeedsOwner {
 		t.Fatalf("check outside hours = %+v", check)
 	}
 	if msg := toolError(t, cs, "create_personal_link", offerArgs(3, "09:00", "11:00")); !strings.Contains(msg, "Allow exceptions") {
@@ -566,5 +568,80 @@ func TestMCPAssistant_checkNeedsNoGuest(t *testing.T) {
 	})
 	if !strings.Contains(res, `"can_create":true`) {
 		t.Errorf("check without a guest = %s", res)
+	}
+}
+
+// With the setting on (the default), times outside the owner's usual hours are what Telegram
+// asks the owner to confirm before a link exists. An agent gets the same: no link, and with
+// ask_owner the owner's own panel, where Allow and Create link make it.
+func TestMCPAssistant_timesOutsideUsualHoursNeedTheOwnersTap(t *testing.T) {
+	f := newOwnerFixture(t)
+	f.closeDay(t, 3)
+	cs := connectMCPInternal(t, f.h)
+	var check mcpOfferCheck
+	if err := json.Unmarshal([]byte(callJSON(t, cs, "check_personal_link_offer", offerArgs(3, "09:00", "11:00"))), &check); err != nil {
+		t.Fatal(err)
+	}
+	if check.CanCreate || !check.NeedsOwner || !check.Windows[0].NeedsApproval || !strings.Contains(check.Advice, "ask_owner") {
+		t.Fatalf("check = %+v", check)
+	}
+	if msg := toolError(t, cs, "create_personal_link", offerArgs(3, "09:00", "11:00")); !strings.Contains(msg, "ask_owner") {
+		t.Errorf("create without the owner: %s", msg)
+	}
+	args := offerArgs(3, "09:00", "11:00")
+	args["ask_owner"] = true
+	if msg := toolError(t, cs, "create_personal_link", args); !strings.Contains(msg, "sent the details on Telegram") {
+		t.Errorf("asking the owner: %s", msg)
+	}
+	if n := f.count(t, `SELECT COUNT(*) FROM personal_links`); n != 0 {
+		t.Fatalf("%d links before the owner tapped", n)
+	}
+	f.tap(t, "Allow outside my availability")
+	f.tap(t, "Create link")
+	if n := f.count(t, `SELECT COUNT(*) FROM personal_links`); n != 1 {
+		t.Fatalf("%d links after the owner's taps; want 1", n)
+	}
+}
+
+// Days without times get the owner's usual hours, and days off are left out, as on Telegram.
+func TestMCPAssistant_daysWithoutTimesUseUsualHours(t *testing.T) {
+	f := newOwnerFixture(t)
+	f.closeDay(t, 4)
+	cs := connectMCPInternal(t, f.h)
+	var check mcpOfferCheck
+	if err := json.Unmarshal([]byte(callJSON(t, cs, "check_personal_link_offer", map[string]any{
+		"event_type": "intro", "windows": []map[string]string{{"date": date(3)}, {"date": date(4)}},
+	})), &check); err != nil {
+		t.Fatal(err)
+	}
+	if len(check.Windows) == 0 || len(check.SkippedDays) != 1 || check.NeedsOwner || !check.CanCreate {
+		t.Fatalf("check = %+v", check)
+	}
+}
+
+// A guest's suggested time that is free on the calendar but outside the owner's hours is not
+// booked by the agent: Telegram asks the owner about it, and so must this.
+func TestMCPAssistant_aSuggestionOutsideHoursIsNotBookedByTheAgent(t *testing.T) {
+	f := newChatFixture(t)
+	f.throughDetails(t)
+	suggested := f.at(21, 0).AddDate(0, 0, 1)
+	weekday := int(suggested.Weekday())
+	if _, err := f.h.db.Exec(`DELETE FROM availability_rules WHERE day_of_week = ?`, weekday); err != nil {
+		t.Fatal(err)
+	}
+	links := f.h.personalLinks()
+	starts, _ := json.Marshal([]string{suggested.UTC().Format(time.RFC3339)})
+	if err := links.Hold(context.Background(), f.link.ID, personallink.HeldSuggestions, string(starts)); err != nil {
+		t.Fatal(err)
+	}
+	items, _ := links.HeldItems(context.Background(), f.link.ID)
+	cs := connectMCPInternal(t, f.h)
+	if msg := toolError(t, cs, "answer_guest", map[string]any{
+		"link_id": f.link.ID, "held_id": items[len(items)-1].ID, "answer": "book", "at": suggested.UTC().Format(time.RFC3339),
+	}); !strings.Contains(msg, "outside the times") {
+		t.Errorf("answer = %s", msg)
+	}
+	if n := f.count(t, `SELECT COUNT(*) FROM bookings`); n != 0 {
+		t.Fatalf("the agent booked a time outside the owner's hours (%d bookings)", n)
 	}
 }
