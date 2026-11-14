@@ -91,12 +91,14 @@ type Link struct {
 	// DetailsDone: the guest has been through the email and phone step.
 	DetailsDone   bool
 	GuestTimezone string // the zone the guest's browser reported; empty until they open the link
+	GuestLocale   string // the language their page was shown in; empty until they open the link
 	// Where the guest's chat stands. ChatMode is one of the Chat* constants; the three
 	// times decide when the chat is over and whether the owner has been told how it ended.
 	ChatMode       string
 	ChatActiveAt   time.Time // the guest's last action; zero until they do something
 	ChatLeftAt     time.Time // when their page closed; zero while it is open
 	ChatReportedAt time.Time // when the owner was last told how the chat ended
+	ExpiryToldAt   time.Time // when the owner was told it ran out unused; zero until then
 	Status         string
 	BookingID      string
 	ReplacesID     string
@@ -317,8 +319,8 @@ func normalizeWindows(in []Window, now time.Time) ([]Window, error) {
 	return out, nil
 }
 
-const linkColumns = `id, user_id, event_type_id, guest_name, guest_email, guest_phone, place_name, place_address, topic, details_done, outside_availability, guest_timezone,
-	chat_mode, chat_active_at, chat_left_at, chat_reported_at,
+const linkColumns = `id, user_id, event_type_id, guest_name, guest_email, guest_phone, place_name, place_address, topic, details_done, outside_availability, guest_timezone, guest_locale,
+	chat_mode, chat_active_at, chat_left_at, chat_reported_at, expiry_told_at,
 	status, COALESCE(booking_id, ''), COALESCE(replaces_id, ''), expires_at, COALESCE(last_opened_at, ''), created_at, updated_at`
 
 // ByToken finds the link a URL token belongs to. An unknown token and a malformed one are
@@ -374,10 +376,10 @@ func (s *Service) List(ctx context.Context, userID string) ([]*Link, error) {
 
 func (s *Service) load(ctx context.Context, query string, args ...any) (*Link, error) {
 	var l Link
-	var expires, opened, created, updated, active, left, reported string
+	var expires, opened, created, updated, active, left, reported, told string
 	err := s.db.QueryRowContext(ctx, query, args...).Scan(
-		&l.ID, &l.UserID, &l.EventTypeID, &l.GuestName, &l.GuestEmail, &l.GuestPhone, &l.PlaceName, &l.PlaceAddress, &l.Topic, &l.DetailsDone, &l.OutsideAvailability, &l.GuestTimezone,
-		&l.ChatMode, &active, &left, &reported,
+		&l.ID, &l.UserID, &l.EventTypeID, &l.GuestName, &l.GuestEmail, &l.GuestPhone, &l.PlaceName, &l.PlaceAddress, &l.Topic, &l.DetailsDone, &l.OutsideAvailability, &l.GuestTimezone, &l.GuestLocale,
+		&l.ChatMode, &active, &left, &reported, &told,
 		&l.Status, &l.BookingID, &l.ReplacesID, &expires, &opened, &created, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -386,7 +388,7 @@ func (s *Service) load(ctx context.Context, query string, args ...any) (*Link, e
 		return nil, fmt.Errorf("personal link: load: %w", err)
 	}
 	l.ExpiresAt, l.LastOpenedAt, l.CreatedAt, l.UpdatedAt = parse(expires), parse(opened), parse(created), parse(updated)
-	l.ChatActiveAt, l.ChatLeftAt, l.ChatReportedAt = parse(active), parse(left), parse(reported)
+	l.ChatActiveAt, l.ChatLeftAt, l.ChatReportedAt, l.ExpiryToldAt = parse(active), parse(left), parse(reported), parse(told)
 
 	// Expiry is applied when a link is read rather than by a timer: nothing depends on the
 	// moment it flips, only on what a reader sees. A link waiting on the owner's answer to
@@ -465,6 +467,12 @@ func (s *Service) SetGuestTimezone(ctx context.Context, id, tz string) error {
 	return err
 }
 
+// SetGuestLocale records the language the guest's page was shown in.
+func (s *Service) SetGuestLocale(ctx context.Context, id, code string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE personal_links SET guest_locale = ? WHERE id = ?`, code, id)
+	return err
+}
+
 // SetChatMode records where the guest's chat stands (one of the Chat* constants, or "").
 func (s *Service) SetChatMode(ctx context.Context, id, mode string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE personal_links SET chat_mode = ? WHERE id = ?`, mode, id)
@@ -526,6 +534,50 @@ func (s *Service) ChatsOver(ctx context.Context, quietFor, leftFor time.Duration
 	return ids, rows.Err()
 }
 
+// RanOut returns the links that passed their expiry unused and whose owner has not been
+// told. Expiry is otherwise applied when a link is read, so a link nobody opens again would
+// never be noticed; this is what notices it. A link waiting on the owner's answer to
+// suggested times is not among them, as in load.
+func (s *Service) RanOut(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id FROM personal_links
+		WHERE status IN (?, ?, ?) AND expires_at <= ? AND expiry_told_at = ''
+		ORDER BY expires_at LIMIT 50`,
+		StatusOpen, StatusFollowUp, StatusExpired, stamp(s.now()))
+	if err != nil {
+		return nil, fmt.Errorf("personal link: ran out: %w", err)
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("personal link: ran out: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// MarkExpiryTold records that the owner has been told the link ran out. It reports whether
+// this call was the one that recorded it, so two sweeps cannot both send the message.
+func (s *Service) MarkExpiryTold(ctx context.Context, id string) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE personal_links SET expiry_told_at = ? WHERE id = ? AND expiry_told_at = ''`, stamp(s.now()), id)
+	if err != nil {
+		return false, fmt.Errorf("personal link: mark expiry told: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n == 1, nil
+}
+
+// MaxHeld is how many things one link will hold for the owner. A guest has no reason to
+// leave more, and without a ceiling a page left open could fill the table.
+const MaxHeld = 20
+
+// ErrTooManyHeld is returned by Hold once a link holds MaxHeld items.
+var ErrTooManyHeld = errors.New("personal link: too many held items")
+
 // Held is one thing a guest wanted passed on to the owner.
 type Held struct {
 	ID         int64
@@ -540,6 +592,13 @@ type Held struct {
 
 // Hold keeps something for the owner until the chat is over.
 func (s *Service) Hold(ctx context.Context, linkID, kind, content string) error {
+	var n int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM personal_link_held WHERE link_id = ?`, linkID).Scan(&n); err != nil {
+		return fmt.Errorf("personal link: hold: %w", err)
+	}
+	if n >= MaxHeld {
+		return ErrTooManyHeld
+	}
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO personal_link_held (link_id, kind, content, created_at) VALUES (?, ?, ?, ?)`,
 		linkID, kind, content, stamp(s.now()))

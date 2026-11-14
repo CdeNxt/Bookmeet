@@ -41,6 +41,12 @@ func (l *Locale) FormatDate(t time.Time) string {
 	return fmt.Sprintf(l.T("date_format"), l.T(dowKeys[t.Weekday()]), t.Day(), l.T(monthKeys[t.Month()]), t.Year())
 }
 
+// FormatDay is FormatDate without the year - "Mon 22 Jun" - for a date that is plainly in
+// the next few weeks. Its token order is the "day_format" key. Args: 1=weekday, 2=day, 3=month.
+func (l *Locale) FormatDay(t time.Time) string {
+	return fmt.Sprintf(l.T("day_format"), l.T(dowKeys[t.Weekday()]), t.Day(), l.T(monthKeys[t.Month()]))
+}
+
 // FormatTimeOfDay returns just the clock time, honoring the locale's 12h/24h preference
 // (the "clock_format" key) — e.g. "9:00 AM" (English) or "21:00" (Spanish). This mirrors
 // what Intl.DateTimeFormat already renders client-side for these locales on book.html/

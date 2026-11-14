@@ -32,8 +32,8 @@ import (
 //     only what is on the link and the open times inside its windows. It has nothing else to
 //     reveal.
 //
-// The wording here is English for now. It is gathered in plinkText so that moving it into
-// the locale files is one change.
+// What the guest reads is translated (plink_* keys in the locale files). What the owner
+// reads on Telegram, and what the model is told, stays English.
 
 //go:embed templates/plink.html
 var plinkTmplSrc string
@@ -75,73 +75,21 @@ When the guest indicates they are finished, call end_chat.
 
 Plain text only: no markdown, no lists, no emoji. Reply in the guest's language.`
 
-// plinkText is the page's and the program's wording.
-var plinkText = map[string]string{
-	"title":          "Booking with %s",
-	"disclosure":     "You’re chatting with %s’s AI booking assistant.",
-	"greeting":       "Hi %[1]s, %[2]s asked me to set up a %[3]s meeting with you (%[4]s).",
-	"topic":          "It’s about %s.",
-	"ask_email":      "Before we start, what’s the best email address for the invite?",
-	"have_email":     "I still have your email as %s.",
-	"bad_email":      "That doesn’t look like an email address. Could you check it?",
-	"ask_phone":      "Thanks. What’s the best phone number, in case %s needs to reach you? You can skip this.",
-	"bad_phone":      "I couldn’t read that as a phone number. Try again, or skip it.",
-	"skip":           "Skip",
-	"times_intro":    "%s can do these times. Do any of them work?",
-	"times_again":    "These times are open:",
-	"welcome_back":   "Welcome back. These times are open:",
-	"times_head":     "%[1]s · %[2]s · times in %[3]s",
-	"more_times":     "More times",
-	"no_times":       "There are no open times left on this link. %s will be in touch.",
-	"confirm":        "Confirm your time",
-	"when":           "When",
-	"length":         "Length",
-	"where":          "Where",
-	"invite":         "Invite",
-	"btn_confirm":    "Confirm",
-	"btn_change":     "Change",
-	"booked":         "You’re booked.",
-	"invite_sent":    "Sent to %s",
-	"manage_hint":    "You can reschedule or cancel from the invitation.",
-	"invite_none":    "No email will be sent, so please note the time above.",
-	"suggest_btn":    "Suggest another time",
-	"ask_suggest":    "Sure. What times would work for you? Give me up to three, with exact start times.",
-	"suggest_title":  "You’re suggesting",
-	"btn_send":       "Send to %s",
-	"suggest_sent":   "I’ll check with %[1]s. If one works you’ll get an invitation at %[2]s; if not, %[1]s will be in touch.",
-	"suggest_unsure": "I couldn’t work out exact times from that. Which day and start time would suit you?",
-	"anything_else":  "Anything else I can pass on to %s? If not, you can close this chat.",
-	"btn_done":       "That’s all, thanks",
-	"bye":            "Thanks, %s. You can close this chat now.",
-	"noted":          "I’ll pass that on to %s.",
-	"noted_change":   "I’ll pass that to %s, who will be in touch.",
-	"noted_followup": "No problem, I’ll let %s know.",
-	"noted_cannot":   "Understood. I’ll let %s know.",
-	"confirmed":      "%s confirmed. You’re booked.",
-	"slot_taken":     "That time was just taken. These are still open:",
-	"not_offered":    "That isn’t one of the open times. These are:",
-	"inactive":       "This link is no longer active. Ask %s for a new one.",
-	"already":        "You’re booked. You can reschedule or cancel from the invitation.",
-	"questions":      "This meeting needs a few details I can’t collect here. %s will be in touch.",
-	"trouble":        "I’m having trouble right now. Use the buttons above, or try again in a moment.",
-	"limit":          "We’ve been at this a while. Use the buttons above, or get in touch with %s directly.",
-	"for_host":       "%[1]s for %[2]s",
-	"at_place":       "At %s.",
-	"placeholder":    "Message",
-	"send":           "Send",
-	"thinking":       "Thinking…",
-	"minutes":        "%d minutes",
-	"zone_label":     "Time zone",
-	"load_failed":    "This page could not load. Check your connection and try again.",
-	"email_holder":   "Your email address",
-	"phone_holder":   "Phone number (optional)",
+// The page's and the program's wording lives in the locale files, under plink_* keys. These
+// are the ones the page itself draws (button labels, placeholders); it is handed them without
+// the prefix. Everything else is composed here and sent as finished text.
+var plinkPageKeys = []string{
+	"more_times", "suggest_btn", "btn_change", "btn_confirm", "skip", "btn_done",
+	"email_holder", "phone_holder", "placeholder", "send", "thinking", "zone_label",
+	"load_failed", "trouble",
 }
 
-func plinkT(key string, args ...any) string {
+// t is the guest-facing wording, in the language their page is shown in.
+func (s *plinkSession) t(key string, args ...any) string {
 	if len(args) == 0 {
-		return plinkText[key]
+		return s.lc.T("plink_" + key)
 	}
-	return fmt.Sprintf(plinkText[key], args...)
+	return s.lc.Tf("plink_"+key, args...)
 }
 
 // chatItem is one entry on the guest's page: text, or a card.
@@ -199,6 +147,7 @@ type plinkSession struct {
 	link      *personallink.Link
 	links     *personallink.Service
 	loc       *time.Location // the guest's zone
+	lc        *i18n.Locale   // the guest's language
 	ownerName string
 	ownerLoc  *time.Location
 	etSlug    string
@@ -209,8 +158,20 @@ type plinkSession struct {
 	lastText  string // what the guest just typed, for a tool that passes it on
 }
 
-func (h *Handler) newPlinkSession(ctx context.Context, l *personallink.Link, tz string) (*plinkSession, error) {
-	s := &plinkSession{h: h, link: l, links: h.personalLinks()}
+// newPlinkSession loads what a step of the chat needs. lc is the language of the request in
+// hand; nil means there is no guest on the line (the owner acting later), and the language
+// their page was last shown in is used.
+func (h *Handler) newPlinkSession(ctx context.Context, l *personallink.Link, tz string, lc *i18n.Locale) (*plinkSession, error) {
+	s := &plinkSession{h: h, link: l, links: h.personalLinks(), lc: lc}
+	if s.lc == nil {
+		if s.lc = i18n.Get(l.GuestLocale); s.lc == nil {
+			s.lc = i18n.Default()
+		}
+	} else if s.lc.Code != l.GuestLocale {
+		if err := s.links.SetGuestLocale(ctx, l.ID, s.lc.Code); err == nil {
+			l.GuestLocale = s.lc.Code
+		}
+	}
 	var ownerTZ string
 	if err := h.db.QueryRowContext(ctx, `
 		SELECT u.name, u.iana_timezone, et.slug, et.name, et.duration_minutes, et.location_type
@@ -276,15 +237,33 @@ func (s *plinkSession) say(ctx context.Context, text string) {
 
 // ---- wording helpers ----
 
-func (s *plinkSession) where() string {
+func (s *plinkSession) where() string { return s.whereIn(s.lc) }
+
+// whereIn names the meeting's place or kind in a given language: the guest's for their
+// page, English for the owner and the model.
+func (s *plinkSession) whereIn(lc *i18n.Locale) string {
 	if s.link.PlaceAddress != "" {
 		return s.link.PlaceAddress
 	}
-	w := locationWord(s.locType)
-	return strings.ToUpper(w[:1]) + w[1:]
+	return locationLabel(s.locType, "", lc)
 }
 
-// zoneLabel names a zone the way a person would: "Los Angeles time (PST)".
+// zone names the guest's zone for them: "Los Angeles time (PST)".
+func (s *plinkSession) zone(at time.Time) string {
+	name := s.loc.String()
+	if name == "UTC" || name == "" {
+		return "UTC"
+	}
+	city := name
+	if i := strings.LastIndex(name, "/"); i >= 0 {
+		city = name[i+1:]
+	}
+	return s.t("zone", strings.ReplaceAll(city, "_", " "), at.In(s.loc).Format("MST"))
+}
+
+func (s *plinkSession) clock(t time.Time) string { return s.lc.FormatTimeOfDay(t) }
+
+// zoneLabel names a zone in English, for the model: "Los Angeles time (PST)".
 func zoneLabel(loc *time.Location, at time.Time) string {
 	name := loc.String()
 	abbr := at.In(loc).Format("MST")
@@ -298,30 +277,31 @@ func zoneLabel(loc *time.Location, at time.Time) string {
 	return strings.ReplaceAll(city, "_", " ") + " time (" + abbr + ")"
 }
 
+// plinkClock is a clock time in English, for the owner and the model.
 func plinkClock(t time.Time) string { return t.Format("3:04 PM") }
 
 // when writes a time for the guest, with the owner's own time alongside when the two are in
-// different zones: "Tuesday 17 November, 7:00 AM PST (10:00 AM EST for Jason)".
+// different zones: "Tue 17 Nov, 7:00 AM PST (10:00 AM EST for Jason)".
 func (s *plinkSession) when(start time.Time) string {
-	return start.In(s.loc).Format("Monday 2 January") + ", " + s.clockBoth(start)
+	return s.lc.FormatDay(start.In(s.loc)) + ", " + s.clockBoth(start)
 }
 
 // clockBoth is the clock time for the guest, with the owner's alongside when they differ.
 func (s *plinkSession) clockBoth(start time.Time) string {
 	g, o := start.In(s.loc), start.In(s.ownerLoc)
-	out := plinkClock(g) + " " + g.Format("MST")
+	out := s.clock(g) + " " + g.Format("MST")
 	_, gOff := g.Zone()
 	if _, oOff := o.Zone(); oOff != gOff {
-		out += " (" + plinkT("for_host", plinkClock(o)+" "+o.Format("MST"), s.ownerFirst()) + ")"
+		out += " (" + s.t("for_host", s.clock(o)+" "+o.Format("MST"), s.ownerFirst()) + ")"
 	}
 	return out
 }
 
 func (s *plinkSession) meetingRows(start time.Time) [][2]string {
 	return [][2]string{
-		{plinkT("when"), s.when(start)},
-		{plinkT("length"), plinkT("minutes", s.minutes)},
-		{plinkT("where"), s.where()},
+		{s.t("when"), s.when(start)},
+		{s.t("length"), durationLabel(s.minutes, s.lc)},
+		{s.t("where"), s.where()},
 	}
 }
 
@@ -329,17 +309,17 @@ func (s *plinkSession) meetingRows(start time.Time) [][2]string {
 
 func (s *plinkSession) greet(ctx context.Context) {
 	first := firstName(s.link.GuestName)
-	text := plinkT("greeting", first, s.ownerFirst(), fmt.Sprintf("%d-minute", s.minutes), s.where())
+	text := s.t("greeting", first, s.ownerFirst(), s.t("minutes", s.minutes), s.where())
 	if s.link.Topic != "" {
-		text += " " + plinkT("topic", s.link.Topic)
+		text += " " + s.t("topic", s.link.Topic)
 	}
 	if s.link.GuestEmail != "" && s.link.DetailsDone {
 		// A link that replaced an earlier one for the same guest: confirm, do not ask again.
-		s.say(ctx, text+" "+plinkT("have_email", s.link.GuestEmail))
-		s.times(ctx, plinkT("times_intro", s.ownerFirst()))
+		s.say(ctx, text+" "+s.t("have_email", s.link.GuestEmail))
+		s.times(ctx, s.t("times_intro", s.ownerFirst()))
 		return
 	}
-	s.say(ctx, text+" "+plinkT("ask_email"))
+	s.say(ctx, text+" "+s.t("ask_email"))
 }
 
 // times shows the open times as a card. They are what the scheduling engine found inside
@@ -348,7 +328,7 @@ func (s *plinkSession) times(ctx context.Context, intro string) {
 	res, err := s.h.personalLinkSlots(ctx, s.link, s.loc.String())
 	if err != nil {
 		s.h.logger.ErrorContext(ctx, "personal link chat: slots", "error", err)
-		s.say(ctx, plinkT("trouble"))
+		s.say(ctx, s.t("trouble"))
 		return
 	}
 	var days []chatDay
@@ -358,24 +338,24 @@ func (s *plinkSession) times(ctx context.Context, intro string) {
 			continue
 		}
 		local := start.In(s.loc)
-		label := local.Format("Mon 2 Jan")
+		label := s.lc.FormatDay(local)
 		if len(days) == 0 || days[len(days)-1].Label != label {
 			days = append(days, chatDay{Label: label})
 		}
 		d := &days[len(days)-1]
-		d.Slots = append(d.Slots, chatSlot{Start: start.UTC().Format(time.RFC3339), Label: plinkClock(local)})
+		d.Slots = append(d.Slots, chatSlot{Start: start.UTC().Format(time.RFC3339), Label: s.clock(local)})
 	}
 	if len(days) == 0 {
-		s.say(ctx, plinkT("no_times", s.ownerFirst()))
+		s.say(ctx, s.t("no_times", s.ownerFirst()))
 		return
 	}
 	item := chatItem{
 		Role: "assistant", Kind: "times", Text: intro, Days: days,
-		Head: plinkT("times_head", fmt.Sprintf("%d min", s.minutes), s.where(), zoneLabel(s.loc, s.link.Windows[0].Start)),
+		Head: s.t("times_head", durationLabel(s.minutes, s.lc), s.where(), s.zone(s.link.Windows[0].Start)),
 	}
 	if s.link.PlaceAddress != "" {
-		item.Head = plinkT("times_head", fmt.Sprintf("%d min", s.minutes), locationWord("in_person"), zoneLabel(s.loc, s.link.Windows[0].Start))
-		item.Foot = plinkT("at_place", s.link.PlaceAddress)
+		item.Head = s.t("times_head", durationLabel(s.minutes, s.lc), s.lc.T("location_in_person"), s.zone(s.link.Windows[0].Start))
+		item.Foot = s.t("at_place", s.link.PlaceAddress)
 	}
 	s.add(ctx, item)
 }
@@ -396,7 +376,7 @@ func (s *plinkSession) offered(ctx context.Context, start time.Time) bool {
 
 func (s *plinkSession) confirmCard(ctx context.Context, start time.Time) {
 	s.add(ctx, chatItem{
-		Role: "assistant", Kind: "confirm", Title: plinkT("confirm"),
+		Role: "assistant", Kind: "confirm", Title: s.t("confirm"),
 		Rows: s.meetingRows(start), Start: start.UTC().Format(time.RFC3339),
 	})
 }
@@ -407,7 +387,7 @@ func (s *plinkSession) detailsDone(ctx context.Context) {
 		s.h.logger.ErrorContext(ctx, "personal link chat: details done", "error", err)
 	}
 	s.link.DetailsDone = true
-	s.times(ctx, plinkT("times_intro", s.ownerFirst()))
+	s.times(ctx, s.t("times_intro", s.ownerFirst()))
 }
 
 func (s *plinkSession) saveEmail(ctx context.Context, raw string) bool {
@@ -420,7 +400,7 @@ func (s *plinkSession) saveEmail(ctx context.Context, raw string) bool {
 		return false
 	}
 	s.link.GuestEmail = email
-	s.add(ctx, chatItem{Role: "assistant", Kind: "text", Text: plinkT("ask_phone", s.ownerFirst()), Skip: true})
+	s.add(ctx, chatItem{Role: "assistant", Kind: "text", Text: s.t("ask_phone", s.ownerFirst()), Skip: true})
 	return true
 }
 
@@ -448,35 +428,35 @@ var (
 
 func (s *plinkSession) book(ctx context.Context, start time.Time) {
 	b, err := s.h.bookPersonalLink(ctx, s.link, start,
-		booking.Attendee{Name: s.link.GuestName, Email: s.link.GuestEmail, IANATimezone: s.loc.String()}, false)
+		booking.Attendee{Name: s.link.GuestName, Email: s.link.GuestEmail, IANATimezone: s.loc.String(), Locale: s.lc.Code}, false)
 	var answerErr *answerError
 	switch {
 	case err == nil:
 	case errors.Is(err, personallink.ErrNotBookable):
-		s.say(ctx, plinkT("inactive", s.ownerFirst()))
+		s.say(ctx, s.t("inactive", s.ownerFirst()))
 		return
 	case errors.As(err, &answerErr):
-		s.say(ctx, plinkT("questions", s.ownerFirst()))
+		s.say(ctx, s.t("questions", s.ownerFirst()))
 		return
 	case errors.Is(err, errOutsidePersonalLinkWindows), errors.Is(err, errSlotUnavailable),
 		errors.Is(err, booking.ErrDoubleBooked), errors.Is(err, errNoHostAvailable):
-		s.times(ctx, plinkT("slot_taken"))
+		s.times(ctx, s.t("slot_taken"))
 		return
 	default:
 		s.h.logger.ErrorContext(ctx, "personal link chat: book", "error", err)
-		s.say(ctx, plinkT("trouble"))
+		s.say(ctx, s.t("trouble"))
 		return
 	}
 	s.link.Status, s.link.BookingID = personallink.StatusBooked, b.ID
 	// The card says an invitation was sent only when something will actually reach the
 	// guest. On a server with no email and no calendar to invite from, it says so instead.
 	emailed := s.h.guestWillBeEmailed(ctx, b)
-	card := chatItem{Role: "assistant", Kind: "booked", Title: plinkT("booked"), Rows: s.meetingRows(start)}
+	card := chatItem{Role: "assistant", Kind: "booked", Title: s.t("booked"), Rows: s.meetingRows(start)}
 	if emailed {
-		card.Rows = append(card.Rows, [2]string{plinkT("invite"), plinkT("invite_sent", s.link.GuestEmail)})
-		card.Foot = plinkT("manage_hint")
+		card.Rows = append(card.Rows, [2]string{s.t("invite"), s.t("invite_sent", s.link.GuestEmail)})
+		card.Foot = s.t("manage_hint")
 	} else {
-		card.Foot = plinkT("invite_none")
+		card.Foot = s.t("invite_none")
 	}
 	s.add(ctx, card)
 	s.h.notifyOwnerBooked(ctx, s, b, emailed)
@@ -525,7 +505,7 @@ func (h *Handler) notifyOwnerBooked(ctx context.Context, s *plinkSession, b *boo
 		closing = fmt.Sprintf("It's booked in Bookmeet, but no invitation went to %s: this server has no email set up and no calendar to invite from.", firstName(s.link.GuestName))
 	}
 	text := fmt.Sprintf("Booked: %s\n%s · %s\nWhen: %s\nWhere: %s\nEmail: %s\nPhone: %s\n\n%s",
-		s.link.GuestName, s.etName, plinkT("minutes", s.minutes), when, s.where(), s.link.GuestEmail, phone, closing)
+		s.link.GuestName, s.etName, fmt.Sprintf("%d minutes", s.minutes), when, s.whereIn(i18n.Default()), s.link.GuestEmail, phone, closing)
 	if s.link.Topic != "" {
 		text = strings.Replace(text, "\nWhen:", "\nTopic: "+s.link.Topic+"\nWhen:", 1)
 	}
@@ -550,14 +530,14 @@ func (s *plinkSession) setMode(ctx context.Context, mode string) {
 // over, which is what releases everything held for the owner.
 func (s *plinkSession) closing(ctx context.Context) {
 	s.setMode(ctx, personallink.ChatClosing)
-	s.add(ctx, chatItem{Role: "assistant", Kind: "text", Text: plinkT("anything_else", s.ownerFirst()), Done: true})
+	s.add(ctx, chatItem{Role: "assistant", Kind: "text", Text: s.t("anything_else", s.ownerFirst()), Done: true})
 }
 
 // end is the guest saying there is nothing else. The owner is told now rather than at the
 // next sweep.
 func (s *plinkSession) end(ctx context.Context) {
 	s.setMode(ctx, personallink.ChatEnded)
-	s.say(ctx, plinkT("bye", firstName(s.link.GuestName)))
+	s.say(ctx, s.t("bye", firstName(s.link.GuestName)))
 	s.h.reportChat(ctx, s.link.ID)
 }
 
@@ -567,25 +547,28 @@ func (s *plinkSession) hold(ctx context.Context, kind, words string) {
 	if len(words) > 1000 {
 		words = words[:1000]
 	}
-	if err := s.links.Hold(ctx, s.link.ID, kind, words); err != nil {
+	if err := s.links.Hold(ctx, s.link.ID, kind, words); errors.Is(err, personallink.ErrTooManyHeld) {
+		s.say(ctx, s.t("limit", s.ownerFirst()))
+		return
+	} else if err != nil {
 		s.h.logger.ErrorContext(ctx, "personal link chat: hold", "error", err)
-		s.say(ctx, plinkT("trouble"))
+		s.say(ctx, s.t("trouble"))
 		return
 	}
 	switch kind {
 	case personallink.HeldChange:
-		s.say(ctx, plinkT("noted_change", s.ownerFirst()))
+		s.say(ctx, s.t("noted_change", s.ownerFirst()))
 	case personallink.HeldFollowUp:
 		if s.link.Status == personallink.StatusOpen {
 			if err := s.links.SetStatus(ctx, s.link.ID, personallink.StatusFollowUp); err == nil {
 				s.link.Status = personallink.StatusFollowUp
 			}
 		}
-		s.say(ctx, plinkT("noted_followup", s.ownerFirst()))
+		s.say(ctx, s.t("noted_followup", s.ownerFirst()))
 	case personallink.HeldCannot:
-		s.say(ctx, plinkT("noted_cannot", s.ownerFirst()))
+		s.say(ctx, s.t("noted_cannot", s.ownerFirst()))
 	default:
-		s.say(ctx, plinkT("noted", s.ownerFirst()))
+		s.say(ctx, s.t("noted", s.ownerFirst()))
 		return // a note is not the end of anything
 	}
 	s.closing(ctx)
@@ -593,15 +576,15 @@ func (s *plinkSession) hold(ctx context.Context, kind, words string) {
 
 func (s *plinkSession) askSuggest(ctx context.Context) {
 	s.setMode(ctx, personallink.ChatSuggesting)
-	s.say(ctx, plinkT("ask_suggest"))
+	s.say(ctx, s.t("ask_suggest"))
 }
 
 // suggestCard shows the guest the times they are about to suggest, in both zones, to
 // confirm or change before anything goes to the owner.
 func (s *plinkSession) suggestCard(ctx context.Context, starts []time.Time) {
-	item := chatItem{Role: "assistant", Kind: "suggest", Title: plinkT("suggest_title"), Label: plinkT("btn_send", s.ownerFirst())}
+	item := chatItem{Role: "assistant", Kind: "suggest", Title: s.t("suggest_title"), Label: s.t("btn_send", s.ownerFirst())}
 	for _, start := range starts {
-		item.Rows = append(item.Rows, [2]string{start.In(s.loc).Format("Mon 2 Jan"), s.clockBoth(start)})
+		item.Rows = append(item.Rows, [2]string{s.lc.FormatDay(start.In(s.loc)), s.clockBoth(start)})
 		item.Starts = append(item.Starts, start.UTC().Format(time.RFC3339))
 	}
 	s.add(ctx, item)
@@ -634,7 +617,7 @@ func (s *plinkSession) sendSuggestions(ctx context.Context, raw []string) {
 	}
 	starts = usableSuggestions(starts, time.Now())
 	if len(starts) == 0 {
-		s.say(ctx, plinkT("suggest_unsure"))
+		s.say(ctx, s.t("suggest_unsure"))
 		return
 	}
 	out := make([]string, len(starts))
@@ -642,12 +625,15 @@ func (s *plinkSession) sendSuggestions(ctx context.Context, raw []string) {
 		out[i] = t.Format(time.RFC3339)
 	}
 	content, _ := json.Marshal(out)
-	if err := s.links.Hold(ctx, s.link.ID, personallink.HeldSuggestions, string(content)); err != nil {
+	if err := s.links.Hold(ctx, s.link.ID, personallink.HeldSuggestions, string(content)); errors.Is(err, personallink.ErrTooManyHeld) {
+		s.say(ctx, s.t("limit", s.ownerFirst()))
+		return
+	} else if err != nil {
 		s.h.logger.ErrorContext(ctx, "personal link chat: hold suggestions", "error", err)
-		s.say(ctx, plinkT("trouble"))
+		s.say(ctx, s.t("trouble"))
 		return
 	}
-	s.say(ctx, plinkT("suggest_sent", s.ownerFirst(), s.link.GuestEmail))
+	s.say(ctx, s.t("suggest_sent", s.ownerFirst(), s.link.GuestEmail))
 	s.closing(ctx)
 }
 
@@ -673,7 +659,7 @@ func (s *plinkSession) heard(ctx context.Context, text string) {
 		}
 		return
 	case "closed":
-		s.say(ctx, plinkT("inactive", s.ownerFirst()))
+		s.say(ctx, s.t("inactive", s.ownerFirst()))
 		return
 	case "email":
 		if m := plinkEmailIn.FindString(text); m != "" && s.saveEmail(ctx, strings.Trim(m, ".")) {
@@ -694,9 +680,9 @@ func (s *plinkSession) heard(ctx context.Context, text string) {
 	// No model, or it failed: fall back to the plain next step.
 	switch {
 	case s.stage() == "email":
-		s.say(ctx, plinkT("bad_email"))
+		s.say(ctx, s.t("bad_email"))
 	case s.stage() == "phone":
-		s.add(ctx, chatItem{Role: "assistant", Kind: "text", Text: plinkT("bad_phone"), Skip: true})
+		s.add(ctx, chatItem{Role: "assistant", Kind: "text", Text: s.t("bad_phone"), Skip: true})
 	case s.link.ChatMode == personallink.ChatSuggesting || s.link.ChatMode == personallink.ChatClosing:
 		// The guest was asked for other times, or for anything else, and nothing here can
 		// read the answer. It still reaches the owner, in the guest's own words, and the
@@ -704,7 +690,7 @@ func (s *plinkSession) heard(ctx context.Context, text string) {
 		s.hold(ctx, personallink.HeldNote, text)
 		s.closing(ctx)
 	default:
-		s.say(ctx, plinkT("trouble"))
+		s.say(ctx, s.t("trouble"))
 	}
 }
 
@@ -775,11 +761,12 @@ func (s *plinkSession) model(ctx context.Context, text string) bool {
 func (s *plinkSession) prompt(ctx context.Context) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, guestAssistantRules, s.ownerFirst(), firstName(s.link.GuestName))
-	fmt.Fprintf(&b, "\n\nSTATE\nGuest: %s. Host: %s.\nMeeting: %d minutes, %s.", s.link.GuestName, s.ownerName, s.minutes, s.where())
+	fmt.Fprintf(&b, "\n\nSTATE\nGuest: %s. Host: %s.\nMeeting: %d minutes, %s.", s.link.GuestName, s.ownerName, s.minutes, s.whereIn(i18n.Default()))
 	if s.link.Topic != "" {
 		b.WriteString(" Topic: " + s.link.Topic + ".")
 	}
 	fmt.Fprintf(&b, "\nGuest's time zone: %s.\n", zoneLabel(s.loc, time.Now()))
+	fmt.Fprintf(&b, "The guest's page is in %s. Write in it unless the guest writes in another language.\n", s.lc.EnglishName())
 	switch s.stage() {
 	case "email":
 		b.WriteString("Step: waiting for the guest's email address. Times are hidden until it is saved.\n")
@@ -941,7 +928,7 @@ func (s *plinkSession) runTool(ctx context.Context, name, argsJSON string) strin
 		s.detailsDone(ctx)
 		return "Skipped. The program is showing the times."
 	case name == "show_times" && stage == "times":
-		s.times(ctx, plinkT("times_again"))
+		s.times(ctx, s.t("times_again"))
 		return "The times are on screen."
 	case name == "pick_time" && stage == "times":
 		day, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(args.Date), s.loc)
@@ -984,7 +971,9 @@ func (h *Handler) PersonalLinkChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	s, err := h.newPlinkSession(ctx, l, strings.TrimSpace(req.Timezone))
+	// The request comes from the guest's page, so it carries the same language signals the
+	// page was rendered from.
+	s, err := h.newPlinkSession(ctx, l, strings.TrimSpace(req.Timezone), h.resolveLocale(r))
 	if err != nil {
 		h.logger.ErrorContext(ctx, "personal link chat", "error", err)
 		h.writeError(w, http.StatusInternalServerError, "internal error")
@@ -993,7 +982,7 @@ func (h *Handler) PersonalLinkChat(w http.ResponseWriter, r *http.Request) {
 	// The module's switch governs the links too: off means they stop opening.
 	if !h.assistantEnabled(ctx) {
 		h.writeJSON(w, http.StatusOK, plinkChatResponse{
-			Items: []chatItem{{Role: "assistant", Kind: "text", Text: plinkT("inactive", s.ownerFirst())}}, History: true, Stage: "closed",
+			Items: []chatItem{{Role: "assistant", Kind: "text", Text: s.t("inactive", s.ownerFirst())}}, History: true, Stage: "closed",
 		})
 		return
 	}
@@ -1020,7 +1009,7 @@ func (h *Handler) PersonalLinkChat(w http.ResponseWriter, r *http.Request) {
 		past, _ := s.links.Messages(ctx, l.ID)
 		if len(past) == 0 {
 			if s.stage() == "closed" {
-				s.out = append(s.out, chatItem{Role: "assistant", Kind: "text", Text: plinkT("inactive", s.ownerFirst())})
+				s.out = append(s.out, chatItem{Role: "assistant", Kind: "text", Text: s.t("inactive", s.ownerFirst())})
 				break
 			}
 			s.greet(ctx)
@@ -1033,7 +1022,7 @@ func (h *Handler) PersonalLinkChat(w http.ResponseWriter, r *http.Request) {
 		// since what was open when they left may not be now.
 		last := past[len(past)-1]
 		if s.stage() == "times" && (last.Kind != "times" || time.Since(last.CreatedAt) > 10*time.Minute) {
-			s.times(ctx, plinkT("welcome_back"))
+			s.times(ctx, s.t("welcome_back"))
 		}
 	case "say":
 		text := strings.TrimSpace(req.Text)
@@ -1046,23 +1035,23 @@ func (h *Handler) PersonalLinkChat(w http.ResponseWriter, r *http.Request) {
 		s.add(ctx, chatItem{Role: "guest", Kind: "text", Text: text})
 		s.out = s.out[:0] // the page already shows what the guest typed
 		if n := h.plinkGuestMessages(ctx, l.ID); n > plinkMaxGuestMessages {
-			s.say(ctx, plinkT("limit", s.ownerFirst()))
+			s.say(ctx, s.t("limit", s.ownerFirst()))
 			break
 		}
 		s.heard(ctx, text)
 	case "skip_phone":
 		if s.stage() == "phone" {
-			s.add(ctx, chatItem{Role: "guest", Kind: "text", Text: plinkT("skip")})
+			s.add(ctx, chatItem{Role: "guest", Kind: "text", Text: s.t("skip")})
 			s.detailsDone(ctx)
 		}
 	case "times", "change":
 		if s.stage() == "times" {
 			s.setMode(ctx, "")
-			s.times(ctx, plinkT("times_again"))
+			s.times(ctx, s.t("times_again"))
 		}
 	case "suggest":
 		if s.stage() == "times" {
-			s.add(ctx, chatItem{Role: "guest", Kind: "text", Text: plinkT("suggest_btn")})
+			s.add(ctx, chatItem{Role: "guest", Kind: "text", Text: s.t("suggest_btn")})
 			s.askSuggest(ctx)
 		}
 	case "suggest_send":
@@ -1071,7 +1060,7 @@ func (h *Handler) PersonalLinkChat(w http.ResponseWriter, r *http.Request) {
 		}
 	case "end":
 		if s.stage() != "closed" {
-			s.add(ctx, chatItem{Role: "guest", Kind: "text", Text: plinkT("btn_done")})
+			s.add(ctx, chatItem{Role: "guest", Kind: "text", Text: s.t("btn_done")})
 			s.end(ctx)
 		}
 	case "pick", "confirm":
@@ -1081,18 +1070,18 @@ func (h *Handler) PersonalLinkChat(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusBadRequest, "invalid start")
 			return
 		case s.stage() == "booked":
-			s.say(ctx, plinkT("already"))
+			s.say(ctx, s.t("already"))
 		case s.stage() == "closed":
-			s.say(ctx, plinkT("inactive", s.ownerFirst()))
+			s.say(ctx, s.t("inactive", s.ownerFirst()))
 		case s.stage() == "email":
-			s.say(ctx, plinkT("ask_email")) // the times are not available before the details
+			s.say(ctx, s.t("ask_email")) // the times are not available before the details
 		case s.stage() == "phone":
-			s.add(ctx, chatItem{Role: "assistant", Kind: "text", Text: plinkT("ask_phone", s.ownerFirst()), Skip: true})
+			s.add(ctx, chatItem{Role: "assistant", Kind: "text", Text: s.t("ask_phone", s.ownerFirst()), Skip: true})
 		case !s.offered(ctx, start):
-			s.times(ctx, plinkT("not_offered"))
+			s.times(ctx, s.t("not_offered"))
 		case req.Action == "pick":
 			local := start.In(s.loc)
-			s.add(ctx, chatItem{Role: "guest", Kind: "text", Text: local.Format("Monday") + ", " + plinkClock(local)})
+			s.add(ctx, chatItem{Role: "guest", Kind: "text", Text: s.lc.FormatDay(local) + ", " + s.clock(local)})
 			s.confirmCard(ctx, start)
 		default:
 			s.book(ctx, start)
@@ -1166,14 +1155,20 @@ func (h *Handler) PersonalLinkPage(w http.ResponseWriter, r *http.Request) {
 	_ = h.db.QueryRowContext(r.Context(), `SELECT name, booking_accent FROM users WHERE id = ?`, l.UserID).Scan(&owner, &accent)
 	accent = accentOrDefault(accent)
 	brand := h.loadBranding(r.Context())
-	textJSON, _ := json.Marshal(plinkText)
+	h.persistLangOverride(w, r)
+	lc := h.resolveLocaleWithFallback(r, brand.FallbackLocale)
+	text := make(map[string]string, len(plinkPageKeys))
+	for _, k := range plinkPageKeys {
+		text[k] = lc.T("plink_" + k)
+	}
+	textJSON, _ := json.Marshal(text)
 	data := plinkPageData{
 		PublicTheme: brand.PublicTheme, PublicCopyJSON: brand.PublicCopyJSON(), PublicSkinHTML: h.publicHeadHTML(brand.GlassTint),
 		CSSVersion: bookingCSSVersion, BusinessName: brand.BusinessName, LogoURL: brand.LogoURL,
 		LogoHeight: pageLogoHeight(brand.LogoHeight), LogoOpacity: opacityCSS(brand.LogoOpacity),
-		AccentColor: accent, AccentForeground: accentForeground(accent), Locale: "en",
-		Title:          plinkT("title", firstName(owner)),
-		Disclosure:     plinkT("disclosure", firstName(owner)),
+		AccentColor: accent, AccentForeground: accentForeground(accent), Locale: lc.Code,
+		Title:          lc.Tf("plink_title", firstName(owner)),
+		Disclosure:     lc.Tf("plink_disclosure", firstName(owner)),
 		Token:          token,
 		TextJSON:       template.JS(textJSON), // #nosec G203 -- json.Marshal output of a fixed string table, which escapes <,>,& by default
 		BookingEffect:  brand.BookingEffect,

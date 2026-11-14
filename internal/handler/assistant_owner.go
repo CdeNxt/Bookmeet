@@ -1093,6 +1093,8 @@ func (h *Handler) ownerHandleCallback(ctx context.Context, bot *telegram.Client,
 		notice = s.tapHeld(ctx, id, parts[2], arg, cq.Message.MessageID)
 	case len(parts) == 3 && parts[0] == "l" && parts[1] == "c":
 		notice = s.tapCancelLink(ctx, parts[2], cq.Message.MessageID)
+	case len(parts) == 3 && parts[0] == "l" && parts[1] == "n":
+		notice = s.tapNewLink(ctx, parts[2])
 	case len(parts) == 2 && parts[0] == "l" && parts[1] == "k":
 		_ = bot.Edit(ctx, chatID, cq.Message.MessageID, "Kept. The link still works.", nil)
 	}
