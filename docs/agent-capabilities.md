@@ -21,19 +21,26 @@ A button drawn inside an agent app is still pressed through the agent. It never 
 owner's own approval: exceptions to the owner's availability stay on Telegram, or a future
 Bookmeet approval page.
 
-## The apps (checked 2026-11-13)
+## The apps (checked 2026-11-14)
 
-| App | Connects to remote MCP | Interactive cards (MCP Apps) | Pick-one prompts (elicitation) | Asks before writes | Source |
-|---|---|---|---|---|---|
-| Claude (web, desktop) | Yes, as a connector | Yes, since 2026-01-26 | Not in Claude.ai (open request); Claude Code supports form mode | Yes | [MCP Apps launch](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/), [claude-ai-mcp#153](https://github.com/anthropics/claude-ai-mcp/issues/153) |
-| ChatGPT | Yes (connectors; developer mode for write tools) | Yes, from late January 2026 | Not verified | Not verified | [MCP Apps launch](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/), [OpenAI community](https://community.openai.com/t/mcp-server-tools-now-in-chatgpt-developer-mode/1357233) |
-| Microsoft 365 Copilot, VS Code | Yes | Reported yes (secondary source) | VS Code: form and URL mode | Not verified | [antlr-interactive](https://www.antlr-interactive.com/blog/mcp-apps), claude-ai-mcp#153 |
-| "Claude Duet", "Facebook Muse" | Unknown | Unknown | Unknown | Unknown | J named these; not identified yet |
+| App | Connects to remote MCP | Interactive cards (MCP Apps) | Bookmeet tools in voice | Approval in voice | Pick-one prompts (elicitation) | Source |
+|---|---|---|---|---|---|---|
+| Claude (web, desktop, mobile) | Yes, as a connector | Yes (official MCP Apps client list) | Unreliable: reported broken, then working again on iOS; issue closed "not planned" | Not documented | Not in Claude.ai (open request) | [MCP Apps overview](https://modelcontextprotocol.io/extensions/apps/overview), [claude-ai-mcp#146](https://github.com/anthropics/claude-ai-mcp/issues/146), [#153](https://github.com/anthropics/claude-ai-mcp/issues/153) |
+| ChatGPT | Yes (developer mode / apps) | Announced January 2026, but not on the official MCP Apps client list: verify with a real test | Yes, in Live voice (help page updated 2026-11-12) | On screen only: "spoken approval is not supported" | Not verified | [ChatGPT Voice](https://help.openai.com/en/articles/20001274-chatgpt-voice), [MCP Apps launch](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/) |
+| Microsoft 365 Copilot, VS Code, Goose | Yes | Yes (official list) | n/a | n/a | VS Code: form and URL mode | MCP Apps overview |
+| "Claude Duet", "Facebook Muse" | Unknown | Unknown | Unknown | Unknown | Unknown | J named these; not identified yet |
 
-## What this means for the next steps
+Both apps ask the person before a tool that is not marked read-only (ChatGPT per
+conversation; Claude per tool, with "Allow always"). That is the app's prompt, not Bookmeet's,
+and "Allow always" turns it off, so it is never treated as the owner's approval.
 
-- Interactive cards work in both apps J named first, so a level 1 card for the details panel
-  (meeting, days, times, Create link) is worth building. It is the closest match to Telegram's
-  panel. Not built yet.
-- Elicitation is not available in Claude.ai, so do not depend on it. Level 3 must stay
+## What this means
+
+- **Cards are built** (2026-11-14): `mcp_cards.go`. Approvals are a tap on the card
+  (`owner_approve`, app-only). Checked against a stand-in host in a browser; still to check in
+  real Claude and ChatGPT on staging.
+- **Voice:** the owner can ask by voice where the app lets connectors work in voice; the
+  approval is still a tap on the card on screen. Spoken approval was researched and rejected
+  (J, 2026-11-14): nothing the AI writes down can prove the owner said it.
+- Elicitation is not available in Claude.ai, so nothing depends on it. Text must stay
   complete on its own.

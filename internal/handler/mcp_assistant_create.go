@@ -319,9 +319,11 @@ type createPersonalLinkOut struct {
 	Expires       mcpTimeAt      `json:"expires"`
 	Replaced      bool           `json:"replaced,omitempty" jsonschema:"an older link was replaced and no longer works"`
 	Offer         *mcpOfferCheck `json:"offer"`
+	// Approval is set instead of a link when only the owner's tap on the card can confirm it.
+	Approval *mcpApprovalOut `json:"approval,omitempty" jsonschema:"no link is made yet: the owner approves on the card"`
 }
 
-func (h *Handler) mcpCreatePersonalLink(ctx context.Context, _ *mcp.CallToolRequest, in createPersonalLinkIn) (*mcp.CallToolResult, createPersonalLinkOut, error) {
+func (h *Handler) mcpCreatePersonalLink(ctx context.Context, req *mcp.CallToolRequest, in createPersonalLinkIn) (*mcp.CallToolResult, createPersonalLinkOut, error) {
 	o, err := h.mcpAssistantOwner(ctx)
 	if err != nil {
 		return nil, createPersonalLinkOut{}, err
@@ -347,6 +349,25 @@ func (h *Handler) mcpCreatePersonalLink(ctx context.Context, _ *mcp.CallToolRequ
 	if err != nil {
 		return nil, createPersonalLinkOut{}, err
 	}
+	if !check.CanCreate && check.NeedsOwner && check.TimesOffered > 0 && mcpDrawsCards(req) {
+		// The owner confirms the times outside their usual hours with a tap on the card.
+		placeName, placeAddr := splitPlace(check.Place)
+		ap := issueApproval(&ownerApproval{UserID: o.UserID, Kind: approveLink, Replaces: strings.TrimSpace(in.ReplacesLinkID),
+			Link: personallink.CreateParams{UserID: o.UserID, EventTypeID: et.ID, GuestName: name, GuestEmail: email, Topic: topic,
+				PlaceName: placeName, PlaceAddress: placeAddr, Windows: windows}})
+		lines := []string{et.Name}
+		var outside []string
+		for _, w := range check.Windows {
+			lines = append(lines, w.Text)
+			if w.NeedsApproval {
+				outside = append(outside, w.Text)
+			}
+		}
+		return approvalResult(ap), createPersonalLinkOut{Offer: check, Approval: &mcpApprovalOut{
+			Ticket: ap.Ticket, Title: "Link for " + name + " with times outside your hours?", Lines: lines,
+			Why: "Outside your usual hours: " + strings.Join(outside, "; ") + ".", Button: "Allow and create link",
+		}}, nil
+	}
 	if !check.CanCreate && check.NeedsOwner && check.TimesOffered > 0 && in.AskOwner {
 		return nil, createPersonalLinkOut{}, errors.New(h.askOwnerToConfirmLink(ctx, o, et, name, email, topic, check, windows, strings.TrimSpace(in.ReplacesLinkID)))
 	}
@@ -354,13 +375,7 @@ func (h *Handler) mcpCreatePersonalLink(ctx context.Context, _ *mcp.CallToolRequ
 		return nil, createPersonalLinkOut{}, fmt.Errorf("no link was made. %s", check.Advice)
 	}
 
-	placeName, placeAddr := "", check.Place
-	if placeAddr != "" {
-		placeName = placeAddr
-		if i := strings.Index(placeAddr, ", "); i > 0 {
-			placeName = placeAddr[:i] // the same split the Telegram panel makes (placeParts)
-		}
-	}
+	placeName, placeAddr := splitPlace(check.Place)
 	params := personallink.CreateParams{
 		UserID: o.UserID, EventTypeID: et.ID, GuestName: name, GuestEmail: email, Topic: topic, Windows: windows,
 		PlaceName: placeName, PlaceAddress: placeAddr,
@@ -401,16 +416,16 @@ func (h *Handler) mcpCreatePersonalLink(ctx context.Context, _ *mcp.CallToolRequ
 }
 
 func (h *Handler) addAssistantCreateTools(s *mcp.Server) {
-	mcp.AddTool(s, &mcp.Tool{
+	mcp.AddTool(s, withCard(&mcp.Tool{
 		Name:  "check_personal_link_offer",
 		Title: "Check a personal link offer",
 		Description: "Before making a personal link: check the days and times the owner wants to offer against their availability. " +
 			"Pass dates and clock times in the owner's own time zone; each window comes back with its weekday and date written out, so you can confirm with the owner that the days are right. " +
 			"Takes the same arguments as create_personal_link. Says per window how many times the guest would be offered, and whether a window is outside the owner's hours, beyond how far ahead they take bookings, or busy throughout. Changes nothing.",
 		Annotations: toolReadOnly,
-	}, h.mcpCheckPersonalLinkOffer)
+	}), h.mcpCheckPersonalLinkOffer)
 
-	mcp.AddTool(s, &mcp.Tool{
+	mcp.AddTool(s, withCard(&mcp.Tool{
 		Name:  "create_personal_link",
 		Title: "Create a personal link",
 		Description: "Make a single-use booking link for one named guest, limited to the windows given, and return its address and a message for the owner to send. " +
@@ -419,7 +434,7 @@ func (h *Handler) addAssistantCreateTools(s *mcp.Server) {
 			"For an in-person meeting, pass place_query, show the owner the place_options the check returns, and pass the one they pick as place. " +
 			"To change an existing link's offer, pass replaces_link_id: the old address stops working. Never send the link to the guest yourself; the owner sends it.",
 		Annotations: toolWrites,
-	}, h.mcpCreatePersonalLink)
+	}), h.mcpCreatePersonalLink)
 }
 
 // askOwnerToConfirmLink puts the Telegram details panel for this link in front of the owner,
@@ -455,4 +470,17 @@ func (h *Handler) askOwnerToConfirmLink(ctx context.Context, o *mcpOwner, et *ow
 		s.remember(ctx, "event", fmt.Sprintf("Through a connected AI app, the owner asked for a link for %s with times outside their usual hours. The details panel is waiting for their tap.", name))
 	})
 	return "no link is made yet. Some times are outside the owner's usual hours, so the owner has been sent the details on Telegram to confirm with their own tap. list_personal_links will show the link once they do; they get the address there"
+}
+
+// splitPlace is a confirmed place as name and address: the same split the Telegram panel
+// makes (placeParts).
+func splitPlace(place string) (name, address string) {
+	if place == "" {
+		return "", ""
+	}
+	name = place
+	if i := strings.Index(place, ", "); i > 0 {
+		name = place[:i]
+	}
+	return name, place
 }

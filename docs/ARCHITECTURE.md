@@ -1075,6 +1075,13 @@ own agent should be able to do what the bot does; the tools are still narrow and
 purpose-built, and none of them can set an owner waiver. Rules: CLAUDE.md, "Personal booking
 assistant over MCP".
 
+**Cards and tap approvals (2026-11-14).** Apps that draw MCP Apps cards get Bookmeet's card
+(`ui://bookmeet/card.html`) on the assistant tools, and an owner's exception is approved by a
+tap on it: `owner_approve` is app-only (`visibility: ["app"]`), needs a one-use ticket plus a
+key carried only in the result's `_meta`, and is refused on connections that did not declare
+cards. On J's decision this replaces "exceptions only by the owner's Telegram tap" for card
+apps; spoken approval is deliberately not supported.
+
 **MCP surface — design decision (2026-06-22).** The MCP intentionally exposes only the
 **booking lifecycle** (discover → slots → book → view/list/reschedule/cancel), not
 Calnode's full ~88-endpoint surface. Event-type CRUD, availability rules/overrides,

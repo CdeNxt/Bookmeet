@@ -40,9 +40,11 @@ type bookForGuestOut struct {
 	Where      string    `json:"where"`
 	Invitation string    `json:"invitation" jsonschema:"whether and how the guest is being invited, in words"`
 	ManageURL  string    `json:"manage_url,omitempty" jsonschema:"the booking's own page, where the guest can reschedule or cancel; for the owner to pass on if they want"`
+	// Approval is set instead of a booking when only the owner's tap on the card can book it.
+	Approval *mcpApprovalOut `json:"approval,omitempty" jsonschema:"nothing is booked yet: the owner approves on the card"`
 }
 
-func (h *Handler) mcpBookForGuest(ctx context.Context, _ *mcp.CallToolRequest, in bookForGuestIn) (*mcp.CallToolResult, bookForGuestOut, error) {
+func (h *Handler) mcpBookForGuest(ctx context.Context, req *mcp.CallToolRequest, in bookForGuestIn) (*mcp.CallToolResult, bookForGuestOut, error) {
 	o, err := h.mcpAssistantOwner(ctx)
 	if err != nil {
 		return nil, bookForGuestOut{}, err
@@ -75,30 +77,60 @@ func (h *Handler) mcpBookForGuest(ctx context.Context, _ *mcp.CallToolRequest, i
 	b, err := h.createBookingForSlugWith(ctx, et.Slug, start,
 		booking.Attendee{Name: name, Email: email, IANATimezone: o.zone()},
 		nil, bookingExtras{OwnerInvited: true})
-	var answerErr *answerError
-	switch {
-	case errors.Is(err, errCalendarClash), errors.Is(err, booking.ErrDoubleBooked):
-		return nil, bookForGuestOut{}, fmt.Errorf("nothing was booked: the owner already has something at %s. Ask for another time, or offer a few with create_personal_link. Only the owner can book over their calendar, from the Bookmeet assistant on Telegram", o.when(start))
-	case errors.Is(err, errSlotUnavailable), errors.Is(err, errNoHostAvailable):
+	if errors.Is(err, errSlotUnavailable) && !errors.Is(err, errCalendarClash) || errors.Is(err, errNoHostAvailable) {
+		// Outside the owner's hours. Only the owner can allow it: on a card, with a tap;
+		// or on Telegram, when the agent was told to ask there.
+		if mcpDrawsCards(req) && h.assistantExceptions(ctx) {
+			ap := &ownerApproval{UserID: o.UserID, Kind: approveDirect}
+			ap.Direct.Slug, ap.Direct.Name, ap.Direct.Email, ap.Direct.Start = et.Slug, name, email, start
+			issueApproval(ap)
+			return approvalResult(ap), bookForGuestOut{Approval: &mcpApprovalOut{
+				Ticket: ap.Ticket, Title: "Book " + name + " outside your hours?",
+				Lines: []string{et.Name, o.when(start), email},
+				Why:   o.when(start) + " is outside the times you take meetings.", Button: "Allow and book",
+			}}, nil
+		}
 		if in.AskOwner {
 			// Not an error the agent can fix, but nothing was booked by this call either.
 			return nil, bookForGuestOut{}, errors.New(h.askOwnerToBookDirect(ctx, o, et, name, email, strings.TrimSpace(in.Date), minute, start))
 		}
-		return nil, bookForGuestOut{}, fmt.Errorf("nothing was booked: %s is outside the times the owner takes meetings (their hours, notice or booking horizon). get_available_slots shows what is open. Only the owner can book outside their hours: if they want to, call again with ask_owner set to true and they get the details on Telegram to allow it with a tap", o.when(start))
-	case errors.Is(err, errCalendarUnavailable):
-		return nil, bookForGuestOut{}, fmt.Errorf("the owner's calendar could not be checked just now, so nothing was booked. Try again in a moment")
-	case errors.As(err, &answerErr):
-		return nil, bookForGuestOut{}, fmt.Errorf("%q has required questions for the guest, so it cannot be booked for them. Nothing was booked; send the guest the booking page instead", et.Name)
-	case errors.Is(err, errPaymentRequired):
-		return nil, bookForGuestOut{}, fmt.Errorf("%q takes payment, so the guest has to book it on the booking page. Nothing was booked", et.Name)
-	case errors.Is(err, booking.ErrEmailThrottled):
-		return nil, bookForGuestOut{}, fmt.Errorf("too many bookings for that email just now. Nothing was booked; try again later")
-	case err != nil:
-		return nil, bookForGuestOut{}, fmt.Errorf("book for guest: %w", err)
 	}
+	if err != nil {
+		return nil, bookForGuestOut{}, directBookingError(o, start, err)
+	}
+	out := h.bookedView(ctx, o, b, name, email)
+	h.agentDid(ctx, o, fmt.Sprintf("Booked: %s\n%s\nWhen: %s to %s\nEmail: %s\n%s", name, et.Name, out.When.Text, o.clock(b.EndAt), email, out.Invitation),
+		fmt.Sprintf("the owner booked %s (%s) for %s, %s.", name, email, et.Name, out.When.Text))
+	return nil, *out, nil
+}
 
-	out := bookForGuestOut{
-		BookingID: b.ID, GuestName: name, Meeting: et.Name,
+// directBookingError words a refused direct booking for an agent: the category only, never
+// what is on the calendar.
+func directBookingError(o *mcpOwner, start time.Time, err error) error {
+	var answerErr *answerError
+	switch {
+	case errors.Is(err, errCalendarClash), errors.Is(err, booking.ErrDoubleBooked):
+		return fmt.Errorf("nothing was booked: the owner already has something at %s. Ask for another time, or offer a few with create_personal_link", o.when(start))
+	case errors.Is(err, errSlotUnavailable), errors.Is(err, errNoHostAvailable):
+		return fmt.Errorf("nothing was booked: %s is outside the times the owner takes meetings (their hours, notice or booking horizon). get_available_slots shows what is open. Only the owner can book outside their hours: in an app that shows Bookmeet cards they approve it with a tap; otherwise call again with ask_owner set to true and they get the details on Telegram", o.when(start))
+	case errors.Is(err, errCalendarUnavailable):
+		return fmt.Errorf("the owner's calendar could not be checked just now, so nothing was booked. Try again in a moment")
+	case errors.As(err, &answerErr):
+		return fmt.Errorf("that meeting type has required questions for the guest, so it cannot be booked for them. Nothing was booked; send the guest the booking page instead")
+	case errors.Is(err, errPaymentRequired):
+		return fmt.Errorf("that meeting type takes payment, so the guest has to book it on the booking page. Nothing was booked")
+	case errors.Is(err, booking.ErrEmailThrottled):
+		return fmt.Errorf("too many bookings for that email just now. Nothing was booked; try again later")
+	case errors.Is(err, booking.ErrBookingLimitReached):
+		return fmt.Errorf("that guest has reached a booking limit on this meeting type. Nothing was booked")
+	}
+	return fmt.Errorf("book for guest: %w", err)
+}
+
+// bookedView is a booking in the owner's words, with the manage link.
+func (h *Handler) bookedView(ctx context.Context, o *mcpOwner, b *booking.Booking, name, email string) *bookForGuestOut {
+	out := &bookForGuestOut{
+		BookingID: b.ID, GuestName: name, Meeting: h.eventTypeNames(ctx, o.UserID)[b.EventTypeID],
 		When:  mcpTimeAt{At: rfc3339OrEmpty(b.StartAt), Text: o.when(b.StartAt)},
 		Ends:  mcpTimeAt{At: rfc3339OrEmpty(b.EndAt), Text: o.when(b.EndAt)},
 		Where: locationWord(b.LocationType),
@@ -116,18 +148,16 @@ func (h *Handler) mcpBookForGuest(ctx context.Context, _ *mcp.CallToolRequest, i
 	default:
 		out.Invitation = "It is on the owner's calendar, but no invitation email will reach the guest (email is not set up), so the owner should tell them."
 	}
-	h.agentDid(ctx, o, fmt.Sprintf("Booked: %s\n%s\nWhen: %s to %s\nEmail: %s\n%s", name, et.Name, out.When.Text, o.clock(b.EndAt), email, out.Invitation),
-		fmt.Sprintf("the owner booked %s (%s) for %s, %s.", name, email, et.Name, out.When.Text))
 	if tok, err := h.bookingSvc.IssueManageToken(ctx, b.ID); err == nil {
 		out.ManageURL = strings.TrimRight(h.publicURL(), "/") + "/manage/" + tok
 	} else {
 		h.logger.ErrorContext(ctx, "mcp: manage link", "error", err)
 	}
-	return nil, out, nil
+	return out
 }
 
 func (h *Handler) addAssistantBookTools(s *mcp.Server) {
-	mcp.AddTool(s, &mcp.Tool{
+	mcp.AddTool(s, withCard(&mcp.Tool{
 		Name:  "book_for_guest",
 		Title: "Book a guest at one exact time",
 		Description: "Book one exact time for a named guest whose email the owner gave, as the owner's own invitation: no link, no guest chat. " +
@@ -135,7 +165,7 @@ func (h *Handler) addAssistantBookTools(s *mcp.Server) {
 			"Refuses a time outside the owner's hours or over something on their calendar, and says which. " +
 			"Without the guest's email, use create_personal_link with a window exactly the meeting's length instead.",
 		Annotations: toolWrites,
-	}, h.mcpBookForGuest)
+	}), h.mcpBookForGuest)
 }
 
 // ── answer_guest ─────────────────────────────────────────────────────────────
@@ -160,9 +190,11 @@ type answerGuestOut struct {
 	LinkID string           `json:"link_id"`
 	Result string           `json:"result" jsonschema:"what happened, in words"`
 	Booked *bookForGuestOut `json:"booked,omitempty"`
+	// Approval is set when only the owner's tap on the card can book it.
+	Approval *mcpApprovalOut `json:"approval,omitempty" jsonschema:"nothing is booked yet: the owner approves on the card"`
 }
 
-func (h *Handler) mcpAnswerGuest(ctx context.Context, _ *mcp.CallToolRequest, in answerGuestIn) (*mcp.CallToolResult, answerGuestOut, error) {
+func (h *Handler) mcpAnswerGuest(ctx context.Context, req *mcp.CallToolRequest, in answerGuestIn) (*mcp.CallToolResult, answerGuestOut, error) {
 	o, err := h.mcpAssistantOwner(ctx)
 	if err != nil {
 		return nil, answerGuestOut{}, err
@@ -237,6 +269,14 @@ func (h *Handler) mcpAnswerGuest(ctx context.Context, _ *mcp.CallToolRequest, in
 		if v.Unknown && !v.Clash && !v.Outside {
 			return nil, answerGuestOut{}, fmt.Errorf("nothing was booked: %s. Try again in a moment", why)
 		}
+		if mcpDrawsCards(req) && h.assistantExceptions(ctx) {
+			ap := issueApproval(&ownerApproval{UserID: o.UserID, Kind: approveSuggestion, HeldID: held.ID, At: at})
+			return approvalResult(ap), answerGuestOut{LinkID: l.ID, Result: "Waiting for the owner's tap.", Approval: &mcpApprovalOut{
+				Ticket: ap.Ticket, Title: "Book " + l.GuestName + " anyway?",
+				Lines: []string{h.eventTypeNames(ctx, o.UserID)[l.EventTypeID], o.when(at), l.GuestName + " suggested this time."},
+				Why:   strings.ToUpper(why[:1]) + why[1:] + ". Both stay on your calendar; moving anything is up to you.", Button: "Book anyway",
+			}}, nil
+		}
 		if in.AskOwner {
 			if msg := h.askOwnerToBookSuggested(ctx, o, held, starts, at); msg != "" {
 				return nil, answerGuestOut{LinkID: l.ID, Result: msg}, nil
@@ -294,14 +334,14 @@ func (h *Handler) mcpAnswerGuest(ctx context.Context, _ *mcp.CallToolRequest, in
 }
 
 func (h *Handler) addAssistantAnswerTools(s *mcp.Server) {
-	mcp.AddTool(s, &mcp.Tool{
+	mcp.AddTool(s, withCard(&mcp.Tool{
 		Name:  "answer_guest",
 		Title: "Answer what a guest left",
 		Description: "Answer something a guest left for the owner on a personal link (see get_personal_link's left_for_owner): " +
 			"book one of their suggested times, decline them all (none; the guest is not told), or mark a request or note as handled by the owner. " +
 			"A suggested time books only if it is free under the owner's own rules; otherwise it is refused and only the owner can book it anyway. Ask the owner before answering.",
 		Annotations: toolWrites,
-	}, h.mcpAnswerGuest)
+	}), h.mcpAnswerGuest)
 }
 
 // ── handing a decision to the owner's own tap ───────────────────────────────

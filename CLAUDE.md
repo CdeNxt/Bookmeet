@@ -526,7 +526,8 @@ create or change a link), `mcp_assistant_book.go` (`book_for_guest`, `answer_gue
   `suggestedTimeVerdict` before booking, as `tapHeld` does, because `bookPersonalLink` applies
   `linkException` and skips the window check: booking a suggestion straight away would waive
   the owner's hours with no tap. When Telegram's rules change, change these with them.
-  "Book anyway" and the direct booking's Allow tap stay the owner's: with `ask_owner`, the
+  "Book anyway" and the direct booking's Allow tap stay the owner's: on a card app, a tap on
+  the card (below); otherwise with `ask_owner`, the
   agent hands the decision to Telegram (`askOwnerToBookDirect` and `askOwnerToConfirmLink`
   show the same panel; `askOwnerToBookSuggested` runs the same `tapHeld` question), and only
   the tap books or creates.
@@ -548,8 +549,25 @@ create or change a link), `mcp_assistant_book.go` (`book_for_guest`, `answer_gue
   `place_options`; create takes `place` only if it is one of them, exactly. The agent never
   writes an address, the same rule as the Telegram model. No place key: taken as typed and
   marked `place_unverified`, as on the panel.
-- Not built yet: a Bookmeet approval page so an owner without Telegram can
-  approve an exception, and interactive cards (MCP Apps).
+- **Cards (MCP Apps), `mcp_cards.go` + `assets/mcp-card.html`.** Apps that declare the
+  `io.modelcontextprotocol/ui` extension draw one Bookmeet card for every assistant tool
+  (`withCard`): the offer, the link with Copy, booked, what's waiting, one link with the
+  guest's suggestions. The card is framework-free like the public pages, and words things for
+  the owner ("your hours"), not the agent. Text-only apps get exactly the text replies above.
+- **The owner's approval is a tap on a card, and only that** (J, 2026-11-14). Where Telegram
+  would show Allow / Book anyway, a card app gets an approval card instead of an error, and
+  the tap calls `owner_approve`: `visibility: ["app"]`, so the app hides it from the model
+  and refuses it unless the card calls it. Two more locks for an app that gets that wrong:
+  it needs the ticket (visible) AND the key, which travels only in the result's `_meta`
+  (kept out of the model's context); and tickets are issued, and `owner_approve` accepted,
+  only on a connection that declared cards. A ticket is one exact action, one owner, one
+  use, 15 minutes, in memory. The exceptions setting is read again at the tap.
+  `owner_approve` only ever runs the same paths as the Telegram taps (`createLink` with
+  the exception, `bookDirect` with `OutsideRules`, `bookPersonalLinkApproved`). Calendar
+  titles are never on a card: the model can read what the card is given.
+- **No spoken approval.** In voice the owner asks, and taps the card on screen; ChatGPT's own
+  voice mode makes the same choice. Do not add a way for words alone to approve.
+- Not built yet: a Bookmeet approval page for an owner with neither cards nor Telegram.
 - **The bot hears what the agent did** (`agentDid`): a link made or cancelled, a booking, an
   answer to a guest is sent to the owner on Telegram and written to the Telegram assistant's
   memory, so the two front ends agree about what exists. Nothing from the calendar goes there.
