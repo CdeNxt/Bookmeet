@@ -52,16 +52,22 @@ func withCard(t *mcp.Tool) *mcp.Tool {
 	return t
 }
 
-// mcpDrawsCards reports whether the app on this connection draws MCP Apps cards.
+// mcpDrawsCards reports whether the app making this request draws MCP Apps cards.
+//
+// /mcp over HTTP is stateless on purpose (see newMCPStreamableHandler), so this cannot come
+// from a remembered session. Under protocol 2026-07-28 the app sends its capabilities with
+// every request, and req.ClientCapabilities reads them; an older-protocol request on a
+// stateless server has none, and is treated as text-only. That is the safe direction: such
+// an app gets the text replies and refusals, never an approval ticket.
 func mcpDrawsCards(req *mcp.CallToolRequest) bool {
-	if req == nil || req.Session == nil {
+	if req == nil {
 		return false
 	}
-	p := req.Session.InitializeParams()
-	if p == nil || p.Capabilities == nil {
+	caps := req.ClientCapabilities()
+	if caps == nil {
 		return false
 	}
-	ext, ok := p.Capabilities.Extensions[mcpUIExtension].(map[string]any)
+	ext, ok := caps.Extensions[mcpUIExtension].(map[string]any)
 	if !ok {
 		return false
 	}

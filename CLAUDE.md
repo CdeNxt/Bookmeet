@@ -562,6 +562,9 @@ create or change a link), `mcp_assistant_book.go` (`book_for_guest`, `answer_gue
   (kept out of the model's context); and tickets are issued, and `owner_approve` accepted,
   only on a connection that declared cards. A ticket is one exact action, one owner, one
   use, 15 minutes, in memory. The exceptions setting is read again at the tap.
+  "Declared cards" is read per request (`req.ClientCapabilities`), because `/mcp` is
+  stateless on purpose (#170): apps on protocol 2026-07-28 send capabilities with every
+  request; an older-protocol app on HTTP shows as text-only and gets refusals, never tickets.
   `owner_approve` only ever runs the same paths as the Telegram taps (`createLink` with
   the exception, `bookDirect` with `OutsideRules`, `bookPersonalLinkApproved`). Calendar
   titles are never on a card: the model can read what the card is given.
