@@ -568,6 +568,13 @@ create or change a link), `mcp_assistant_book.go` (`book_for_guest`, `answer_gue
   `owner_approve` only ever runs the same paths as the Telegram taps (`createLink` with
   the exception, `bookDirect` with `OutsideRules`, `bookPersonalLinkApproved`). Calendar
   titles are never on a card: the model can read what the card is given.
+- **"Show my calendar" on a card** (`mcp_card_calendar.go`, app-only `show_my_calendar`):
+  the days a card is about, with usual hours, busy times, the owner's Bookmeet bookings and
+  the times asked for. Busy times only, never titles, for the reason above.
+- **One tap, not a conversation, for an approval.** Agents are told to call the tool that
+  makes the thing (the result carries the Allow card) instead of asking the owner to approve
+  in words first, and that the tap can come after their reply. Copy buttons use
+  `execCommand("copy")` first: app frames block the clipboard API.
 - **No spoken approval.** In voice the owner asks, and taps the card on screen; ChatGPT's own
   voice mode makes the same choice. Do not add a way for words alone to approve.
 - Not built yet: a Bookmeet approval page for an owner with neither cards nor Telegram.

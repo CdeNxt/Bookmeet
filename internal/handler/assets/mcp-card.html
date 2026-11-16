@@ -66,6 +66,24 @@ h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 4px;
 .quote { border-left: 3px solid var(--line); padding: 2px 10px; color: var(--fg); font-style: italic; margin: 6px 0; overflow-wrap: anywhere; }
 .muted { color: var(--muted); }
 .empty { color: var(--muted); padding: 8px 0; }
+.manual { width: 100%; font: inherit; font-size: 13px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--accent); background: var(--soft); color: var(--fg); resize: none; margin-top: 6px; }
+/* Show my calendar: the days side by side, the hours down the left. */
+.cal { margin-top: 12px; }
+.cal .grid { display: flex; gap: 6px; }
+.cal .axis { position: relative; width: 44px; flex: none; font-size: 11px; color: var(--muted); }
+.cal .axis span { position: absolute; right: 4px; transform: translateY(-50%); white-space: nowrap; }
+.cal .col { flex: 1; min-width: 0; }
+.cal .axis-col { flex: none; width: 44px; }
+.cal .head { font-size: 12px; font-weight: 600; text-align: center; height: 20px; }
+.cal .day { position: relative; border: 1px solid var(--line); border-radius: 8px; background: var(--soft); overflow: hidden; }
+.cal .line { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--line); }
+.cal .blk { position: absolute; left: 3px; right: 3px; border-radius: 5px; font-size: 11px; line-height: 1.25; padding: 1px 4px; overflow: hidden; }
+.cal .hours { left: 0; right: 0; border-radius: 0; background: var(--bg); }
+.cal .busy { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--muted) 35%, transparent) 0 4px, color-mix(in srgb, var(--muted) 20%, transparent) 4px 8px); color: var(--fg); }
+.cal .booking { background: color-mix(in srgb, var(--accent) 22%, var(--bg)); color: var(--fg); border-left: 3px solid var(--accent); }
+.cal .asked { background: transparent; border: 2px solid var(--warn); left: 1px; right: 1px; z-index: 2; }
+.cal .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.cal .legend i { display: inline-block; width: 12px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
 </style>
 </head>
 <body>
@@ -161,16 +179,111 @@ h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 4px;
     card("warn", "Not done", "", '<div class="note bad">' + esc(msg) + '</div>');
   }
   function on(id, fn) { var el = document.getElementById(id); if (el) el.addEventListener("click", function () { fn(el); }); }
+  // Copying inside an app's sandboxed frame: the clipboard API is often switched off there,
+  // so try the older copy command first (it runs inside the tap), then the API, and if both
+  // are refused show the text selected for the owner to copy with the keyboard.
   function copy(text, button) {
-    function done() { button.textContent = "Copied"; setTimeout(function () { button.textContent = button.dataset.copyLabel || "Copy"; }, 1500); }
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(done, function () { selectFallback(); });
-    } else selectFallback();
-    function selectFallback() {
-      var input = document.getElementById("url-box");
-      if (input) { input.focus(); input.select(); }
-      button.textContent = "Selected: copy it";
+    var label = button.dataset.copyLabel || "Copy";
+    function done() { button.textContent = "Copied"; setTimeout(function () { button.textContent = label; }, 1500); }
+    if (execCopy(text)) return done();
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { manualCopy(text, button); });
+        return;
+      }
+    } catch (e) { /* refused outright: fall through */ }
+    manualCopy(text, button);
+  }
+  function execCopy(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text; ta.setAttribute("readonly", "");
+    ta.style.position = "fixed"; ta.style.top = "0"; ta.style.left = "0"; ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus(); ta.select(); ta.setSelectionRange(0, text.length);
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    return ok;
+  }
+  function manualCopy(text, button) {
+    var holder = button.closest(".card");
+    var box = holder.querySelector("textarea.manual");
+    if (!box) { box = document.createElement("textarea"); box.className = "manual"; box.readOnly = true; holder.appendChild(box); }
+    box.value = text; box.rows = Math.min(4, Math.ceil(text.length / 60) + 1);
+    box.focus(); box.select();
+    button.textContent = /Mac|iPhone|iPad/.test(navigator.platform) ? "Press ⌘C to copy" : "Press Ctrl+C to copy";
+    requestAnimationFrame(reportSize);
+  }
+
+  // ── Show my calendar ─────────────────────────────────────────────────────────────
+  // The days a card is about, side by side: the owner's usual hours, when their calendar is
+  // busy (no titles: Bookmeet never puts calendar titles on a card), their Bookmeet bookings
+  // and the times being asked about. Drawn from show_my_calendar, which only this card calls.
+  function calendarButton(spans) { return spans && spans.length ? '<button id="show-cal">Show my calendar</button>' : ""; }
+  function wireCalendar(eventType, spans) {
+    on("show-cal", function (btn) {
+      var box = document.getElementById("cal");
+      if (!box) { box = document.createElement("div"); box.id = "cal"; box.className = "cal"; root.querySelector(".card").appendChild(box); }
+      if (box.dataset.open) { box.innerHTML = ""; delete box.dataset.open; btn.textContent = "Show my calendar"; requestAnimationFrame(reportSize); return; }
+      btn.disabled = true; btn.textContent = "Loading…";
+      var args = { event_type: eventType || "", spans: spans.map(function (s) { return { start: s.start, end: s.end }; }) };
+      request("tools/call", { name: "show_my_calendar", arguments: args }).then(function (res) {
+        btn.disabled = false;
+        if (!res || res.isError) { btn.textContent = "Show my calendar"; box.innerHTML = '<div class="note bad">' + esc(textOf(res) || "Your calendar could not be shown.") + '</div>'; }
+        else { safely(function () { box.innerHTML = drawCalendar(res.structuredContent || {}); }); box.dataset.open = "1"; btn.textContent = "Hide my calendar"; }
+        requestAnimationFrame(reportSize);
+      }).catch(function (err) {
+        btn.disabled = false; btn.textContent = "Show my calendar";
+        box.innerHTML = '<div class="note bad">' + esc(err.message) + '</div>';
+        requestAnimationFrame(reportSize);
+      });
+    });
+  }
+  function clockOf(min, h24) {
+    var h = Math.floor(min / 60) % 24, m = min % 60, mm = (m < 10 ? "0" : "") + m;
+    if (h24) return (h < 10 ? "0" : "") + h + ":" + mm;
+    var ap = h < 12 ? "am" : "pm", h12 = h % 12 || 12;
+    return h12 + (m ? ":" + mm : "") + ap;
+  }
+  function drawCalendar(c) {
+    var days = c.days || [];
+    if (!days.length) return '<p class="muted">Nothing to show.</p>';
+    // The hours shown: everything that happens on these days, with a little room either side.
+    var lo = 24 * 60, hi = 0;
+    days.forEach(function (d) {
+      [].concat(d.hours || [], d.asked || [], d.bookings || [], d.busy || []).forEach(function (b) { lo = Math.min(lo, b.from); hi = Math.max(hi, b.to); });
+    });
+    if (lo >= hi) { lo = 8 * 60; hi = 18 * 60; }
+    lo = Math.max(0, Math.floor(lo / 60) * 60 - 60); hi = Math.min(24 * 60, Math.ceil(hi / 60) * 60 + 60);
+    var span = hi - lo, px = Math.max(220, Math.min(420, span / 60 * 26));
+    function top(m) { return ((Math.max(lo, Math.min(hi, m)) - lo) / span * 100).toFixed(2) + "%"; }
+    function height(b) { return ((Math.min(hi, b.to) - Math.max(lo, b.from)) / span * 100).toFixed(2) + "%"; }
+    function blocks(list, cls, label) {
+      return (list || []).map(function (b) {
+        if (b.to <= lo || b.from >= hi) return "";
+        var text = label === undefined ? (b.label || "") : label;
+        var title = clockOf(b.from, c.h24) + "–" + clockOf(b.to, c.h24) + (text ? " " + text : "");
+        return '<div class="blk ' + cls + '" style="top:' + top(b.from) + ';height:' + height(b) + '" title="' + esc(title) + '">' + esc(text) + '</div>';
+      }).join("");
     }
+    var step = span > 10 * 60 ? 120 : 60, axis = "", lines = "";
+    for (var m = lo; m <= hi; m += step) {
+      axis += '<span style="top:' + top(m) + '">' + esc(clockOf(m, c.h24)) + '</span>';
+      lines += '<div class="line" style="top:' + top(m) + '"></div>';
+    }
+    var h = '<div class="grid"><div class="col axis-col"><div class="head"></div><div class="axis" style="height:' + px + 'px">' + axis + '</div></div>';
+    days.forEach(function (d) {
+      h += '<div class="col"><div class="head">' + esc(d.text) + '</div><div class="day" style="height:' + px + 'px">' + lines +
+        blocks(d.hours, "hours", "") + blocks(d.busy, "busy", "Busy") + blocks(d.bookings, "booking") + blocks(d.asked, "asked", "") + '</div></div>';
+    });
+    h += '</div>';
+    h += '<div class="legend"><span><i style="background:var(--bg);border:1px solid var(--line)"></i>Your hours</span>' +
+      '<span><i class="busy" style="background:color-mix(in srgb, var(--muted) 35%, transparent)"></i>Busy</span>' +
+      '<span><i style="background:color-mix(in srgb, var(--accent) 22%, var(--bg));border-left:3px solid var(--accent)"></i>Bookmeet booking</span>' +
+      '<span><i style="border:2px solid var(--warn)"></i>Asked for</span></div>';
+    if (!c.calendar_checked) h += '<p class="muted">Your calendar could not be read just now, so busy times are missing.</p>';
+    if (c.zone) h += '<p class="muted">Times in ' + esc(c.zone) + '.</p>';
+    return h;
   }
 
   // A card that cannot be drawn says so, rather than leaving a blank frame in the chat.
@@ -222,9 +335,14 @@ h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 4px;
     else if (!s.can_create) h += '<div class="note bad">' + esc(s.advice) + '</div>';
     var canGo = s.can_create || (s.needs_owner_approval && s.times_offered > 0);
     var label = s.needs_owner_approval ? "Allow and create link" : "Create link";
-    if (canGo && guest) h += '<div class="actions"><button class="primary" id="go">' + esc(label) + '</button></div>';
-    else if (canGo) h += '<p class="muted">Tell your assistant who the link is for, and it will make it.</p>';
+    var spans = (s.windows || []).filter(function (w) { return w.start && w.end; });
+    if (canGo && guest) h += '<div class="actions"><button class="primary" id="go">' + esc(label) + '</button>' + calendarButton(spans) + '</div>';
+    else {
+      if (canGo) h += '<p class="muted">Tell your assistant who the link is for, and it will make it.</p>';
+      if (spans.length) h += '<div class="actions">' + calendarButton(spans) + '</div>';
+    }
     card("", guest ? "Personal link for " + guest : "Personal link", s.owner_timezone ? "Times in " + s.owner_timezone : "", h);
+    wireCalendar(toolArgs.event_type, spans);
     on("go", function (btn) {
       // One tap: make the link. If it needs the owner's approval, this same tap (on a button
       // that said "Allow") is it, so go straight on without showing a second Allow.
@@ -245,8 +363,9 @@ h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 4px;
     var h = '';
     (a.lines || []).forEach(function (l) { h += '<div>' + esc(l) + '</div>'; });
     h += '<div class="note warn">' + esc(a.why) + '</div>';
-    h += '<div class="actions"><button class="primary" id="allow">' + esc(a.button || "Allow") + '</button><button id="not-now">Not now</button></div>';
+    h += '<div class="actions"><button class="primary" id="allow">' + esc(a.button || "Allow") + '</button>' + calendarButton(a.spans) + '<button id="not-now">Not now</button></div>';
     card("warn", a.title || "Your approval", "Only your tap can approve this.", h);
+    wireCalendar(a.event_type, a.spans || []);
     on("allow", function (btn) {
       if (!key) return showError("This card can't approve: open it again from your assistant.");
       callTool("owner_approve", { ticket: a.ticket, key: key }, btn);

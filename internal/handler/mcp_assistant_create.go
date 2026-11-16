@@ -357,8 +357,10 @@ func (h *Handler) mcpCreatePersonalLink(ctx context.Context, req *mcp.CallToolRe
 				PlaceName: placeName, PlaceAddress: placeAddr, Windows: windows}})
 		lines := []string{et.Name}
 		var outside []string
+		var spans []mcpTimeSpan
 		for _, w := range check.Windows {
 			lines = append(lines, w.Text)
+			spans = append(spans, w.mcpTimeSpan)
 			if w.NeedsApproval {
 				outside = append(outside, w.Text)
 			}
@@ -366,6 +368,7 @@ func (h *Handler) mcpCreatePersonalLink(ctx context.Context, req *mcp.CallToolRe
 		return approvalResult(ap), createPersonalLinkOut{Offer: check, Approval: &mcpApprovalOut{
 			Ticket: ap.Ticket, Title: "Link for " + name + " with times outside your hours?", Lines: lines,
 			Why: "Outside your usual hours: " + strings.Join(outside, "; ") + ".", Button: "Allow and create link",
+			EventType: et.Slug, Spans: spans,
 		}}, nil
 	}
 	if !check.CanCreate && check.NeedsOwner && check.TimesOffered > 0 && in.AskOwner {
@@ -419,7 +422,9 @@ func (h *Handler) addAssistantCreateTools(s *mcp.Server) {
 	mcp.AddTool(s, withCard(&mcp.Tool{
 		Name:  "check_personal_link_offer",
 		Title: "Check a personal link offer",
-		Description: "Before making a personal link: check the days and times the owner wants to offer against their availability. " +
+		Description: "Preview a personal link before making it: check the days and times the owner wants to offer against their availability. " +
+			"Use it when the owner wants to see first or the days are unclear; when the guest and times are clear, call create_personal_link directly, which runs the same check. " +
+			"Pass guest_name when you know it: in apps that show Bookmeet's card, the card then has the button that creates the link. " +
 			"Pass dates and clock times in the owner's own time zone; each window comes back with its weekday and date written out, so you can confirm with the owner that the days are right. " +
 			"Takes the same arguments as create_personal_link. Says per window how many times the guest would be offered, and whether a window is outside the owner's hours, beyond how far ahead they take bookings, or busy throughout. Changes nothing.",
 		Annotations: toolReadOnly,
@@ -429,7 +434,8 @@ func (h *Handler) addAssistantCreateTools(s *mcp.Server) {
 		Name:  "create_personal_link",
 		Title: "Create a personal link",
 		Description: "Make a single-use booking link for one named guest, limited to the windows given, and return its address and a message for the owner to send. " +
-			"Check the offer with check_personal_link_offer and confirm the days with the owner first. " +
+			"When the owner has named the guest and the days and times, call it directly: it checks the offer itself. If any day is unclear, check_personal_link_offer first and confirm with the owner. " +
+			"If some times are outside the owner's usual hours, an app that shows Bookmeet's card gets an approval card with an Allow button in the chat: that tap is the owner's approval, so do not ask them to approve in words first. " +
 			"Refuses an offer with nothing in it. " +
 			"For an in-person meeting, pass place_query, show the owner the place_options the check returns, and pass the one they pick as place. " +
 			"To change an existing link's offer, pass replaces_link_id: the old address stops working. Never send the link to the guest yourself; the owner sends it.",

@@ -88,6 +88,7 @@ func (h *Handler) mcpBookForGuest(ctx context.Context, req *mcp.CallToolRequest,
 				Ticket: ap.Ticket, Title: "Book " + name + " outside your hours?",
 				Lines: []string{et.Name, o.when(start), email},
 				Why:   o.when(start) + " is outside the times you take meetings.", Button: "Allow and book",
+				EventType: et.Slug, Spans: []mcpTimeSpan{o.timeSpan(start, start.Add(time.Duration(et.Minutes)*time.Minute))},
 			}}, nil
 		}
 		if in.AskOwner {
@@ -271,7 +272,11 @@ func (h *Handler) mcpAnswerGuest(ctx context.Context, req *mcp.CallToolRequest, 
 		}
 		if mcpDrawsCards(req) && h.assistantExceptions(ctx) {
 			ap := issueApproval(&ownerApproval{UserID: o.UserID, Kind: approveSuggestion, HeldID: held.ID, At: at})
+			var slug string
+			minutes := 30
+			_ = h.db.QueryRowContext(ctx, `SELECT slug, duration_minutes FROM event_types WHERE id = ?`, l.EventTypeID).Scan(&slug, &minutes)
 			return approvalResult(ap), answerGuestOut{LinkID: l.ID, Result: "Waiting for the owner's tap.", Approval: &mcpApprovalOut{
+				EventType: slug, Spans: []mcpTimeSpan{o.timeSpan(at, at.Add(time.Duration(minutes)*time.Minute))},
 				Ticket: ap.Ticket, Title: "Book " + l.GuestName + " anyway?",
 				Lines: []string{h.eventTypeNames(ctx, o.UserID)[l.EventTypeID], o.when(at), l.GuestName + " suggested this time."},
 				Why:   strings.ToUpper(why[:1]) + why[1:] + ". Both stay on your calendar; moving anything is up to you.", Button: "Book anyway",

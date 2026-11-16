@@ -161,6 +161,9 @@ type mcpApprovalOut struct {
 	Lines  []string `json:"lines"`
 	Why    string   `json:"why"`
 	Button string   `json:"button"`
+	// What "Show my calendar" on the card draws: the meeting type and the times asked about.
+	EventType string        `json:"event_type,omitempty"`
+	Spans     []mcpTimeSpan `json:"spans,omitempty"`
 }
 
 // approvalResult is a tool result that asks the owner to tap: the key goes in _meta, for
@@ -168,8 +171,10 @@ type mcpApprovalOut struct {
 func approvalResult(a *ownerApproval) *mcp.CallToolResult {
 	return &mcp.CallToolResult{
 		Meta: mcp.Meta{approvalKeyMeta: a.key},
-		Content: []mcp.Content{&mcp.TextContent{Text: "Nothing is done yet. This needs the owner's own approval: " +
-			"the owner sees a Bookmeet card with an Allow button, and only their tap can approve it. Tell the owner to tap it, or ask what they would like instead."}},
+		Content: []mcp.Content{&mcp.TextContent{Text: "Not done yet: this needs the owner's own approval. A Bookmeet card with an Allow button is showing in this chat, " +
+			"right with this reply (not on Telegram). Only the owner's tap on it approves; you cannot. Tell the owner, in one short line, to tap Allow on the card. " +
+			"The tap may come after your reply, and the card then shows the result itself, so do not tell the owner later that nothing was done without checking first " +
+			"(get_personal_link, list_personal_links or list_bookings)."}},
 	}
 }
 
@@ -314,6 +319,14 @@ func (h *Handler) addAssistantCards(s *mcp.Server) {
 		Annotations: toolWrites,
 		Meta:        mcp.Meta{"ui": map[string]any{"resourceUri": mcpCardURI, "visibility": []string{"app"}}},
 	}, h.mcpOwnerApprove)
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "show_my_calendar",
+		Title:       "Show my calendar (card only)",
+		Description: "Used only by Bookmeet's card, for its Show my calendar button: the owner's busy times, usual hours and Bookmeet bookings on the days a card is about. Not for the model: calls that do not come from the card are refused.",
+		Annotations: toolReadOnly,
+		Meta:        mcp.Meta{"ui": map[string]any{"resourceUri": mcpCardURI, "visibility": []string{"app"}}},
+	}, h.mcpCalendarDays)
 }
 
 // linkAddress is a personal link's guest address.

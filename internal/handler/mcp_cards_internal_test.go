@@ -110,7 +110,7 @@ func TestMCPCards_aTapApprovesALinkOutsideUsualHours(t *testing.T) {
 	if res.IsError {
 		t.Fatalf("create on a card app: %+v", res.Content)
 	}
-	if text := res.Content[0].(*mcp.TextContent).Text; !strings.Contains(text, "only their tap") {
+	if text := res.Content[0].(*mcp.TextContent).Text; !strings.Contains(text, "Only the owner's tap") {
 		t.Errorf("the model was not told only the owner's tap approves: %s", text)
 	}
 	ticket, key := approvalOf(t, res)
@@ -201,5 +201,57 @@ func TestMCPCards_aTapBooksASuggestionAnywayAndNamesNothing(t *testing.T) {
 	}
 	if n := f.count(t, `SELECT COUNT(*) FROM bookings`); n != 1 {
 		t.Fatalf("%d bookings after Book anyway; want 1", n)
+	}
+}
+
+// Show my calendar: the card's own call draws the busy times on the days asked about, and
+// carries no calendar title. Text apps (and so models acting on their own) cannot call it.
+func TestMCPCards_showMyCalendarShowsBusyTimesWithoutTitles(t *testing.T) {
+	f := newChatFixture(t)
+	clash := f.at(21, 0)
+	f.cal.mu.Lock()
+	f.cal.busy = []slots.Interval{{Start: clash.Add(-30 * time.Minute), End: clash.Add(30 * time.Minute)}}
+	f.cal.titled = []calendar.BusyEvent{{Title: "Dentist", Start: clash.Add(-30 * time.Minute), End: clash.Add(30 * time.Minute)}}
+	f.cal.mu.Unlock()
+	args := map[string]any{"spans": []map[string]any{{"start": clash.UTC().Format(time.RFC3339), "end": clash.Add(time.Hour).UTC().Format(time.RFC3339)}}}
+
+	cs := connectCardApp(t, f.h)
+	res := callRaw(t, cs, "show_my_calendar", args)
+	blob, _ := json.Marshal(res)
+	if res.IsError || strings.Contains(string(blob), "Dentist") {
+		t.Fatalf("show_my_calendar: %s", blob)
+	}
+	var out calendarDaysOut
+	sc, _ := json.Marshal(res.StructuredContent)
+	if err := json.Unmarshal(sc, &out); err != nil || len(out.Days) == 0 {
+		t.Fatalf("days: %v %s", err, sc)
+	}
+	busy, asked := 0, 0
+	for _, d := range out.Days {
+		busy += len(d.Busy)
+		asked += len(d.Asked)
+	}
+	if !out.Checked || busy == 0 || asked == 0 {
+		t.Fatalf("want the busy time and the asked time drawn: %s", sc)
+	}
+
+	text := connectMCPInternal(t, f.h)
+	if msg := toolError(t, text, "show_my_calendar", args); !strings.Contains(msg, "card") {
+		t.Errorf("show_my_calendar from a text app: %s", msg)
+	}
+}
+
+// An approval card carries what Show my calendar needs: the meeting type and the times.
+func TestMCPCards_approvalsCarryTheirTimesForTheCalendar(t *testing.T) {
+	f := newOwnerFixture(t)
+	f.closeDay(t, 3)
+	cs := connectCardApp(t, f.h)
+	res := callRaw(t, cs, "book_for_guest", map[string]any{"guest_name": "Ann Agent", "guest_email": "ann@example.com", "event_type": "intro", "date": date(3), "time": "09:00"})
+	sc, _ := json.Marshal(res.StructuredContent)
+	var out struct {
+		Approval *mcpApprovalOut `json:"approval"`
+	}
+	if err := json.Unmarshal(sc, &out); err != nil || out.Approval == nil || out.Approval.EventType != "intro" || len(out.Approval.Spans) != 1 {
+		t.Fatalf("approval: %v %s", err, sc)
 	}
 }
