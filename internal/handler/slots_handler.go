@@ -513,16 +513,16 @@ func (h *Handler) hostAvailability(ctx context.Context, userID, eventTypeID stri
 	for busyRows.Next() {
 		var r busyRow
 		if err := busyRows.Scan(&r.start, &r.end, &r.before, &r.after, &r.location); err != nil {
-			busyRows.Close()
+			busyRows.Close() // #nosec G104 -- already returning the scan error; nothing more actionable
 			return slots.HostAvailability{}, false, err
 		}
 		rows = append(rows, r)
 	}
 	if err := busyRows.Err(); err != nil {
-		busyRows.Close()
+		busyRows.Close() // #nosec G104 -- already returning the iteration error; nothing more actionable
 		return slots.HostAvailability{}, false, err
 	}
-	busyRows.Close()
+	busyRows.Close() // #nosec G104 -- rows already fully consumed above; nothing actionable on close error
 
 	var busy []slots.Interval
 	var homeAddr string

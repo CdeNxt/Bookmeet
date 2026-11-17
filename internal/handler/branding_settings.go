@@ -66,7 +66,7 @@ func (h *Handler) publicHeadHTML(glassTint int) template.HTML {
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="` + img + `">
 <meta name="bookmeet-glass" content="` + strconv.Itoa(glassTint) + `">
-` + bookmeetSkinHTML)
+` + bookmeetSkinHTML) // #nosec G203 -- fixed markup; the one variable part (the share image URL) is HTML-escaped above and the tint is an integer
 }
 
 // brandingSettings is the instance-wide brand identity. The definition lives in

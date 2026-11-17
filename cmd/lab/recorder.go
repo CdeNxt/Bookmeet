@@ -67,7 +67,7 @@ func (rec *recorder) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 8<<20))
-	req, err := http.NewRequestWithContext(r.Context(), r.Method, up+strings.TrimPrefix(r.URL.Path, "/llm"), bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(r.Context(), r.Method, up+strings.TrimPrefix(r.URL.Path, "/llm"), bytes.NewReader(body)) // #nosec G704 -- cmd/lab is a local development tool, never built into the app image; forwarding to the model address the developer entered is its purpose
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
@@ -78,7 +78,7 @@ func (rec *recorder) serve(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	started := time.Now()
-	resp, err := rec.http.Do(req)
+	resp, err := rec.http.Do(req) // #nosec G704 -- cmd/lab is a local development tool, never built into the app image; forwarding to the model address the developer entered is its purpose
 	if err != nil {
 		rec.keep(body, []byte(`{"lab":"the model could not be reached"}`), 0, started)
 		http.Error(w, `{"error":"the model could not be reached"}`, http.StatusBadGateway)

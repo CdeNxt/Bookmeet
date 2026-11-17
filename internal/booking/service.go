@@ -414,7 +414,7 @@ func (s *Service) Overlapping(ctx context.Context, hostIDs []string, startAt, en
 			var o Overlap
 			var start, end string
 			if err := rows.Scan(&o.BookingID, &o.EventTypeName, &o.GuestName, &start, &end); err != nil {
-				rows.Close()
+				rows.Close() // #nosec G104 -- already returning the scan error; nothing more actionable
 				return nil, fmt.Errorf("booking: overlapping: %w", err)
 			}
 			o.StartAt, _ = time.Parse(time.RFC3339Nano, start)
@@ -424,7 +424,7 @@ func (s *Service) Overlapping(ctx context.Context, hostIDs []string, startAt, en
 				out = append(out, o)
 			}
 		}
-		rows.Close()
+		rows.Close() // #nosec G104 -- rows already fully consumed above; nothing actionable on close error
 		if err := rows.Err(); err != nil {
 			return nil, fmt.Errorf("booking: overlapping: %w", err)
 		}

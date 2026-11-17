@@ -57,7 +57,7 @@ func (c *Client) BusyEvents(ctx context.Context, userID string, from, to time.Ti
 			}
 			var list eventsListResp
 			decodeErr := json.NewDecoder(resp.Body).Decode(&list)
-			resp.Body.Close()
+			resp.Body.Close() // #nosec G104 -- body already decoded above; nothing actionable on close error
 			if resp.StatusCode != http.StatusOK {
 				return nil, fmt.Errorf("gcal: events status %d", resp.StatusCode)
 			}
