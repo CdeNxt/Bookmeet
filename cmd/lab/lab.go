@@ -76,7 +76,7 @@ func newLab(root, dir string) *lab {
 	l.rec = newRecorder(func() string { l.mu.Lock(); defer l.mu.Unlock(); return l.model.Endpoint })
 	l.secret = randomHex(32)
 	l.password = "lab-" + randomHex(8)
-	if raw, err := os.ReadFile(filepath.Join(dir, "config.json")); err == nil {
+	if raw, err := os.ReadFile(filepath.Join(dir, "config.json")); err == nil { // #nosec G304 -- cmd/lab is a local development tool, never built into the app image; the path is the lab's own .lab/config.json
 		_ = json.Unmarshal(raw, &l.model)
 	}
 	_ = os.WriteFile(filepath.Join(dir, "sign-in.txt"), []byte("Admin app: "+appURL+"/admin\nEmail: "+ownerEmail+"\nPassword: "+l.password+"\n(new each time the lab starts)\n"), 0o600)
@@ -113,7 +113,7 @@ func (l *lab) boot(ctx context.Context) error {
 	l.busy.Lock()
 	defer l.busy.Unlock()
 	l.setStatus("Building the app from this checkout…")
-	build := exec.CommandContext(ctx, "go", "build", "-o", filepath.Join(l.dir, "bookmeet"), "./cmd/calnode")
+	build := exec.CommandContext(ctx, "go", "build", "-o", filepath.Join(l.dir, "bookmeet"), "./cmd/calnode") // #nosec G204 -- cmd/lab is a local development tool, never built into the app image; runs `go build` with fixed arguments
 	build.Dir = l.root
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build failed:\n%s", out)
@@ -137,7 +137,7 @@ func (l *lab) startApp() error {
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command(filepath.Join(l.dir, "bookmeet"))
+	cmd := exec.Command(filepath.Join(l.dir, "bookmeet")) // #nosec G204 -- cmd/lab is a local development tool, never built into the app image; runs the binary it just built
 	cmd.Dir = l.dir
 	cmd.Env = append(os.Environ(),
 		"PORT="+appPort,
@@ -164,7 +164,7 @@ func (l *lab) startApp() error {
 	for {
 		resp, err := http.Get(appURL + "/version")
 		if err == nil {
-			resp.Body.Close()
+			resp.Body.Close() // #nosec G104 -- readiness probe; the body is unread and a close error changes nothing
 			if resp.StatusCode == http.StatusOK {
 				break
 			}
@@ -235,7 +235,7 @@ func (l *lab) restore() error {
 	if err != nil {
 		return fmt.Errorf("restore: %w", err)
 	}
-	if err := os.WriteFile(l.dbPath(), src, 0o600); err != nil {
+	if err := os.WriteFile(l.dbPath(), src, 0o600); err != nil { // #nosec G703 -- cmd/lab is a local development tool, never built into the app image; both paths are inside the lab's own .lab directory
 		return fmt.Errorf("restore: %w", err)
 	}
 	l.tg.clearChat()
@@ -352,7 +352,7 @@ func (l *lab) seed(ctx context.Context) error {
 			l.types[slug] = id
 		}
 	}
-	rows.Close()
+	rows.Close() // #nosec G104 -- rows already fully consumed above; nothing actionable on close error
 
 	// The bot: the app checks the key and registers its webhook with the stand-in, which is
 	// how the lab learns where to deliver and with what secret.
@@ -471,7 +471,7 @@ func (l *lab) setModel(ctx context.Context, m modelConfig) error {
 	}
 	l.model = m
 	l.mu.Unlock()
-	raw, _ := json.MarshalIndent(m, "", "  ")
+	raw, _ := json.MarshalIndent(m, "", "  ") // #nosec G117 -- cmd/lab is a local development tool, never built into the app image; the developer's own model key, written 0600 to the git-ignored .lab/config.json
 	if err := os.WriteFile(filepath.Join(l.dir, "config.json"), raw, 0o600); err != nil {
 		return err
 	}

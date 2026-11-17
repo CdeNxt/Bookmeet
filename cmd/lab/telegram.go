@@ -155,7 +155,7 @@ func (t *telegramStandIn) deliver(ctx context.Context, update map[string]any) er
 	if err != nil {
 		return err
 	}
-	resp.Body.Close()
+	resp.Body.Close() // #nosec G104 -- response already handled; nothing actionable on close error
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("the app answered the delivery with %d", resp.StatusCode)
 	}

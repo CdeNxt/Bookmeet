@@ -355,12 +355,12 @@ func (s *Service) List(ctx context.Context, userID string) ([]*Link, error) {
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			rows.Close()
+			rows.Close() // #nosec G104 -- already returning the scan error; nothing more actionable
 			return nil, fmt.Errorf("personal link: list: %w", err)
 		}
 		ids = append(ids, id)
 	}
-	rows.Close()
+	rows.Close() // #nosec G104 -- rows already fully consumed above; nothing actionable on close error
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("personal link: list: %w", err)
 	}
