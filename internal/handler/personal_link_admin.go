@@ -68,7 +68,7 @@ func (h *Handler) ListPersonalLinks(w http.ResponseWriter, r *http.Request) {
 				names[id] = name
 			}
 		}
-		rows.Close()
+		rows.Close() // #nosec G104 -- rows already fully consumed above; nothing actionable on close error
 	}
 	out := make([]personalLinkJSON, 0, len(links))
 	for _, l := range links {

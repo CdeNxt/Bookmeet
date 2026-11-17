@@ -94,7 +94,7 @@ func loadScenarios(dir string) ([]scenario, error) {
 	sort.Strings(files)
 	var out []scenario
 	for _, f := range files {
-		raw, err := os.ReadFile(f)
+		raw, err := os.ReadFile(f) // #nosec G304 -- cmd/lab is a local development tool, never built into the app image; reads the scenario files the developer named
 		if err != nil {
 			return nil, err
 		}
