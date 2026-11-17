@@ -1,7 +1,7 @@
 #!/bin/sh
 # Deploy the checked-out commit to Fly.io and confirm the app reports it.
 #
-#   packaging/fly/deploy.sh staging      any pushed commit; test it at https://staging.bookmeet.date
+#   packaging/fly/deploy.sh staging      any pushed commit that contains origin/bookmeet; test it at https://staging.bookmeet.date
 #   packaging/fly/deploy.sh production   only a commit on origin/bookmeet that staging is running
 #
 # Needs: flyctl signed in (fly auth login) and a clean checkout. Bump VERSION (1.N) in the push.
@@ -48,9 +48,20 @@ if [ "$target" = production ]; then
     *"$commit"*) ;;
     *) echo "Staging is not running $commit. Run 'packaging/fly/deploy.sh staging' and check it first." >&2; exit 1 ;;
   esac
+else
+  # Staging takes any pushed branch, but only one that already holds everything on bookmeet.
+  # A branch cut before a release would put staging back to before it, and its database has
+  # already run that release's migrations. This is how staging lost work three times on
+  # 2026-11-13. Fix: git merge origin/bookmeet, test, push. STAGING_BEHIND_OK=1 overrides,
+  # for deliberately testing an older commit.
+  if ! git merge-base --is-ancestor origin/bookmeet "$commit" && [ "${STAGING_BEHIND_OK:-}" != 1 ]; then
+    echo "This commit does not contain origin/bookmeet. Merge it in first: git merge origin/bookmeet" >&2
+    exit 1
+  fi
 fi
 
-echo "Deploying $version ($commit) to $target ($app)"
+branch=$(git rev-parse --abbrev-ref HEAD)
+echo "Deploying $version ($commit, branch $branch) to $target ($app)"
 fly deploy . --config "$config" --app "$app" --ha=false \
   --build-arg "VERSION=$version" --build-arg "COMMIT=$commit"
 
