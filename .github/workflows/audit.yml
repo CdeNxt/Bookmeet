@@ -7,7 +7,8 @@ name: Audit
 # This is separate from ci.yml (build/test) — audit signal, not correctness.
 on:
   push:
-    branches: [main]
+    # bookmeet is this fork's integration and release branch.
+    branches: [main, bookmeet]
   # Also on pull requests. Without this the Go stdlib CVE that broke the
   # clean-security-scan claim sat undetected until it was already on main,
   # because this workflow only ran on push, weekly, and manually. The scan is
