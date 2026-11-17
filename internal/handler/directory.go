@@ -109,7 +109,7 @@ func (h *Handler) renderDirectory(w http.ResponseWriter, r *http.Request, data d
 	data.BookingEffect = brand.BookingEffect
 	data.CancelEffect = brand.CancelEffect
 	data.HideAttribution = brand.HideAttribution
-	data.ExperienceJS = template.JS(bookmeetEffectsJS)
+	data.ExperienceJS = template.JS(bookmeetEffectsJS) // #nosec G203 -- our own bundled JS source constant, not user input
 	data.PublicTheme = brand.PublicTheme
 	data.PublicCopyJSON = brand.PublicCopyJSON()
 	data.PublicSkinHTML = h.publicHeadHTML(brand.GlassTint)

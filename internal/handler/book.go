@@ -564,7 +564,7 @@ func (h *Handler) BookPage(w http.ResponseWriter, r *http.Request) {
 
 	data := bookPageData{
 		GroupTimes: brand.GroupTimes, PublicTheme: brand.PublicTheme, PublicCopyJSON: brand.PublicCopyJSON(), PublicSkinHTML: h.publicHeadHTML(brand.GlassTint),
-		BookingEffect: brand.BookingEffect, CancelEffect: brand.CancelEffect, HideAttribution: brand.HideAttribution, ExperienceJS: template.JS(bookmeetEffectsJS),
+		BookingEffect: brand.BookingEffect, CancelEffect: brand.CancelEffect, HideAttribution: brand.HideAttribution, ExperienceJS: template.JS(bookmeetEffectsJS), // #nosec G203 -- our own bundled JS source constant, not user input
 		InPersonChoice:      allowInPerson,
 		PlacesSearch:        allowInPerson && strings.TrimSpace(os.Getenv("BOOKMEET_GOOGLE_PLACES_KEY")) != "",
 		DirectoryURL:        bookingDirectoryURL(r, ownerHandle),

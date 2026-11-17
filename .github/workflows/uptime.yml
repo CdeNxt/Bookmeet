@@ -1,0 +1,36 @@
+name: Uptime
+
+# A basic outside check that the live site answers. It runs from GitHub, so it sees what a
+# visitor sees. A failed run emails the repository's owner through GitHub's own
+# notifications; no other service is involved. Scheduled runs can start several minutes
+# late, so this is a safety net, not a pager.
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: uptime
+  cancel-in-progress: true
+
+jobs:
+  production:
+    # Only in the Bookmeet fork: a copy of this repository has no site to check.
+    if: github.repository == 'CdeNxt/Bookmeet'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: bookmeet.date answers and reports a version
+        run: |
+          set -eu
+          for url in https://bookmeet.date/healthz https://bookmeet.date/version; do
+            ok=0
+            for attempt in 1 2 3; do
+              if out=$(curl -fsS -m 15 "$url"); then ok=1; break; fi
+              sleep 20
+            done
+            [ "$ok" = 1 ] || { echo "::error::$url did not answer after three tries"; exit 1; }
+            echo "$url -> $out"
+          done

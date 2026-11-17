@@ -91,8 +91,14 @@ jobs:
         working-directory: frontend
         run: pnpm check
 
-      - name: Bookmeet appearance preferences and inverse animation
-        run: node --test internal/handler/assets/bookmeet-skin.test.cjs
+      # The same three files as JS_TESTS in the Makefile. booking-logic is the slot logic
+      # book.html and manage.html share; room-logic is the video room's pure logic.
+      - name: JavaScript unit tests (booking logic, room logic, Bookmeet skin)
+        run: >-
+          node --test
+          internal/handler/assets/booking-logic.test.js
+          internal/handler/assets/room-logic.test.js
+          internal/handler/assets/bookmeet-skin.test.cjs
 
       - name: Build frontend (required by the Go embed)
         working-directory: frontend
