@@ -260,6 +260,12 @@ func (s *ownerSession) typeBySlug(slug string) *ownerEventType {
 // ---- conversation memory ----
 
 func (s *ownerSession) remember(ctx context.Context, role, content string) {
+	s.h.rememberFor(ctx, s.userID, role, content)
+}
+
+// rememberFor adds to the Telegram assistant's working memory for one owner. The owner's
+// agent over MCP writes here too, so the bot knows what was done in the owner's name.
+func (h *Handler) rememberFor(ctx context.Context, userID, role, content string) {
 	content = strings.TrimSpace(content)
 	if content == "" {
 		return
@@ -267,16 +273,16 @@ func (s *ownerSession) remember(ctx context.Context, role, content string) {
 	if len(content) > 2000 {
 		content = content[:2000]
 	}
-	if _, err := s.h.db.ExecContext(ctx,
+	if _, err := h.db.ExecContext(ctx,
 		`INSERT INTO assistant_messages (user_id, role, content, created_at) VALUES (?, ?, ?, ?)`,
-		s.userID, role, content, time.Now().UTC().Format(time.RFC3339)); err != nil {
-		s.h.logger.WarnContext(ctx, "assistant: remember", "error", err)
+		userID, role, content, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		h.logger.WarnContext(ctx, "assistant: remember", "error", err)
 		return
 	}
 	// Working memory, not a record: keep the last few dozen.
-	_, _ = s.h.db.ExecContext(ctx, `
+	_, _ = h.db.ExecContext(ctx, `
 		DELETE FROM assistant_messages WHERE user_id = ? AND id NOT IN
-		  (SELECT id FROM assistant_messages WHERE user_id = ? ORDER BY id DESC LIMIT 60)`, s.userID, s.userID)
+		  (SELECT id FROM assistant_messages WHERE user_id = ? ORDER BY id DESC LIMIT 60)`, userID, userID)
 }
 
 func (s *ownerSession) history(ctx context.Context) []llm.Message {
