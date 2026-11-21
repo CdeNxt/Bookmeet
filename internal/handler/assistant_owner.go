@@ -70,7 +70,7 @@ Topic: if the owner says what the meeting is about, pass a short topic.
 
 Changes: call show_details again with the full updated details. The owner can also adjust the panel with its buttons; the state below shows what it holds.
 
-Existing links: list_links, resend_link, cancel_link and change_link work on links the owner made earlier, found by the guest's name.
+Existing links: list_links, resend_link, cancel_link and change_link work on links the owner made earlier, found by the guest's name. A guest's email, once they gave it on their link, is shown with that link under Recent links below and in list_links (name <email>), even if they did not book: give it when the owner asks, and use it as guest_email for a direct booking.
 
 You cannot message the guest, and nothing the owner says is passed on to the guest. If asked to tell the guest something, say so and offer what you can do: change the offer and give the owner a new link to send, or leave it with them.
 
@@ -1572,7 +1572,13 @@ func (s *ownerSession) linkLine(l *personallink.Link) string {
 			offer += " to " + last.Format("Mon 2 Jan")
 		}
 	}
-	return fmt.Sprintf("%s · %s · %s · %s", l.GuestName, kind, offer, s.linkStatus(l))
+	guest := l.GuestName
+	// The email the guest gave on the link, so the owner (and their assistant, which reads
+	// these lines) can book them directly even when the link itself was never used.
+	if l.GuestEmail != "" {
+		guest += " <" + l.GuestEmail + ">"
+	}
+	return fmt.Sprintf("%s · %s · %s · %s", guest, kind, offer, s.linkStatus(l))
 }
 
 // findLink returns the owner's most recent link for a guest name, preferring one that can

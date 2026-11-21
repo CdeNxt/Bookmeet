@@ -169,6 +169,10 @@ section.
   unavailable time. Only `errors.Is(err, errCalendarClash)` learns the reason.
 - **What the guest's note says is what they typed** (`lastText`), not the model's retelling.
 - A held item is answered once (`ResolveHeld`); a second tap is told so.
+- **An email the guest gave is never lost when they do not book.** It is on the link
+  (`guest_email`), named in the end-of-chat message, and in `linkLine` (`Name <email>`),
+  which is what the owner's assistant reads under Recent links and what `list_links` shows,
+  so the owner can ask for it later and book directly. MCP: `get_personal_link` returns it.
 
 ## Personal booking assistant: exceptions to the owner's availability (Bookmeet)
 
