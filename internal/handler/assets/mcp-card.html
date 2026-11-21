@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bookmeet</title>
+<style>
+/* Bookmeet's card inside an AI app (MCP Apps). Framework-free on purpose, like the public
+   booking pages: it runs in the app's sandbox with no network of its own. Colours follow
+   the app's theme (hostContext.theme), falling back to the system's. */
+:root {
+  --bg: #ffffff; --fg: #1c1b22; --muted: #6b6876; --line: #e6e3ec; --soft: #f6f4f9;
+  --accent: #5b3fd6; --accent-fg: #ffffff; --ok: #1f7a4d; --ok-soft: #e7f5ee;
+  --warn: #8a5a00; --warn-soft: #fdf3e1; --bad: #a3262b; --bad-soft: #fbeaea;
+  --radius: 14px;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17161c; --fg: #f1eff6; --muted: #a29fae; --line: #2c2a35; --soft: #201e27;
+    --accent: #9c86ff; --accent-fg: #120d2b; --ok: #6fd3a0; --ok-soft: #15291f;
+    --warn: #f0c060; --warn-soft: #2b2312; --bad: #ff8d8d; --bad-soft: #2d1616;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #17161c; --fg: #f1eff6; --muted: #a29fae; --line: #2c2a35; --soft: #201e27;
+  --accent: #9c86ff; --accent-fg: #120d2b; --ok: #6fd3a0; --ok-soft: #15291f;
+  --warn: #f0c060; --warn-soft: #2b2312; --bad: #ff8d8d; --bad-soft: #2d1616;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: transparent; color: var(--fg); }
+body { padding: 2px; font-size: 14px; line-height: 1.45; }
+.card { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; max-width: 520px; }
+.card.ok { border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); }
+.card.warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+.brand { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; display: flex; gap: 6px; align-items: center; }
+.brand .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+h1 { font-size: 17px; margin: 0 0 4px; font-weight: 650; }
+.sub { color: var(--muted); margin: 0 0 12px; }
+.rows { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 10px 0 12px; }
+.rows dt { color: var(--muted); }
+.rows dd { margin: 0; overflow-wrap: anywhere; }
+ul.windows { list-style: none; padding: 0; margin: 8px 0 12px; display: grid; gap: 6px; }
+ul.windows li { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; padding: 8px 10px; border-radius: 10px; background: var(--soft); }
+.badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.badge.open { background: var(--ok-soft); color: var(--ok); }
+.badge.warn { background: var(--warn-soft); color: var(--warn); }
+.badge.bad { background: var(--bad-soft); color: var(--bad); }
+.note { padding: 10px 12px; border-radius: 10px; margin: 10px 0; }
+.note.warn { background: var(--warn-soft); color: var(--warn); }
+.note.bad { background: var(--bad-soft); color: var(--bad); }
+.note.ok { background: var(--ok-soft); color: var(--ok); }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+button { font: inherit; border-radius: 10px; padding: 9px 14px; border: 1px solid var(--line); background: var(--soft); color: var(--fg); cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
+button:disabled { opacity: .55; cursor: default; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.url { display: flex; gap: 8px; margin: 8px 0; }
+.url input { flex: 1; min-width: 0; font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--soft); color: var(--fg); }
+.list { display: grid; gap: 8px; margin: 8px 0; }
+.item { padding: 10px 12px; border-radius: 10px; background: var(--soft); }
+.item .top { display: flex; justify-content: space-between; gap: 8px; }
+.item .meta { color: var(--muted); font-size: 13px; }
+.item .actions { margin-top: 8px; }
+h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 4px; text-transform: uppercase; letter-spacing: .04em; }
+.quote { border-left: 3px solid var(--line); padding: 2px 10px; color: var(--fg); font-style: italic; margin: 6px 0; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.empty { color: var(--muted); padding: 8px 0; }
+.manual { width: 100%; font: inherit; font-size: 13px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--accent); background: var(--soft); color: var(--fg); resize: none; margin-top: 6px; }
+/* Show my calendar: the days side by side, the hours down the left. */
+.cal { margin-top: 12px; }
+.cal .grid { display: flex; gap: 6px; }
+.cal .axis { position: relative; width: 44px; flex: none; font-size: 11px; color: var(--muted); }
+.cal .axis span { position: absolute; right: 4px; transform: translateY(-50%); white-space: nowrap; }
+.cal .col { flex: 1; min-width: 0; }
+.cal .axis-col { flex: none; width: 44px; }
+.cal .head { font-size: 12px; font-weight: 600; text-align: center; height: 20px; }
+.cal .day { position: relative; border: 1px solid var(--line); border-radius: 8px; background: var(--soft); overflow: hidden; }
+.cal .line { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--line); }
+.cal .blk { position: absolute; left: 3px; right: 3px; border-radius: 5px; font-size: 11px; line-height: 1.25; padding: 1px 4px; overflow: hidden; }
+.cal .hours { left: 0; right: 0; border-radius: 0; background: var(--bg); }
+.cal .busy { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--muted) 35%, transparent) 0 4px, color-mix(in srgb, var(--muted) 20%, transparent) 4px 8px); color: var(--fg); }
+.cal .booking { background: color-mix(in srgb, var(--accent) 22%, var(--bg)); color: var(--fg); border-left: 3px solid var(--accent); }
+.cal .asked { background: transparent; border: 2px solid var(--warn); left: 1px; right: 1px; z-index: 2; }
+.cal .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.cal .legend i { display: inline-block; width: 12px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+</style>
+</head>
+<body>
+<div id="root"><div class="card"><div class="brand"><span class="dot"></span>Bookmeet</div><p class="muted">Loading…</p></div></div>
+<script>
+(function () {
+  "use strict";
+  // ── the app connection (MCP Apps, JSON-RPC over postMessage) ──────────────────────
+  var nextId = 1, pending = {}, toolName = "", toolArgs = {}, root = document.getElementById("root");
+
+  function send(msg) { window.parent.postMessage(msg, "*"); }
+  function request(method, params) {
+    var id = nextId++;
+    send({ jsonrpc: "2.0", id: id, method: method, params: params || {} });
+    return new Promise(function (resolve, reject) { pending[id] = { resolve: resolve, reject: reject }; });
+  }
+  function notify(method, params) { send({ jsonrpc: "2.0", method: method, params: params || {} }); }
+
+  window.addEventListener("message", function (event) {
+    var m = event.data;
+    if (!m || m.jsonrpc !== "2.0") return;
+    if (m.id !== undefined && pending[m.id] && !m.method) {
+      var p = pending[m.id]; delete pending[m.id];
+      if (m.error) p.reject(new Error(m.error.message || "The app refused that.")); else p.resolve(m.result);
+      return;
+    }
+    if (m.method === "ui/notifications/tool-input") toolArgs = (m.params && m.params.arguments) || {};
+    else if (m.method === "ui/notifications/tool-result") safely(function () { render(toolName, m.params || {}); });
+    else if (m.method === "ui/notifications/tool-cancelled") card("", "Cancelled", "", '<p class="muted">Nothing was done.</p>');
+    else if (m.method === "ui/notifications/host-context-changed") theme(m.params || {});
+  });
+
+  function theme(ctx) {
+    if (ctx.theme === "dark" || ctx.theme === "light") document.documentElement.setAttribute("data-theme", ctx.theme);
+  }
+
+  request("ui/initialize", {
+    appCapabilities: { availableDisplayModes: ["inline"] },
+    clientInfo: { name: "bookmeet-card", version: "1" },
+    protocolVersion: "2026-01-26"
+  }).then(function (res) {
+    var ctx = (res && res.hostContext) || {};
+    theme(ctx);
+    if (ctx.toolInfo && ctx.toolInfo.tool) toolName = ctx.toolInfo.tool.name || "";
+    notify("ui/notifications/initialized", {});
+  }).catch(function () { notify("ui/notifications/initialized", {}); });
+
+  // The app sizes the frame from what the card reports: after every redraw, and whenever the
+  // content changes size on its own (fonts, a wrapped line).
+  var lastH = 0;
+  function reportSize() {
+    var h = Math.ceil(root.getBoundingClientRect().height) + 8;
+    if (h === lastH) return;
+    lastH = h;
+    notify("ui/notifications/size-changed", { width: document.documentElement.scrollWidth, height: h });
+  }
+  if (window.ResizeObserver) new ResizeObserver(reportSize).observe(root);
+
+  // callTool runs a Bookmeet tool from a button and draws what comes back.
+  function callTool(name, args, button) {
+    if (button) { button.disabled = true; button.dataset.label = button.textContent; button.textContent = "Working…"; }
+    return request("tools/call", { name: name, arguments: args || {} }).then(function (res) {
+      safely(function () { render(name, res || {}); });
+      return res;
+    }).catch(function (err) {
+      if (button) { button.disabled = false; button.textContent = button.dataset.label; }
+      showError(err.message);
+    });
+  }
+
+  // ── drawing ──────────────────────────────────────────────────────────────────────
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function card(kind, title, sub, body) {
+    root.innerHTML = '<div class="card ' + kind + '"><div class="brand"><span class="dot"></span>Bookmeet</div>' +
+      '<h1>' + esc(title) + '</h1>' + (sub ? '<p class="sub">' + esc(sub) + '</p>' : "") + body + '</div>';
+    requestAnimationFrame(reportSize);
+  }
+  function rows(pairs) {
+    var h = '<dl class="rows">';
+    pairs.forEach(function (p) { if (p[1]) h += '<dt>' + esc(p[0]) + '</dt><dd>' + esc(p[1]) + '</dd>'; });
+    return h + '</dl>';
+  }
+  function textOf(res) {
+    var c = (res && res.content) || [];
+    for (var i = 0; i < c.length; i++) if (c[i].type === "text") return c[i].text;
+    return "";
+  }
+  function showError(msg) {
+    card("warn", "Not done", "", '<div class="note bad">' + esc(msg) + '</div>');
+  }
+  function on(id, fn) { var el = document.getElementById(id); if (el) el.addEventListener("click", function () { fn(el); }); }
+  // Copying inside an app's sandboxed frame: the clipboard API is often switched off there,
+  // so try the older copy command first (it runs inside the tap), then the API, and if both
+  // are refused show the text selected for the owner to copy with the keyboard.
+  function copy(text, button) {
+    var label = button.dataset.copyLabel || "Copy";
+    function done() { button.textContent = "Copied"; setTimeout(function () { button.textContent = label; }, 1500); }
+    if (execCopy(text)) return done();
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { manualCopy(text, button); });
+        return;
+      }
+    } catch (e) { /* refused outright: fall through */ }
+    manualCopy(text, button);
+  }
+  function execCopy(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text; ta.setAttribute("readonly", "");
+    ta.style.position = "fixed"; ta.style.top = "0"; ta.style.left = "0"; ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus(); ta.select(); ta.setSelectionRange(0, text.length);
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    return ok;
+  }
+  function manualCopy(text, button) {
+    var holder = button.closest(".card");
+    var box = holder.querySelector("textarea.manual");
+    if (!box) { box = document.createElement("textarea"); box.className = "manual"; box.readOnly = true; holder.appendChild(box); }
+    box.value = text; box.rows = Math.min(4, Math.ceil(text.length / 60) + 1);
+    box.focus(); box.select();
+    button.textContent = /Mac|iPhone|iPad/.test(navigator.platform) ? "Press ⌘C to copy" : "Press Ctrl+C to copy";
+    requestAnimationFrame(reportSize);
+  }
+
+  // ── Show my calendar ─────────────────────────────────────────────────────────────
+  // The days a card is about, side by side: the owner's usual hours, when their calendar is
+  // busy (no titles: Bookmeet never puts calendar titles on a card), their Bookmeet bookings
+  // and the times being asked about. Drawn from show_my_calendar, which only this card calls.
+  function calendarButton(spans) { return spans && spans.length ? '<button id="show-cal">Show my calendar</button>' : ""; }
+  function wireCalendar(eventType, spans) {
+    on("show-cal", function (btn) {
+      var box = document.getElementById("cal");
+      if (!box) { box = document.createElement("div"); box.id = "cal"; box.className = "cal"; root.querySelector(".card").appendChild(box); }
+      if (box.dataset.open) { box.innerHTML = ""; delete box.dataset.open; btn.textContent = "Show my calendar"; requestAnimationFrame(reportSize); return; }
+      btn.disabled = true; btn.textContent = "Loading…";
+      var args = { event_type: eventType || "", spans: spans.map(function (s) { return { start: s.start, end: s.end }; }) };
+      request("tools/call", { name: "show_my_calendar", arguments: args }).then(function (res) {
+        btn.disabled = false;
+        if (!res || res.isError) { btn.textContent = "Show my calendar"; box.innerHTML = '<div class="note bad">' + esc(textOf(res) || "Your calendar could not be shown.") + '</div>'; }
+        else { safely(function () { box.innerHTML = drawCalendar(res.structuredContent || {}); }); box.dataset.open = "1"; btn.textContent = "Hide my calendar"; }
+        requestAnimationFrame(reportSize);
+      }).catch(function (err) {
+        btn.disabled = false; btn.textContent = "Show my calendar";
+        box.innerHTML = '<div class="note bad">' + esc(err.message) + '</div>';
+        requestAnimationFrame(reportSize);
+      });
+    });
+  }
+  function clockOf(min, h24) {
+    var h = Math.floor(min / 60) % 24, m = min % 60, mm = (m < 10 ? "0" : "") + m;
+    if (h24) return (h < 10 ? "0" : "") + h + ":" + mm;
+    var ap = h < 12 ? "am" : "pm", h12 = h % 12 || 12;
+    return h12 + (m ? ":" + mm : "") + ap;
+  }
+  function drawCalendar(c) {
+    var days = c.days || [];
+    if (!days.length) return '<p class="muted">Nothing to show.</p>';
+    // The hours shown: everything that happens on these days, with a little room either side.
+    var lo = 24 * 60, hi = 0;
+    days.forEach(function (d) {
+      [].concat(d.hours || [], d.asked || [], d.bookings || [], d.busy || []).forEach(function (b) { lo = Math.min(lo, b.from); hi = Math.max(hi, b.to); });
+    });
+    if (lo >= hi) { lo = 8 * 60; hi = 18 * 60; }
+    lo = Math.max(0, Math.floor(lo / 60) * 60 - 60); hi = Math.min(24 * 60, Math.ceil(hi / 60) * 60 + 60);
+    var span = hi - lo, px = Math.max(220, Math.min(420, span / 60 * 26));
+    function top(m) { return ((Math.max(lo, Math.min(hi, m)) - lo) / span * 100).toFixed(2) + "%"; }
+    function height(b) { return ((Math.min(hi, b.to) - Math.max(lo, b.from)) / span * 100).toFixed(2) + "%"; }
+    function blocks(list, cls, label) {
+      return (list || []).map(function (b) {
+        if (b.to <= lo || b.from >= hi) return "";
+        var text = label === undefined ? (b.label || "") : label;
+        var title = clockOf(b.from, c.h24) + "–" + clockOf(b.to, c.h24) + (text ? " " + text : "");
+        return '<div class="blk ' + cls + '" style="top:' + top(b.from) + ';height:' + height(b) + '" title="' + esc(title) + '">' + esc(text) + '</div>';
+      }).join("");
+    }
+    var step = span > 10 * 60 ? 120 : 60, axis = "", lines = "";
+    for (var m = lo; m <= hi; m += step) {
+      axis += '<span style="top:' + top(m) + '">' + esc(clockOf(m, c.h24)) + '</span>';
+      lines += '<div class="line" style="top:' + top(m) + '"></div>';
+    }
+    var h = '<div class="grid"><div class="col axis-col"><div class="head"></div><div class="axis" style="height:' + px + 'px">' + axis + '</div></div>';
+    days.forEach(function (d) {
+      h += '<div class="col"><div class="head">' + esc(d.text) + '</div><div class="day" style="height:' + px + 'px">' + lines +
+        blocks(d.hours, "hours", "") + blocks(d.busy, "busy", "Busy") + blocks(d.bookings, "booking") + blocks(d.asked, "asked", "") + '</div></div>';
+    });
+    h += '</div>';
+    h += '<div class="legend"><span><i style="background:var(--bg);border:1px solid var(--line)"></i>Your hours</span>' +
+      '<span><i class="busy" style="background:color-mix(in srgb, var(--muted) 35%, transparent)"></i>Busy</span>' +
+      '<span><i style="background:color-mix(in srgb, var(--accent) 22%, var(--bg));border-left:3px solid var(--accent)"></i>Bookmeet booking</span>' +
+      '<span><i style="border:2px solid var(--warn)"></i>Asked for</span></div>';
+    if (!c.calendar_checked) h += '<p class="muted">Your calendar could not be read just now, so busy times are missing.</p>';
+    if (c.zone) h += '<p class="muted">Times in ' + esc(c.zone) + '.</p>';
+    return h;
+  }
+
+  // A card that cannot be drawn says so, rather than leaving a blank frame in the chat.
+  function safely(fn) {
+    try { fn(); } catch (err) { showError("This card could not be drawn (" + (err && err.message) + "). Your assistant has the details in text."); }
+  }
+
+  function render(name, res) {
+    var s = res.structuredContent || {};
+    if (res.isError) return showError(textOf(res) || "That could not be done.");
+    if (s.approval) return renderApproval(s.approval, (res._meta || {})["bookmeet/approvalKey"]);
+    if (name === "owner_approve") {
+      if (s.link) return renderLink(s.link, toolArgs.guest_name);
+      if (s.booked) return renderBooked(s.booked);
+      return card("ok", s.result || "Done", "", "");
+    }
+    if (name === "check_personal_link_offer" || s.windows && s.can_create !== undefined) return renderOffer(s);
+    if (name === "create_personal_link" || s.url && s.link_id && s.offer) return renderLink(s, toolArgs.guest_name);
+    if (name === "book_for_guest" || s.booking_id && s.when) return renderBooked(s);
+    if (name === "answer_guest") return s.booked ? renderBooked(s.booked) : card("ok", "Done", "", '<p>' + esc(s.result) + '</p>');
+    if (name === "whats_waiting" || s.needs_owner) return renderWaiting(s);
+    if (name === "list_personal_links" || s.links) return renderLinks(s);
+    if (name === "get_personal_link" || s.left_for_owner) return renderOneLink(s);
+    card("", "Bookmeet", "", '<p>' + esc(textOf(res)) + '</p>');
+  }
+
+  // The verdicts in the owner's own words: the card is read by the owner, not the agent.
+  var verdictWords = {
+    busy_throughout: "busy the whole time",
+    outside_hours: "outside your hours",
+    beyond_booking_horizon: "further ahead than you take bookings",
+    partly_outside_hours: "partly outside your hours"
+  };
+  function verdictBadge(w) {
+    var cls = w.verdict === "open" ? "open" : (w.verdict === "busy_throughout" ? "bad" : "warn");
+    var label = w.verdict === "open" ? (w.times_offered + (w.times_offered === 1 ? " time" : " times")) : (verdictWords[w.verdict] || w.verdict_text);
+    return '<span class="badge ' + cls + '">' + esc(label) + '</span>';
+  }
+
+  // The offer: Telegram's details panel.
+  function renderOffer(s) {
+    var guest = toolArgs.guest_name || "";
+    var h = rows([["Guest", guest], ["Meeting", s.meeting + (s.duration_minutes ? " · " + s.duration_minutes + " min" : "")], ["Place", s.place]]);
+    h += '<ul class="windows">';
+    (s.windows || []).forEach(function (w) { h += '<li><span>' + esc(w.text) + '</span>' + verdictBadge(w) + '</li>'; });
+    h += '</ul>';
+    if (s.skipped_days && s.skipped_days.length) h += '<p class="muted">Left out (not a working day): ' + esc(s.skipped_days.join(", ")) + '</p>';
+    if (s.needs_owner_approval) h += '<div class="note warn">Some of these times are outside your usual hours. Allow them to include them in the link.</div>';
+    else if (!s.can_create) h += '<div class="note bad">' + esc(s.advice) + '</div>';
+    var canGo = s.can_create || (s.needs_owner_approval && s.times_offered > 0);
+    var label = s.needs_owner_approval ? "Allow and create link" : "Create link";
+    var spans = (s.windows || []).filter(function (w) { return w.start && w.end; });
+    if (canGo && guest) h += '<div class="actions"><button class="primary" id="go">' + esc(label) + '</button>' + calendarButton(spans) + '</div>';
+    else {
+      if (canGo) h += '<p class="muted">Tell your assistant who the link is for, and it will make it.</p>';
+      if (spans.length) h += '<div class="actions">' + calendarButton(spans) + '</div>';
+    }
+    card("", guest ? "Personal link for " + guest : "Personal link", s.owner_timezone ? "Times in " + s.owner_timezone : "", h);
+    wireCalendar(toolArgs.event_type, spans);
+    on("go", function (btn) {
+      // One tap: make the link. If it needs the owner's approval, this same tap (on a button
+      // that said "Allow") is it, so go straight on without showing a second Allow.
+      btn.disabled = true; btn.textContent = "Working…";
+      request("tools/call", { name: "create_personal_link", arguments: toolArgs }).then(function (res) {
+        var sc = res && res.structuredContent;
+        var key = res && res._meta && res._meta["bookmeet/approvalKey"];
+        if (sc && sc.approval && key && s.needs_owner_approval && !res.isError) {
+          return callTool("owner_approve", { ticket: sc.approval.ticket, key: key });
+        }
+        safely(function () { render("create_personal_link", res || {}); });
+      }).catch(function (err) { showError(err.message); });
+    });
+  }
+
+  // An approval only the owner's tap can give.
+  function renderApproval(a, key) {
+    var h = '';
+    (a.lines || []).forEach(function (l) { h += '<div>' + esc(l) + '</div>'; });
+    h += '<div class="note warn">' + esc(a.why) + '</div>';
+    h += '<div class="actions"><button class="primary" id="allow">' + esc(a.button || "Allow") + '</button>' + calendarButton(a.spans) + '<button id="not-now">Not now</button></div>';
+    card("warn", a.title || "Your approval", "Only your tap can approve this.", h);
+    wireCalendar(a.event_type, a.spans || []);
+    on("allow", function (btn) {
+      if (!key) return showError("This card can't approve: open it again from your assistant.");
+      callTool("owner_approve", { ticket: a.ticket, key: key }, btn);
+    });
+    on("not-now", function () { card("", "Not approved", "", '<p class="muted">Nothing was done.</p>'); });
+  }
+
+  function renderLink(s, guest) {
+    var h = '<p>' + (s.replaced ? "The old link no longer works. " : "") + 'It works once, and expires ' + esc(s.expires && s.expires.text) + '.</p>';
+    h += '<div class="url"><input id="url-box" readonly value="' + esc(s.url) + '"><button id="copy-url" data-copy-label="Copy link">Copy link</button></div>';
+    h += '<div class="actions"><button class="primary" id="copy-msg" data-copy-label="Copy message">Copy message</button></div>';
+    h += '<p class="muted">Send it to ' + esc(guest || "your guest") + ' yourself; Bookmeet does not send it.</p>';
+    card("ok", "Link ready" + (guest ? " for " + guest : ""), "", h);
+    on("copy-url", function (b) { copy(s.url, b); });
+    on("copy-msg", function (b) { copy(s.message_to_send, b); });
+  }
+
+  function renderBooked(b) {
+    var h = rows([["Guest", b.guest_name], ["Meeting", b.meeting], ["When", b.when && b.when.text], ["Where", b.where]]);
+    // The server words this for the agent; the card is read by the owner.
+    var inv = String(b.invitation || "").replace(/the owner's/g, "your").replace(/the owner should/g, "you should").replace(/^It is/, "It's");
+    h += '<div class="note ok">' + esc(inv) + '</div>';
+    if (b.manage_url) h += '<div class="url"><input id="url-box" readonly value="' + esc(b.manage_url) + '"><button id="copy-manage" data-copy-label="Copy manage link">Copy manage link</button></div>';
+    card("ok", "Booked", "", h);
+    on("copy-manage", function (btn) { copy(b.manage_url, btn); });
+  }
+
+  function linkRow(l, extra) {
+    return '<div class="item"><div class="top"><strong>' + esc(l.guest_name) + '</strong><span class="meta">' + esc(l.meeting) + '</span></div>' +
+      '<div class="meta">' + esc(l.status_text) + (l.booked ? " · " + esc(l.booked.text) : "") + '</div>' + (extra || "") + '</div>';
+  }
+
+  function renderWaiting(s) {
+    var h = '';
+    function section(title, items, withOpen) {
+      if (!items || !items.length) return;
+      h += '<h2>' + esc(title) + '</h2><div class="list">';
+      items.forEach(function (it) {
+        h += linkRow(it.link, '<div>' + esc(it.why) + '</div>' + (withOpen ? '<div class="actions"><button data-open="' + esc(it.link.link_id) + '">Open</button></div>' : ""));
+      });
+      h += '</div>';
+    }
+    section("Needs you", s.needs_owner, true);
+    section("Booked this week", s.recently_booked, false);
+    section("Ran out", s.ran_out, false);
+    if (!h) h = '<p class="empty">Nothing is waiting.</p>';
+    card("", "What's waiting", "", h);
+    bindOpen();
+  }
+
+  function renderLinks(s) {
+    var h = '<div class="list">';
+    (s.links || []).forEach(function (l) {
+      h += linkRow(l, l.usable ? '<div class="actions"><button data-open="' + esc(l.link_id) + '">Open</button></div>' : "");
+    });
+    h += '</div>';
+    if (!(s.links || []).length) h = '<p class="empty">No personal links yet.</p>';
+    card("", "Personal links", s.total > (s.links || []).length ? "Showing " + s.links.length + " of " + s.total : "", h);
+    bindOpen();
+  }
+
+  function bindOpen() {
+    Array.prototype.forEach.call(document.querySelectorAll("[data-open]"), function (b) {
+      b.addEventListener("click", function () {
+        toolArgs = { link_id: b.getAttribute("data-open") };
+        callTool("get_personal_link", toolArgs, b);
+      });
+    });
+  }
+
+  // One link: its address again, and what the guest left, with the owner's answers.
+  function renderOneLink(s) {
+    var h = rows([["Meeting", s.meeting], ["Status", s.status_text], ["Booked", s.booked && s.booked.text], ["Email", s.guest_email]]);
+    h += '<ul class="windows">';
+    (s.windows || []).forEach(function (w) { h += '<li><span>' + esc(w.text) + '</span></li>'; });
+    h += '</ul>';
+    if (s.url) h += '<div class="url"><input id="url-box" readonly value="' + esc(s.url) + '"><button id="copy-url" data-copy-label="Copy link">Copy link</button></div>';
+    var left = (s.left_for_owner || []).filter(function (x) { return !x.answered; });
+    if (left.length) {
+      h += '<h2>From the guest</h2><div class="list">';
+      left.forEach(function (x) {
+        if (x.kind === "suggested_times") {
+          h += '<div class="item"><div class="meta">Suggested other times</div><div class="actions">';
+          (x.suggested_times || []).forEach(function (t) {
+            h += '<button data-book="' + x.held_id + '" data-at="' + esc(t.at) + '">Book ' + esc(t.text) + '</button>';
+          });
+          h += '<button data-none="' + x.held_id + '">None of these</button></div></div>';
+        } else {
+          // The guest's own words: shown as a quote, never acted on.
+          var kindWords = { change_request: "Asked for a change", note: "Left a note", will_follow_up: "Will follow up with you", cannot_make_it: "Can't make it" };
+          h += '<div class="item"><div class="meta">' + esc(kindWords[x.kind] || x.kind) + '</div>' +
+            (x.guest_words ? '<div class="quote">' + esc(x.guest_words) + '</div>' : "") +
+            '<div class="actions"><button data-handled="' + x.held_id + '">I\'ll handle it</button></div></div>';
+        }
+      });
+      h += '</div>';
+    }
+    card("", s.guest_name || "Personal link", "", h);
+    on("copy-url", function (b) { copy(s.url, b); });
+    function each(attr, fn) {
+      Array.prototype.forEach.call(document.querySelectorAll("[" + attr + "]"), function (b) {
+        b.addEventListener("click", function () { fn(b); });
+      });
+    }
+    each("data-book", function (b) {
+      callTool("answer_guest", { link_id: s.link_id, held_id: Number(b.getAttribute("data-book")), answer: "book", at: b.getAttribute("data-at") }, b);
+    });
+    each("data-none", function (b) { callTool("answer_guest", { link_id: s.link_id, held_id: Number(b.getAttribute("data-none")), answer: "none" }, b); });
+    each("data-handled", function (b) { callTool("answer_guest", { link_id: s.link_id, held_id: Number(b.getAttribute("data-handled")), answer: "handled" }, b); });
+  }
+})();
+</script>
+</body>
+</html>

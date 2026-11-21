@@ -97,7 +97,7 @@ Read the one you need; do not load them all.
 | Event type create/update/validation | `docs/agent-notes/event-types.md` |
 | Calendar read-back, `external_event_id` | `docs/agent-notes/calendar-readback.md` |
 | Personal links, Telegram assistant, guest chat page, exceptions, reports | `docs/agent-notes/personal-assistant.md` |
-| MCP assistant tools, cards, `owner_approve` | `docs/agent-notes/personal-assistant-mcp.md` and `docs/agent-capabilities.md` (both arrive with the AI branch) |
+| MCP assistant tools, cards, `owner_approve` | `docs/agent-notes/personal-assistant-mcp.md` and `docs/agent-capabilities.md` |
 | `cmd/lab` | `cmd/lab/CLAUDE.md` (loads itself) |
 | `packaging/` | `packaging/CLAUDE.md` (loads itself) |
 | How the whole app fits together | `docs/ARCHITECTURE.md` |

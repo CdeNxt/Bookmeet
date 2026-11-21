@@ -1001,7 +1001,7 @@ Each account can set `booking_accent` in its profile. The default preserves the 
 
 A Model Context Protocol server is compiled into the binary on the official Go SDK
 (`github.com/modelcontextprotocol/go-sdk`). `Handler.MCPServer()`
-(`internal/handler/mcp.go`) builds one server instance exposing eight typed tools
+(`internal/handler/mcp.go`) builds one server instance exposing typed tools (the booking lifecycle below, plus the personal booking assistant)
 (schema generated from Go structs): `list_event_types`, `get_event_type`,
 `get_available_slots`, `create_booking`, `get_booking`, `reschedule_booking`,
 `cancel_booking`, `list_bookings`. `list_bookings` filters (`status`, `date_from`,
@@ -1065,6 +1065,22 @@ types that have required questions.
     stale or internal. Copy failure is surfaced explicitly, because `navigator.clipboard`
     is unavailable outside a secure context and a self-hosted instance on plain http is
     exactly that case.
+
+**Personal booking assistant tools (2026-11-13).** Eight more tools give an agent what the
+Telegram assistant has: `list_personal_links`, `get_personal_link`, `cancel_personal_link`,
+`whats_waiting`, `check_personal_link_offer`, `create_personal_link`, `book_for_guest`,
+`answer_guest`. The server now sends instructions (`mcpInstructions`) and every tool carries
+annotations. This widens the 2026-06-22 surface on purpose, on J's direction that an owner's
+own agent should be able to do what the bot does; the tools are still narrow and
+purpose-built, and none of them can set an owner waiver. Rules: CLAUDE.md, "Personal booking
+assistant over MCP".
+
+**Cards and tap approvals (2026-11-14).** Apps that draw MCP Apps cards get Bookmeet's card
+(`ui://bookmeet/card.html`) on the assistant tools, and an owner's exception is approved by a
+tap on it: `owner_approve` is app-only (`visibility: ["app"]`), needs a one-use ticket plus a
+key carried only in the result's `_meta`, and is refused on connections that did not declare
+cards. On J's decision this replaces "exceptions only by the owner's Telegram tap" for card
+apps; spoken approval is deliberately not supported.
 
 **MCP surface — design decision (2026-06-22).** The MCP intentionally exposes only the
 **booking lifecycle** (discover → slots → book → view/list/reschedule/cancel), not

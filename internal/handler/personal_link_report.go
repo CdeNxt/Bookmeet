@@ -592,15 +592,22 @@ func (s *ownerSession) bookSuggested(ctx context.Context, held *personallink.Hel
 		s.say(ctx, "The booking could not be made, and I don't have a clear reason. Nothing was booked. Try again in a moment.")
 		return "Nothing booked."
 	}
-	links := s.h.personalLinks()
-	_ = links.ResolveHeld(ctx, held.ID, "booked")
 	if confirmMessageID != 0 {
 		_ = s.bot.Edit(ctx, s.chatID, confirmMessageID, "Booked anyway.", nil)
 	}
-	// The guest is probably gone. They get the calendar invitation; the card is here for
-	// when they reopen the link.
-	if ps, err := s.h.newPlinkSession(ctx, l, l.GuestTimezone, nil); err == nil {
-		emailed := s.h.guestWillBeEmailed(ctx, b)
+	s.h.suggestedTimeBooked(ctx, held, l, start, b)
+	s.remember(ctx, "event", "The owner booked a time "+l.GuestName+" suggested.")
+	return ""
+}
+
+// suggestedTimeBooked is what follows booking a time the guest suggested, whoever answered
+// it (the owner's tap on Telegram, or their agent over MCP): the held item is closed, a
+// booked card waits on the guest's page for when they reopen the link (they are probably
+// gone; the calendar invitation is what reaches them), and the owner is told.
+func (h *Handler) suggestedTimeBooked(ctx context.Context, held *personallink.Held, l *personallink.Link, start time.Time, b *booking.Booking) {
+	_ = h.personalLinks().ResolveHeld(ctx, held.ID, "booked")
+	if ps, err := h.newPlinkSession(ctx, l, l.GuestTimezone, nil); err == nil {
+		emailed := h.guestWillBeEmailed(ctx, b)
 		card := chatItem{Role: "assistant", Kind: "booked", Title: ps.t("confirmed", ps.ownerFirst()), Rows: ps.meetingRows(start)}
 		if emailed {
 			card.Rows = append(card.Rows, [2]string{ps.t("invite"), ps.t("invite_sent", l.GuestEmail)})
@@ -609,8 +616,6 @@ func (s *ownerSession) bookSuggested(ctx context.Context, held *personallink.Hel
 			card.Foot = ps.t("invite_none")
 		}
 		ps.add(ctx, card)
-		s.h.notifyOwnerBooked(ctx, ps, b, emailed)
+		h.notifyOwnerBooked(ctx, ps, b, emailed)
 	}
-	s.remember(ctx, "event", "The owner booked a time "+l.GuestName+" suggested.")
-	return ""
 }
