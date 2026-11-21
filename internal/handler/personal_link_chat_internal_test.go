@@ -907,3 +907,38 @@ func TestPersonalLinkChat_withoutAModelASuggestionIsKeptAsANote(t *testing.T) {
 		t.Fatalf("held = %+v", held)
 	}
 }
+
+// A guest who gave an email and left without booking is still someone the owner can book
+// directly: the email reaches the owner in the end-of-chat message, and their assistant can
+// read it from the link afterwards.
+func TestPersonalLinkChat_anEmailGivenWithoutBookingReachesTheOwnerAndTheirAssistant(t *testing.T) {
+	f := newChatFixture(t)
+	f.throughDetails(t)
+	before := f.ownerMessages()
+	f.chat(t, f.token, plinkChatRequest{Action: "end"})
+	if got := f.ownerMessages(); got != before+1 {
+		t.Fatalf("the owner got %d messages when the chat ended; want 1", got-before)
+	}
+	report := f.tg.sent(ownerChat)[before]
+	if !strings.Contains(report, "Bill gave an email (bill@example.com) and saw the times.") {
+		t.Errorf("the owner's message does not carry the guest's email:\n%s", report)
+	}
+
+	f.model.says("bill@example.com")
+	f.message(t, "what was his email")
+	f.model.mu.Lock()
+	last := f.model.requests[len(f.model.requests)-1]
+	f.model.mu.Unlock()
+	if system := last[0].Content; !strings.Contains(system, "Bill Mathers <bill@example.com>") {
+		t.Errorf("the owner's assistant is not told the email Bill gave:\n%s", system)
+	}
+	var heard bool
+	for _, m := range last[1:] {
+		if strings.Contains(m.Content, "bill@example.com") {
+			heard = true
+		}
+	}
+	if !heard {
+		t.Error("the end-of-chat event the assistant remembers does not carry the email")
+	}
+}

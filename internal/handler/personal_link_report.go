@@ -356,9 +356,9 @@ func (h *Handler) reportChat(ctx context.Context, linkID string) {
 		case l.GuestEmail == "":
 			b.WriteString(first + " opened the link but gave no email.\n")
 		case !l.EmptyToldAt.IsZero():
-			b.WriteString(first + " gave an email; the link had no times left to offer.\n")
+			b.WriteString(first + " gave an email (" + l.GuestEmail + "); the link had no times left to offer.\n")
 		default:
-			b.WriteString(first + " gave an email and saw the times.\n")
+			b.WriteString(first + " gave an email (" + l.GuestEmail + ") and saw the times.\n")
 		}
 	}
 
