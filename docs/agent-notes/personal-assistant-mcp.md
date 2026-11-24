@@ -88,9 +88,19 @@ create or change a link), `mcp_assistant_book.go` (`book_for_guest`, `answer_gue
   Telegram and the cards can do the same things). Neither offers busy times on a link.
 - **The model hears the tap.** The card sends the outcome of `owner_approve` with
   `ui/update-model-context`; apps that ignore it still need `list_bookings`.
+- **No card and no text channel: the approval email** (J, 2026-11-24),
+  `owner_email_approval.go`. Sent only when there is no linked Telegram chat: for an
+  `ask_owner` call from a text-only app, and for times a guest suggested (with whatever else
+  they left). The link opens `/approve/{token}`: GET changes nothing; deciding needs the
+  owner's own signed-in session and a button, so neither a mail scanner nor an agent with
+  the mailbox can approve. It runs the card's paths and waives only what the page showed.
+  The email names kinds of reason only; calendar titles appear on the signed-in page.
+  Tokens are stored hashed, single use, at most 7 days, 10 emails an hour per owner. The
+  assistant can be switched on with email alone; a Telegram bot is no longer required.
 - **No spoken approval.** In voice the owner asks, and taps the card on screen; ChatGPT's own
   voice mode makes the same choice. Do not add a way for words alone to approve.
-- Not built yet: a Bookmeet approval page for an owner with neither cards nor Telegram.
+- Not built yet: a "Waiting on you" inbox in the admin (the owner's likely next step after
+  the approval email). A ran-out or empty link is still only announced on Telegram.
 - **The bot hears what the agent did** (`agentDid`): a link made or cancelled, a booking, an
   answer to a guest is sent to the owner on Telegram and written to the Telegram assistant's
   memory, so the two front ends agree about what exists. Nothing from the calendar goes there.

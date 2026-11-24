@@ -257,8 +257,9 @@
 					<div>
 						<h2 class="text-sm font-semibold">Personal booking assistant</h2>
 						<p class="mt-0.5 text-xs text-muted-foreground">
-							Message a Telegram bot to set up a meeting. It makes a personal booking link
-							for your guest and tells you what happens. It needs the AI model above.
+							Personal booking links for your guests, set up from your AI app or by messaging
+							a Telegram bot. It needs the AI model above, and a Telegram bot or email so it
+							can ask you to approve exceptions.
 						</p>
 					</div>
 					<span class="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium {assistant.active ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}">
@@ -337,17 +338,17 @@
 						<div>
 							<Label for="assistant-enabled" class="text-sm">Assistant on</Label>
 							<p class="text-xs text-muted-foreground">
-								{#if !assistant.telegram.configured}
-									Connect a Telegram bot first.
+								{#if !assistant.telegram.configured && !assistant.email_ready}
+									Connect a Telegram bot or set up email first.
 								{:else if !assistant.ai_active}
 									Set up and enable the AI model above first.
 								{:else}
-									When off, the bot goes quiet.
+									When off, personal links stop opening and the bot goes quiet.
 								{/if}
 							</p>
 						</div>
 						<Switch id="assistant-enabled" checked={assistant.enabled}
-							disabled={assistantFlag.active || (!assistant.enabled && (!assistant.telegram.configured || !assistant.ai_active))}
+							disabled={assistantFlag.active || (!assistant.enabled && ((!assistant.telegram.configured && !assistant.email_ready) || !assistant.ai_active))}
 							onCheckedChange={(v) => patchAssistant({ enabled: v }, v ? 'Assistant switched on' : 'Assistant switched off')} />
 					</div>
 

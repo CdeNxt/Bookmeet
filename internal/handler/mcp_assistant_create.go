@@ -35,7 +35,7 @@ type mcpOfferIn struct {
 	ReplacesLinkID string        `json:"replaces_link_id,omitempty" jsonschema:"to change the offer on an existing link: its link_id. The old address stops working and the guest's email and phone carry over"`
 	PlaceQuery     string        `json:"place_query,omitempty" jsonschema:"for an in-person meeting: the place as the owner named it (\"Equator Coffee on Mission\"). The check looks it up and returns place_options"`
 	Place          string        `json:"place,omitempty" jsonschema:"for an in-person meeting: the option the owner picked, copied exactly from place_options. Never write an address yourself"`
-	AskOwner       bool          `json:"ask_owner,omitempty" jsonschema:"only for apps that show no BookMeet cards, ignored otherwise. Create only: when some times are outside the owner's usual hours, send the owner the details on Telegram to confirm with their own tap. Only after the owner says yes to asking"`
+	AskOwner       bool          `json:"ask_owner,omitempty" jsonschema:"only for apps that show no BookMeet cards, ignored otherwise. Create only: when some times are outside the owner's usual hours, send the owner the details (Telegram, or email without it) to confirm with their own tap. Only after the owner says yes to asking"`
 }
 
 type mcpWindowCheck struct {
@@ -282,7 +282,7 @@ func (h *Handler) checkOffer(ctx context.Context, o *mcpOwner, in mcpOfferIn) (*
 		out.CanCreate = false
 		out.Advice = "Show the owner the place_options and ask which one; then pass it, copied exactly, as place."
 	case out.NeedsOwner && out.TimesOffered > 0:
-		out.Advice = "Some of these times are outside the owner's usual hours (see verdict_text). Tell the owner which; if they want them anyway, call create_personal_link with ask_owner set to true and they confirm on Telegram with their own tap. Or change the times."
+		out.Advice = "Some of these times are outside the owner's usual hours (see verdict_text). Tell the owner which; if they want them anyway, call create_personal_link with ask_owner set to true and they confirm with their own tap, on Telegram or from an email. Or change the times."
 	case !out.CanCreate:
 		out.Advice = "Nothing in these windows can be offered: " + strings.Join(empty, "; ") + ". Ask the owner for other times." + hint
 	case len(empty) > 0:
@@ -468,7 +468,9 @@ func (h *Handler) addAssistantCreateTools(s *mcp.Server) {
 // hours and only they can confirm that. The agent's call makes nothing; the owner's taps do.
 func (h *Handler) askOwnerToConfirmLink(ctx context.Context, o *mcpOwner, et *ownerEventType, name, email, topic string, check *mcpOfferCheck, windows []personallink.Window, replaces string) string {
 	if h.ownerTelegramSession(ctx, o.UserID) == nil {
-		return "no link was made, and the owner has no Telegram assistant connected to confirm times outside their usual hours with. Offer times inside their hours instead"
+		placeName, placeAddr := splitPlace(check.Place)
+		return h.emailLinkApproval(ctx, o, et, personallink.CreateParams{UserID: o.UserID, EventTypeID: et.ID, GuestName: name, GuestEmail: email, Topic: topic,
+			PlaceName: placeName, PlaceAddress: placeAddr, Windows: windows}, replaces, check)
 	}
 	draft := make([]draftWindow, 0, len(windows))
 	for _, w := range windows {

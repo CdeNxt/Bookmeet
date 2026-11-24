@@ -556,6 +556,10 @@ func New(ctx context.Context, cfg *config.Config, db *sql.DB, logger *slog.Logge
 	mux.HandleFunc("POST /manage/{token}/reschedule", manageRL(h.RescheduleByToken))
 	mux.HandleFunc("POST /manage/{token}/cancel", manageRL(h.CancelByToken))
 
+	// The approval email's page. The token names the request; the owner's session decides it.
+	mux.HandleFunc("GET /approve/{token}", manageRL(h.ApprovalPage))
+	mux.HandleFunc("POST /approve/{token}", manageRL(h.DecideApproval))
+
 	// Webhooks
 	mux.HandleFunc("POST /v1/webhooks", h.RequireAuth(h.CreateWebhook))
 	mux.HandleFunc("GET /v1/webhooks", h.RequireAuth(h.ListWebhooks))

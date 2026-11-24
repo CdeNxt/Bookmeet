@@ -259,6 +259,7 @@ export type AssistantSettings = {
 	/** true when it can actually work: switched on, a bot connected, and the AI model live. */
 	active: boolean;
 	ai_active: boolean;
+	email_ready: boolean;
 	telegram: { configured: boolean; bot_username: string };
 	link: { linked: boolean; telegram_name: string };
 };

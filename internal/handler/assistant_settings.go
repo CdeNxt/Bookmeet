@@ -130,6 +130,13 @@ func (h *Handler) assistantActive(ctx context.Context) bool {
 	return bot != nil && h.getLLM() != nil && h.assistantEnabled(ctx)
 }
 
+// canAskOwner reports whether there is a way to ask the owner for a decision outside their
+// AI app: a Telegram bot, or email for the approval email.
+func (h *Handler) canAskOwner() bool {
+	bot, _ := h.getTelegram()
+	return bot != nil || h.isEmailEnabled()
+}
+
 // GetAssistantSettings handles GET /v1/settings/assistant. The bot's key is never returned.
 // Every signed-in user gets their own link state; the workspace's settings are the admin's.
 func (h *Handler) GetAssistantSettings(w http.ResponseWriter, r *http.Request) {
@@ -159,8 +166,10 @@ func (h *Handler) GetAssistantSettings(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, map[string]any{
 		"enabled":    enabled != 0,
 		"exceptions": h.assistantExceptions(r.Context()),
-		"active":     h.assistantActive(r.Context()),
-		"ai_active":  h.getLLM() != nil,
+		// active: the assistant can work, with some way to ask the owner.
+		"active":      h.assistantEnabled(r.Context()) && h.getLLM() != nil && h.canAskOwner(),
+		"email_ready": h.isEmailEnabled(),
+		"ai_active":   h.getLLM() != nil,
 		"telegram": map[string]any{
 			"configured":   tokenEnc != "",
 			"bot_username": username,
@@ -236,8 +245,8 @@ func (h *Handler) PatchAssistantSettings(w http.ResponseWriter, r *http.Request)
 			// Validated on change, not on mention: only the act of switching it on is
 			// checked, so a later save of something else is never blocked by this.
 			if !h.assistantEnabled(ctx) {
-				if bot, _ := h.getTelegram(); bot == nil {
-					h.writeError(w, http.StatusBadRequest, "Connect a Telegram bot before switching the assistant on.")
+				if !h.canAskOwner() {
+					h.writeError(w, http.StatusBadRequest, "Connect a Telegram bot, or set up email, before switching the assistant on.")
 					return
 				}
 				if h.getLLM() == nil {
