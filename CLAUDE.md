@@ -10,9 +10,9 @@ link). `upstream` is Calnode/calnode. `bookmeet` is the integration and release 
 
 ## Start of a session
 
-1. One session, one deliverable. Read the owner's vault first: `~/Documents/Obsidian Vault/10
-   Ventures/bookmeet/CONTEXT.md`, then `TASKS.md`. Product direction is in `SAAS-READINESS.md`
-   and `AI-FIRST-PRINCIPLES.md` there.
+1. One session, one deliverable. Read the owner's vault, **Tokamak Labs Hub**, first:
+   `~/Documents/Tokamak Labs Hub/10 Ventures/bookmeet/CONTEXT.md`, then `TASKS.md`. Product
+   direction is in `SAAS-READINESS.md` and `AI-FIRST-PRINCIPLES.md` there.
 2. Work in your own worktree on your own branch. How, for each kind of task:
    [`docs/DEVELOPING.md`](docs/DEVELOPING.md).
 3. Read the notes for the area you will touch (table below) before changing it.

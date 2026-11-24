@@ -11,6 +11,16 @@ exact tag (`ghcr.io/calnode/calnode:0.1.0`) if you need stability between upgrad
 
 ## [Unreleased]
 
+### Fixed
+- **BookMeet in Claude and ChatGPT.** A time sooner than the minimum notice is no longer
+  called outside your hours. When something is in the way, the card says what kind (notice,
+  hours, calendar, buffer) and "Book anyway" books it after your tap. The assistant is told
+  how the tap went.
+- Apps that show BookMeet's cards no longer offer Telegram or send messages there. The
+  connector, cards and replies are named BookMeet.
+- The Telegram assistant's booking panel has the same **Book anyway** button, including
+  over a calendar clash or its buffer.
+
 ## [0.13.0] - 2026-11-03
 
 ### Added

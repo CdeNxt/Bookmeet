@@ -15,7 +15,7 @@ import (
 
 // This file implements the OAuth 2.1 authorization-server + resource-server pieces that
 // let an MCP client (Claude, ChatGPT, …) connect to /mcp with a "click Connect → sign
-// in → approve" flow instead of a pre-shared API key. Calnode is its own AS:
+// in → approve" flow instead of a pre-shared API key. BookMeet is its own AS:
 //
 //   /.well-known/oauth-protected-resource   — RS metadata (points at the AS)
 //   /.well-known/oauth-authorization-server — AS metadata (RFC 8414)

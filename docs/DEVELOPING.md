@@ -23,7 +23,7 @@ same as CI). Use `gh` with no `--repo`: its default is the fork, not upstream Ca
 1. Start a new Claude Code session with one objective and its acceptance criteria. Tick
    "worktree" when starting it in the desktop app, or ask the session to create one:
    `git worktree add -b feat/<name> .claude/worktrees/<name> origin/bookmeet`
-2. The session reads the vault's `CONTEXT.md` and `TASKS.md`, then the notes for its area
+2. The session reads the vault's (Tokamak Labs Hub) `CONTEXT.md` and `TASKS.md`, then the notes for its area
    (table in `CLAUDE.md`).
 3. Build, with tests. `make verify`.
 4. Push, open a pull request to `bookmeet`. Fix what CI finds.

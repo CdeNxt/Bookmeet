@@ -137,6 +137,10 @@ type ownerDraft struct {
 	OutsideAll bool     `json:"outside_all,omitempty"`
 	OutsideOK  bool     `json:"outside_ok,omitempty"`
 	Busy       []string `json:"busy,omitempty"`
+	// Shown is, on a direct booking that will not book as things stand, the reasons the
+	// panel gave: what its "Book anyway" button waives. Blocked marks one nothing can waive.
+	Shown   *shownReasons `json:"shown,omitempty"`
+	Blocked bool          `json:"blocked,omitempty"`
 	// Offerable is how many start times the link would offer as the panel stands, and
 	// Checked that the count is current (the calendar answered). A link is never created
 	// with nothing to offer.
@@ -823,6 +827,7 @@ func (s *ownerSession) draftSummary(d *ownerDraft) string {
 // calendar, so it runs when the times change, not on every redraw.
 func (s *ownerSession) analyse(ctx context.Context, d *ownerDraft) {
 	d.Outside, d.Busy, d.OutsideAll, d.Offerable, d.Checked = nil, nil, false, 0, false
+	d.Shown, d.Blocked = nil, false
 	et := s.typeByID(d.EventTypeID)
 	if et == nil {
 		return
@@ -836,14 +841,28 @@ func (s *ownerSession) analyse(ctx context.Context, d *ownerDraft) {
 		}
 		v := s.h.timeVerdictFor(ctx, et.Slug, et.Minutes, start, place, s.userID)
 		when := s.day(d.BookDate) + " at " + s.clock(d.BookMinute)
-		if v.Outside {
-			d.Outside, d.OutsideAll = append(d.Outside, s.outsideReason(et, d.BookDate, when)), true
+		if v.Rules.TooSoon {
+			d.Outside = append(d.Outside, when+" is sooner than your "+noticeWords(v.MinNotice)+" minimum notice.")
 		}
+		if v.Outside && (v.Rules.OutsideHours || !v.Rules.TooSoon) {
+			d.Outside = append(d.Outside, s.outsideReason(et, d.BookDate, when))
+		}
+		d.OutsideAll = v.Outside
 		switch what := conflictsText(v, s.prof.Loc, clock); {
+		case v.Clash && v.BufferOnly:
+			d.Busy = append(d.Busy, when+" is too close to something on your calendar: inside the buffer you keep around meetings.")
 		case v.Clash && what != "":
 			d.Busy = append(d.Busy, when+" clashes with "+what+".")
 		case v.Clash:
 			d.Busy = append(d.Busy, when+" clashes with something on your calendar.")
+		}
+		d.Checked = !v.Unknown
+		d.Blocked = v.SameStart
+		if v.SameStart {
+			d.Busy = append(d.Busy, "Another BookMeet booking starts at exactly that time, which nothing can book over.")
+		}
+		if v.Outside || v.Clash {
+			d.Shown = v.shown()
 		}
 	} else {
 		windows := make([]personallink.Window, 0, len(d.Windows))
@@ -865,6 +884,11 @@ func (s *ownerSession) analyse(ctx context.Context, d *ownerDraft) {
 		// usual hours). With exceptions on, the Allow tap confirms them and the link then
 		// offers its whole windows; with them off, the owner's own hours decide.
 		anyInside := false
+		rules, err := s.h.loadBookableEventType(ctx, et.Slug)
+		if err != nil {
+			s.h.logger.WarnContext(ctx, "assistant: load meeting type", "error", err)
+			return
+		}
 		for i, w := range d.Windows {
 			span := s.day(w.Date) + ", " + s.clock(w.Start) + " to " + s.clock(w.End)
 			if s.exceptions {
@@ -872,9 +896,19 @@ func (s *ownerSession) analyse(ctx context.Context, d *ownerDraft) {
 			} else {
 				d.Offerable += normal[i]
 			}
+			shortNotice := false
+			if normal[i] < exception[i] {
+				if shortNotice, err = s.h.onlyShortNotice(ctx, rules, s.userID, windows[i]); err != nil {
+					s.h.logger.WarnContext(ctx, "assistant: check notice", "error", err)
+					return
+				}
+			}
 			switch {
 			case exception[i] == 0:
 				d.Busy = append(d.Busy, span+": you're busy the whole time, so nothing can be offered.")
+			case shortNotice:
+				anyInside = anyInside || normal[i] > 0
+				d.Outside = append(d.Outside, span+": sooner than your "+noticeWords(rules.MinNoticeMinutes)+" minimum notice, in full or in part.")
 			case normal[i] == 0:
 				d.Outside = append(d.Outside, s.outsideReason(et, w.Date, span))
 			case normal[i] < exception[i]:
@@ -956,15 +990,16 @@ func (s *ownerSession) renderPanel(d *ownerDraft) (string, telegram.Markup) {
 			b.WriteString("\n- " + line)
 		}
 		switch {
+		case d.Direct && d.Blocked:
+		case d.Direct && !s.exceptions:
+			b.WriteString("\n" + exceptionsOffHint)
+		case d.Direct:
+			b.WriteString("\nTap Book anyway to book it as it is. Anything already on your calendar stays there.")
 		case len(d.Outside) == 0:
-		case d.OutsideOK && d.Direct:
-			b.WriteString("\nAllowed: it will be booked outside your availability.")
 		case d.OutsideOK:
 			b.WriteString("\nConfirmed: this link offers those times too. Times you're busy are still left out.")
 		case !s.exceptions:
 			b.WriteString("\n" + exceptionsOffHint)
-		case d.Direct:
-			b.WriteString("\nTap Allow to make an exception for this one meeting.")
 		default:
 			b.WriteString("\nYou asked for these outside your usual hours. Tap Allow to confirm you want to offer them.")
 		}
@@ -1039,8 +1074,14 @@ func (s *ownerSession) renderPanel(d *ownerDraft) (string, telegram.Markup) {
 	var rows telegram.Markup
 	if d.Direct {
 		rows = append(rows, []telegram.Button{{Text: "Meeting type", Data: cb("ty")}})
-		rows = append(rows, s.allowRow(d, cb)...)
-		rows = append(rows, []telegram.Button{{Text: "Book it", Data: cb("go")}, {Text: "Discard", Data: cb("x")}})
+		// One button books: "Book it" when nothing is in the way, "Book anyway" when
+		// something the owner may waive is. Its own callback, so an older "Book it" button
+		// can never waive anything.
+		book := telegram.Button{Text: "Book it", Data: cb("go")}
+		if d.Shown != nil && !d.Blocked && s.exceptions {
+			book = telegram.Button{Text: "Book anyway", Data: cb("ba")}
+		}
+		rows = append(rows, []telegram.Button{book, {Text: "Discard", Data: cb("x")}})
 		return b.String(), rows
 	}
 	first := []telegram.Button{{Text: "Meeting type", Data: cb("ty")}, {Text: "Days", Data: cb("dy")}, {Text: "Times", Data: cb("tm")}}
@@ -1341,11 +1382,24 @@ func (s *ownerSession) tapDraft(ctx context.Context, d *ownerDraft, op, arg stri
 		s.retirePanel(ctx, d, "Discarded.")
 		s.remember(ctx, "event", "The owner discarded the panel for "+d.GuestName+".")
 		return "Discarded."
+	case "ba":
+		if !d.Direct || d.Shown == nil {
+			return ""
+		}
+		if d.PlaceQuery != "" && d.Place == "" {
+			d.View = "place"
+			s.refreshPanel(ctx, d)
+			return "Pick the place first."
+		}
+		return s.bookDirectAnyway(ctx, d)
 	case "go":
 		if d.PlaceQuery != "" && d.Place == "" {
 			d.View = "place"
 			s.refreshPanel(ctx, d)
 			return "Pick the place first."
+		}
+		if d.Direct {
+			return s.bookDirect(ctx, d)
 		}
 		// Nothing asked for is inside the owner's availability, and they have not allowed
 		// an exception: there would be nothing to offer, or nothing that books.
@@ -1359,9 +1413,6 @@ func (s *ownerSession) tapDraft(ctx context.Context, d *ownerDraft, op, arg stri
 				return "Outside your availability. No link made."
 			}
 			return "That's outside your availability. Tap Allow, or change the times."
-		}
-		if d.Direct {
-			return s.bookDirect(ctx, d)
 		}
 		// Count again at the tap: the calendar may have filled since the panel was drawn.
 		s.analyse(ctx, d)
@@ -1484,20 +1535,58 @@ func (s *ownerSession) sendLink(ctx context.Context, l *personallink.Link, token
 // It goes through the same booking core as every other booking, so the calendar is checked
 // and the invitation, reminders and webhooks behave as usual.
 func (s *ownerSession) bookDirect(ctx context.Context, d *ownerDraft) string {
+	return s.bookDirectWith(ctx, d, bookingExtras{})
+}
+
+// bookDirectAnyway is the "Book anyway" tap: the same booking, waiving what the panel showed
+// and nothing more. Something new in the way redraws the panel instead.
+func (s *ownerSession) bookDirectAnyway(ctx context.Context, d *ownerDraft) string {
+	if !s.exceptions {
+		return "Exceptions are switched off in Settings."
+	}
+	et := s.typeByID(d.EventTypeID)
+	start, ok := s.instant(d.BookDate, d.BookMinute)
+	if et == nil || !ok {
+		return "Something is missing. Tell me the guest's email and the time again."
+	}
+	_, place := s.placeParts(d)
+	shown := d.Shown.verdict()
+	v := s.h.timeVerdictFor(ctx, et.Slug, et.Minutes, start, place, s.userID)
+	switch {
+	case v.Unknown:
+		return "That time has passed, or your calendar could not be checked. Nothing was booked."
+	case v.SameStart || v.beyond(shown):
+		s.analyse(ctx, d)
+		s.refreshPanel(ctx, d)
+		return "Something changed since I drew this. Check the panel again."
+	}
+	return s.bookDirectWith(ctx, d, bookingExtras{OutsideRules: true, OwnerApproved: v.Clash, OverBookings: v.Clash})
+}
+
+// bookDirectWith books the panel's time with the waivers given, which only a tap sets.
+func (s *ownerSession) bookDirectWith(ctx context.Context, d *ownerDraft, waive bookingExtras) string {
 	et := s.typeByID(d.EventTypeID)
 	start, ok := s.instant(d.BookDate, d.BookMinute)
 	if et == nil || !ok || d.GuestEmail == "" {
 		return "Something is missing. Tell me the guest's email and the time again."
 	}
 	_, placeAddr := s.placeParts(d)
+	waive.PhysicalLocation, waive.OwnerInvited = placeAddr, true
 	b, err := s.h.createBookingForSlugWith(ctx, et.Slug, start,
 		booking.Attendee{Name: d.GuestName, Email: d.GuestEmail, IANATimezone: s.prof.Loc.String()},
-		nil, bookingExtras{PhysicalLocation: placeAddr, OwnerInvited: true, OutsideRules: d.OutsideOK && len(d.Outside) > 0 && s.exceptions})
+		nil, waive)
 	var answerErr *answerError
 	switch {
 	case errors.Is(err, errSlotUnavailable), errors.Is(err, booking.ErrDoubleBooked), errors.Is(err, errNoHostAvailable):
-		s.say(ctx, fmt.Sprintf("That time isn't free on your calendar, so nothing was booked. Give me another time for %s, or I can make a link.", firstName(d.GuestName)))
-		s.remember(ctx, "event", "The owner tapped Book it, but that time was not free. Nothing was booked.")
+		// Redraw with what is in the way now, which brings up "Book anyway" if it applies.
+		s.analyse(ctx, d)
+		s.refreshPanel(ctx, d)
+		next := "Give me another time for " + firstName(d.GuestName) + ", or I can make a link."
+		if d.Shown != nil && !d.Blocked && s.exceptions {
+			next = "The panel shows why: tap Book anyway there, or give me another time."
+		}
+		s.say(ctx, "That time isn't free, so nothing was booked. "+next)
+		s.remember(ctx, "event", "The owner tapped to book, but that time was not free. Nothing was booked.")
 		return "Not free. Nothing booked."
 	case errors.Is(err, errCalendarUnavailable):
 		return "Your calendar could not be checked just now. Try again in a moment."
@@ -1537,7 +1626,7 @@ func (s *ownerSession) bookDirect(ctx context.Context, d *ownerDraft) string {
 			firstName(d.GuestName), strings.TrimRight(s.h.publicURL(), "/"), tok)
 	}
 	s.say(ctx, msg.String())
-	s.remember(ctx, "event", fmt.Sprintf("The owner tapped Book it. %s is booked for %s at %s.", d.GuestName, s.day(d.BookDate), s.clock(d.BookMinute)))
+	s.remember(ctx, "event", fmt.Sprintf("The owner tapped to book. %s is booked for %s at %s.", d.GuestName, s.day(d.BookDate), s.clock(d.BookMinute)))
 	return ""
 }
 

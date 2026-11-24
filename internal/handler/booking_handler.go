@@ -322,17 +322,34 @@ var bookingNow = func() time.Time { return time.Now() }
 // routingMode/candidates/required must be exactly what will be passed to
 // booking.CreateParams — see resolveBookingHostPool.
 func (h *Handler) validateBookingTime(ctx context.Context, et *bookableEventType, routingMode string, candidates, required []string, startAt, endAt time.Time) error {
-	now := bookingNow().UTC()
-	if startAt.Before(now.Add(time.Duration(et.MinNoticeMinutes) * time.Minute)) {
+	broken, err := h.timeRulesBroken(ctx, et, routingMode, candidates, required, startAt, endAt)
+	if err != nil {
+		return err
+	}
+	if broken != (timeRules{}) {
 		return errSlotUnavailable
 	}
+	return nil
+}
+
+// timeRules says which of the owner's own time rules a start breaks. More than one can be.
+type timeRules struct {
+	TooSoon      bool // inside the minimum notice
+	TooFar       bool // beyond how far ahead bookings are taken
+	OutsideHours bool // outside the hosts' weekly hours and date overrides
+}
+
+// timeRulesBroken is the one place those rules are applied. validateBookingTime refuses on
+// any of them; the owner's assistants use the detail to say which one it was.
+func (h *Handler) timeRulesBroken(ctx context.Context, et *bookableEventType, routingMode string, candidates, required []string, startAt, endAt time.Time) (timeRules, error) {
+	var broken timeRules
+	now := bookingNow().UTC()
+	broken.TooSoon = startAt.Before(now.Add(time.Duration(et.MinNoticeMinutes) * time.Minute))
 	maxFuture := now.Add(365 * 24 * time.Hour) // 0 = no configured limit; mirrors internal/slots/generate.go
 	if et.MaxFutureDays > 0 {
 		maxFuture = now.Add(time.Duration(et.MaxFutureDays) * 24 * time.Hour)
 	}
-	if startAt.After(maxFuture) {
-		return errSlotUnavailable
-	}
+	broken.TooFar = startAt.After(maxFuture)
 
 	// Required hosts (round_robin's fixed attendees, or all of fixed/collective's
 	// candidates when routingMode != round_robin — see resolveBookingHostPool) must
@@ -344,14 +361,15 @@ func (h *Handler) validateBookingTime(ctx context.Context, et *bookableEventType
 	for _, hostID := range checkAll {
 		ok, err := h.hostAvailableAt(ctx, hostID, et.ID, startAt, endAt)
 		if err != nil {
-			return fmt.Errorf("check host availability: %w", err)
+			return broken, fmt.Errorf("check host availability: %w", err)
 		}
 		if !ok {
-			return errSlotUnavailable
+			broken.OutsideHours = true
+			return broken, nil
 		}
 	}
 	if routingMode != "round_robin" {
-		return nil
+		return broken, nil
 	}
 	// Round-robin's rotation pool: at least one candidate must be within their hours
 	// (mirrors slots.pickHosts' round_robin branch — the assignment itself happens
@@ -359,13 +377,14 @@ func (h *Handler) validateBookingTime(ctx context.Context, et *bookableEventType
 	for _, hostID := range candidates {
 		ok, err := h.hostAvailableAt(ctx, hostID, et.ID, startAt, endAt)
 		if err != nil {
-			return fmt.Errorf("check host availability: %w", err)
+			return broken, fmt.Errorf("check host availability: %w", err)
 		}
 		if ok {
-			return nil
+			return broken, nil
 		}
 	}
-	return errSlotUnavailable
+	broken.OutsideHours = true
+	return broken, nil
 }
 
 // validateRescheduleTime enforces the same min-notice/max-future/availability-window

@@ -26,7 +26,7 @@ create or change a link), `mcp_assistant_book.go` (`book_for_guest`, `answer_gue
   `linkException` and skips the window check: booking a suggestion straight away would waive
   the owner's hours with no tap. When Telegram's rules change, change these with them.
   "Book anyway" and the direct booking's Allow tap stay the owner's: on a card app, a tap on
-  the card (below); otherwise with `ask_owner`, the
+  the card (below); otherwise with `ask_owner` (ignored on a card app), the
   agent hands the decision to Telegram (`askOwnerToBookDirect` and `askOwnerToConfirmLink`
   show the same panel; `askOwnerToBookSuggested` runs the same `tapHeld` question), and only
   the tap books or creates.
@@ -74,6 +74,20 @@ create or change a link), `mcp_assistant_book.go` (`book_for_guest`, `answer_gue
   makes the thing (the result carries the Allow card) instead of asking the owner to approve
   in words first, and that the tap can come after their reply. Copy buttons use
   `execCommand("copy")` first: app frames block the clipboard API.
+- **The app the owner is in is the only interface (J, 2026-11-24).** A card app is never
+  sent to Telegram: no `ask_owner`, no "From your AI app" message (`agentDid` and
+  `suggestedTimeBooked` stay quiet; the assistant's memory is still written). Text-only apps
+  keep the Telegram route until J picks another.
+- **Say which rule, and make the button keep its promise.** A refusal or card names every
+  reason (`timeVerdict`, worded in `mcp_reasons.go`): minimum notice, outside hours,
+  something on the calendar, or only the buffer around it. A minimum notice is never called
+  "outside your hours". A direct booking's card is "Book anyway": the tap waives exactly the
+  reasons shown, including a calendar clash, and a new reason since the card gets a new card.
+  Only another booking starting at the same instant cannot be waived. Telegram's direct
+  panel does the same with its own "Book anyway" button (`bookDirectAnyway`; J, 2026-11-24:
+  Telegram and the cards can do the same things). Neither offers busy times on a link.
+- **The model hears the tap.** The card sends the outcome of `owner_approve` with
+  `ui/update-model-context`; apps that ignore it still need `list_bookings`.
 - **No spoken approval.** In voice the owner asks, and taps the card on screen; ChatGPT's own
   voice mode makes the same choice. Do not add a way for words alone to approve.
 - Not built yet: a Bookmeet approval page for an owner with neither cards nor Telegram.

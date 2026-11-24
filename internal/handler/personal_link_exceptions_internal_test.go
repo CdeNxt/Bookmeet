@@ -165,7 +165,7 @@ func TestOwnerAssistant_onlyDaysOffWithoutTimesAreAskedAbout(t *testing.T) {
 	}
 }
 
-// A direct booking is one exact time, so outside the owner's hours it still needs the Allow
+// A direct booking is one exact time, so outside the owner's hours it needs the Book anyway
 // tap (that choice is kept on purpose: a link's windows are a range the owner drew).
 func TestOwnerAssistant_aDirectBookingOutsideHoursStillNeedsTheTap(t *testing.T) {
 	f := newOwnerFixture(t)
@@ -175,12 +175,15 @@ func TestOwnerAssistant_aDirectBookingOutsideHoursStillNeedsTheTap(t *testing.T)
 		"book_at": map[string]string{"date": date(3), "time": "09:00"},
 	})
 	f.message(t, "book it")
-	if !strings.Contains(f.panel(), "outside the times you take meetings") || f.buttons()["Allow outside my availability"] == "" {
+	if !strings.Contains(f.panel(), "outside the times you take meetings") || f.buttons()["Book anyway"] == "" || f.buttons()["Book it"] != "" {
 		t.Fatalf("a direct booking outside hours did not ask:\n%s", f.panel())
 	}
-	f.tap(t, "Book it")
 	if n := f.count(t, `SELECT COUNT(*) FROM bookings`); n != 0 {
-		t.Fatalf("%d bookings without the Allow tap", n)
+		t.Fatalf("%d bookings before the tap", n)
+	}
+	f.tap(t, "Book anyway")
+	if n := f.count(t, `SELECT COUNT(*) FROM bookings`); n != 1 {
+		t.Fatalf("%d bookings after Book anyway; want 1", n)
 	}
 }
 

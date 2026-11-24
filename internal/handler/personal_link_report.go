@@ -595,7 +595,7 @@ func (s *ownerSession) bookSuggested(ctx context.Context, held *personallink.Hel
 	if confirmMessageID != 0 {
 		_ = s.bot.Edit(ctx, s.chatID, confirmMessageID, "Booked anyway.", nil)
 	}
-	s.h.suggestedTimeBooked(ctx, held, l, start, b)
+	s.h.suggestedTimeBooked(ctx, held, l, start, b, true)
 	s.remember(ctx, "event", "The owner booked a time "+l.GuestName+" suggested.")
 	return ""
 }
@@ -604,7 +604,7 @@ func (s *ownerSession) bookSuggested(ctx context.Context, held *personallink.Hel
 // it (the owner's tap on Telegram, or their agent over MCP): the held item is closed, a
 // booked card waits on the guest's page for when they reopen the link (they are probably
 // gone; the calendar invitation is what reaches them), and the owner is told.
-func (h *Handler) suggestedTimeBooked(ctx context.Context, held *personallink.Held, l *personallink.Link, start time.Time, b *booking.Booking) {
+func (h *Handler) suggestedTimeBooked(ctx context.Context, held *personallink.Held, l *personallink.Link, start time.Time, b *booking.Booking, tellOwner bool) {
 	_ = h.personalLinks().ResolveHeld(ctx, held.ID, "booked")
 	if ps, err := h.newPlinkSession(ctx, l, l.GuestTimezone, nil); err == nil {
 		emailed := h.guestWillBeEmailed(ctx, b)
@@ -616,6 +616,8 @@ func (h *Handler) suggestedTimeBooked(ctx context.Context, held *personallink.He
 			card.Foot = ps.t("invite_none")
 		}
 		ps.add(ctx, card)
-		h.notifyOwnerBooked(ctx, ps, b, emailed)
+		if tellOwner {
+			h.notifyOwnerBooked(ctx, ps, b, emailed)
+		}
 	}
 }
