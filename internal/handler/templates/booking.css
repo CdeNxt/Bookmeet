@@ -580,7 +580,15 @@ main.plink-shell > .card.plink-card { flex: 0 0 auto; flex-direction: column; wi
   font: inherit; font-size: .8125rem; font-variant-numeric: tabular-nums; cursor: pointer;
 }
 .plink-slot:hover:not(:disabled) { background: var(--booking-accent, #111827); color: var(--booking-accent-text, #fff); }
-.plink-more { align-self: flex-start; background: none; border: none; padding: .25rem 0; font: inherit; font-size: .8125rem; color: #111827; text-decoration: underline; cursor: pointer; }
+.plink-more {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: .5rem; margin-top: .5rem;
+  border: 1.5px solid var(--booking-accent, #111827); background: #f3f4f6; color: #111827;
+  border-radius: 999px; padding: .5rem 1rem; min-height: 40px;
+  font: inherit; font-size: .875rem; font-weight: 600; cursor: pointer;
+}
+/* A down chevron, drawn here so the translated label stays plain text. */
+.plink-more::after { content: ""; width: .4em; height: .4em; border: solid currentColor; border-width: 0 2px 2px 0; transform: translateY(-.1em) rotate(45deg); }
+.plink-more:hover:not(:disabled) { background: var(--booking-accent, #111827); color: var(--booking-accent-text, #fff); }
 .plink-title { font-weight: 600; }
 .plink-rows { display: grid; grid-template-columns: auto 1fr; gap: .2rem .75rem; margin: 0; font-size: .8125rem; }
 .plink-rows dt { color: #6b7280; }
@@ -592,6 +600,9 @@ main.plink-shell > .card.plink-card { flex: 0 0 auto; flex-direction: column; wi
 .plink-secondary { border: 1px solid #d1d5db; background: #fff; color: #111827; }
 .plink-slot:disabled, .plink-primary:disabled, .plink-secondary:disabled, .plink-more:disabled { opacity: .45; cursor: default; }
 .plink-slot:focus-visible, .plink-primary:focus-visible, .plink-secondary:focus-visible, .plink-more:focus-visible { outline: 2px solid var(--booking-accent, #111827); outline-offset: 2px; }
+/* "Suggest another time" sits apart from the times, so reaching for "More times" does not hit it. */
+.plink-actions.plink-other { margin-top: .75rem; padding-top: 1rem; border-top: 1px solid #d1d5db; }
+.plink-other .plink-secondary { background: transparent; }
 .plink-zone select { max-width: 11rem; border: 1px solid #e5e7eb; border-radius: 8px; padding: .25rem .375rem; font: inherit; font-size: .75rem; color: #374151; background: #fff; }
 .plink-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 /* A conversation needs the width more than the page needs its headline. */

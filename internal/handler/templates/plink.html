@@ -166,7 +166,7 @@ body {
           log.scrollTop = log.scrollHeight;
         }));
       }
-      var other = el('div', 'plink-actions');
+      var other = el('div', 'plink-actions plink-other');
       other.appendChild(button('plink-secondary', T.suggest_btn, function () { call({ action: 'suggest' }); }));
       m.appendChild(other);
     } else if (item.kind === 'suggest') {
