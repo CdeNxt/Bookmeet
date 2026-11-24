@@ -320,7 +320,8 @@ func (h *Handler) reportChat(ctx context.Context, linkID string) {
 	bot, _ := h.getTelegram()
 	var chatID int64
 	if bot == nil || h.db.QueryRowContext(ctx, `SELECT chat_id FROM telegram_links WHERE user_id = ?`, l.UserID).Scan(&chatID) != nil {
-		return // nowhere to send it yet; the items stay held and go out once there is
+		h.reportChatByEmail(ctx, l, fresh)
+		return
 	}
 	s, err := h.newPlinkSession(ctx, l, l.GuestTimezone, nil)
 	if err != nil {

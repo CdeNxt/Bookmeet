@@ -112,6 +112,15 @@ type ownerApproval struct {
 	}
 	HeldID int64 // approveSuggestion
 	At     time.Time
+	Via    string // how the owner approved, when it was not a card (approvalViaEmail)
+}
+
+// tapWords is how the owner approved, for the assistant's memory.
+func (a *ownerApproval) tapWords(button string) string {
+	if a.Via != "" {
+		return "the owner tapped " + button + " " + a.Via
+	}
+	return "Through a connected AI app, the owner tapped " + button + " on a card"
 }
 
 // Tickets live in memory: short-lived by design, and a restart costing the owner one more
@@ -247,7 +256,7 @@ func (h *Handler) approveLinkNow(ctx context.Context, o *mcpOwner, a *ownerAppro
 		return nil, ownerApproveOut{}, fmt.Errorf("create personal link: %w", err)
 	}
 	url := h.linkAddress(token)
-	h.rememberFor(ctx, o.UserID, "event", fmt.Sprintf("Through a connected AI app, the owner tapped Allow on a card and made a link for %s, offering %s, including times outside their usual booking rules.", l.GuestName, offerWords(o, l)))
+	h.rememberFor(ctx, o.UserID, "event", fmt.Sprintf("%s and made a link for %s, offering %s, including times outside their usual booking rules.", a.tapWords("Allow"), l.GuestName, offerWords(o, l)))
 	out := &createPersonalLinkOut{
 		LinkID: l.ID, URL: url, MessageToSend: "Here's a link to grab a time with me: " + url,
 		Expires: mcpTimeAt{At: rfc3339OrEmpty(l.ExpiresAt), Text: o.when(l.ExpiresAt)}, Replaced: replaces != "",
@@ -286,7 +295,7 @@ func (h *Handler) approveDirectNow(ctx context.Context, o *mcpOwner, a *ownerApp
 		return nil, ownerApproveOut{}, ownerBookingError(err)
 	}
 	out := h.bookedView(ctx, o, b, d.Name, d.Email)
-	h.rememberFor(ctx, o.UserID, "event", fmt.Sprintf("Through a connected AI app, the owner tapped Book anyway on a card and booked %s for %s.", d.Name, out.When.Text))
+	h.rememberFor(ctx, o.UserID, "event", fmt.Sprintf("%s and booked %s for %s.", a.tapWords("Book anyway"), d.Name, out.When.Text))
 	return nil, ownerApproveOut{Result: "Booked " + d.Name + " for " + out.When.Text + ".", Booked: out}, nil
 }
 
@@ -334,7 +343,7 @@ func (h *Handler) approveSuggestionNow(ctx context.Context, o *mcpOwner, a *owne
 		return nil, ownerApproveOut{}, ownerBookingError(err)
 	}
 	h.suggestedTimeBooked(ctx, held, l, a.At, b, false) // the card tells the owner
-	h.rememberFor(ctx, o.UserID, "event", "Through a connected AI app, the owner tapped Book anyway on a card and booked a time "+l.GuestName+" suggested.")
+	h.rememberFor(ctx, o.UserID, "event", a.tapWords("Book anyway")+" and booked a time "+l.GuestName+" suggested.")
 	out := h.bookedView(ctx, o, b, l.GuestName, l.GuestEmail)
 	return nil, ownerApproveOut{Result: "Booked " + l.GuestName + " for " + out.When.Text + ".", Booked: out}, nil
 }

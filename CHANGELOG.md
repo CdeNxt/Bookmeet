@@ -11,6 +11,11 @@ exact tag (`ghcr.io/calnode/calnode:0.1.0`) if you need stability between upgrad
 
 ## [Unreleased]
 
+### Added
+- **Approval email.** With no BookMeet card and no Telegram connected, an exception or a
+  guest's suggested times are emailed to you, with a link to a page where you decide while
+  signed in. The booking assistant can now be switched on with email instead of Telegram.
+
 ### Fixed
 - **BookMeet in Claude and ChatGPT.** A time sooner than the minimum notice is no longer
   called outside your hours. When something is in the way, the card says what kind (notice,

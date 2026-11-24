@@ -444,9 +444,13 @@ func (h *Handler) consumeOAuthReturn(w http.ResponseWriter, r *http.Request) (st
 	return c.Value, true
 }
 
-// safeLocalPath guards against open redirects: only a same-site /oauth/authorize path.
+// safeLocalPath guards against open redirects: only a same-site /oauth/authorize path, or
+// an approval page (/approve/{token}).
 func safeLocalPath(p string) bool {
-	return strings.HasPrefix(p, "/oauth/authorize") && !strings.HasPrefix(p, "//")
+	if token, ok := strings.CutPrefix(p, "/approve/"); ok {
+		return token != "" && !strings.ContainsAny(token, "/\\?#")
+	}
+	return strings.HasPrefix(p, "/oauth/authorize")
 }
 
 func verifyPKCE(verifier, challenge string) bool {

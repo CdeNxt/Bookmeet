@@ -61,7 +61,7 @@ func Logging(logger *slog.Logger, next http.Handler) http.Handler {
 // and invite tokens (/invites/{token}) would otherwise land verbatim in stdout
 // and any log drain. Query strings are never logged here (only Path is).
 func redactTokenPaths(path string) string {
-	for _, prefix := range []string{"/manage/", "/room/", "/invites/"} {
+	for _, prefix := range []string{"/manage/", "/room/", "/invites/", "/approve/"} {
 		if strings.HasPrefix(path, prefix) {
 			return prefix + "[redacted]"
 		}
