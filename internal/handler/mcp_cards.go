@@ -18,12 +18,12 @@ import (
 	"github.com/calnode/calnode/internal/personallink"
 )
 
-// Cards: the Telegram details panel, drawn by Bookmeet inside the owner's AI app (MCP Apps,
+// Cards: the Telegram details panel, drawn by BookMeet inside the owner's AI app (MCP Apps,
 // https://modelcontextprotocol.io/extensions/apps). One HTML page renders every assistant
 // tool's result; its buttons call tools through the app.
 //
 // The owner's approval of an exception is a tap on a card, and only a tap. It reaches
-// Bookmeet as owner_approve, a tool marked visibility ["app"]: the app must hide it from the
+// BookMeet as owner_approve, a tool marked visibility ["app"]: the app must hide it from the
 // model and refuse it unless the card calls it. Two more locks, so a host that gets that
 // wrong still cannot be talked into an approval:
 //   - owner_approve takes a ticket AND a key. The key travels only in the result's _meta,
@@ -108,6 +108,7 @@ type ownerApproval struct {
 	Direct   struct {                  // approveDirect
 		Slug, Name, Email string
 		Start             time.Time
+		Shown             timeVerdict // the reasons the card showed; the tap waives only these
 	}
 	HeldID int64 // approveSuggestion
 	At     time.Time
@@ -171,8 +172,8 @@ type mcpApprovalOut struct {
 func approvalResult(a *ownerApproval) *mcp.CallToolResult {
 	return &mcp.CallToolResult{
 		Meta: mcp.Meta{approvalKeyMeta: a.key},
-		Content: []mcp.Content{&mcp.TextContent{Text: "Not done yet: this needs the owner's own approval. A Bookmeet card with an Allow button is showing in this chat, " +
-			"right with this reply (not on Telegram). Only the owner's tap on it approves; you cannot. Tell the owner, in one short line, to tap Allow on the card. " +
+		Content: []mcp.Content{&mcp.TextContent{Text: "Not done yet: this needs the owner's own approval. A BookMeet card with an Allow button is showing in this chat, " +
+			"right with this reply. This chat is the only place to approve it: never offer Telegram or any other messaging app. Only the owner's tap on it approves; you cannot. Tell the owner, in one short line, to tap Allow on the card. " +
 			"The tap may come after your reply, and the card then shows the result itself, so do not tell the owner later that nothing was done without checking first " +
 			"(get_personal_link, list_personal_links or list_bookings)."}},
 	}
@@ -189,11 +190,13 @@ type ownerApproveOut struct {
 	Result string                 `json:"result"`
 	Link   *createPersonalLinkOut `json:"link,omitempty"`
 	Booked *bookForGuestOut       `json:"booked,omitempty"`
+	// Approval is set when something new got in the way since the card was drawn.
+	Approval *mcpApprovalOut `json:"approval,omitempty"`
 }
 
 func (h *Handler) mcpOwnerApprove(ctx context.Context, req *mcp.CallToolRequest, in ownerApproveIn) (*mcp.CallToolResult, ownerApproveOut, error) {
 	if !mcpDrawsCards(req) {
-		return nil, ownerApproveOut{}, errors.New("approvals are made by tapping a Bookmeet card; this app does not show cards")
+		return nil, ownerApproveOut{}, errors.New("approvals are made by tapping a BookMeet card; this app does not show cards")
 	}
 	o, err := h.mcpAssistantOwner(ctx)
 	if err != nil {
@@ -205,7 +208,7 @@ func (h *Handler) mcpOwnerApprove(ctx context.Context, req *mcp.CallToolRequest,
 	}
 	// The owner's setting is read again: switched off since the card was drawn, no exception.
 	if !h.assistantExceptions(ctx) {
-		return nil, ownerApproveOut{}, errors.New(`"Allow exceptions to my availability" is off in Bookmeet, Settings → AI, so this cannot be approved`)
+		return nil, ownerApproveOut{}, errors.New(`"Allow exceptions to my availability" is off in BookMeet, Settings → AI, so this cannot be approved`)
 	}
 	switch a.Kind {
 	case approveLink:
@@ -244,8 +247,7 @@ func (h *Handler) approveLinkNow(ctx context.Context, o *mcpOwner, a *ownerAppro
 		return nil, ownerApproveOut{}, fmt.Errorf("create personal link: %w", err)
 	}
 	url := h.linkAddress(token)
-	h.agentDid(ctx, o, fmt.Sprintf("you approved a link for %s with times outside your usual hours: %s.\n\n%s", l.GuestName, offerWords(o, l), url),
-		fmt.Sprintf("the owner tapped Allow on a card and made a link for %s, offering %s, including times outside their usual hours.", l.GuestName, offerWords(o, l)))
+	h.rememberFor(ctx, o.UserID, "event", fmt.Sprintf("Through a connected AI app, the owner tapped Allow on a card and made a link for %s, offering %s, including times outside their usual booking rules.", l.GuestName, offerWords(o, l)))
 	out := &createPersonalLinkOut{
 		LinkID: l.ID, URL: url, MessageToSend: "Here's a link to grab a time with me: " + url,
 		Expires: mcpTimeAt{At: rfc3339OrEmpty(l.ExpiresAt), Text: o.when(l.ExpiresAt)}, Replaced: replaces != "",
@@ -253,19 +255,59 @@ func (h *Handler) approveLinkNow(ctx context.Context, o *mcpOwner, a *ownerAppro
 	return nil, ownerApproveOut{Result: "Link created for " + l.GuestName + ".", Link: out}, nil
 }
 
-// approveDirectNow is the Telegram panel's Allow then Book it (bookDirect).
+// approveDirectNow books the one exact time the owner tapped "Book anyway" on. It waives
+// what the card showed and nothing more: if something new is in the way since, the owner is
+// shown a fresh card. Booking over something on the calendar is the same waiver as Book
+// anyway on a guest's suggestion (bookPersonalLinkApproved).
 func (h *Handler) approveDirectNow(ctx context.Context, o *mcpOwner, a *ownerApproval) (*mcp.CallToolResult, ownerApproveOut, error) {
 	d := a.Direct
+	var minutes int
+	var meeting string
+	if err := h.db.QueryRowContext(ctx, `SELECT name, duration_minutes FROM event_types WHERE slug = ?`, d.Slug).Scan(&meeting, &minutes); err != nil {
+		return nil, ownerApproveOut{}, errors.New("that meeting type is no longer available. Nothing was booked")
+	}
+	v := h.timeVerdictFor(ctx, d.Slug, minutes, d.Start, "", o.UserID)
+	switch {
+	case v.Unknown:
+		return nil, ownerApproveOut{}, errors.New("that time has passed, or your calendar could not be checked. Nothing was booked")
+	case v.SameStart:
+		return nil, ownerApproveOut{}, errors.New("another BookMeet booking starts at exactly that time, and two can't start at the same moment. Nothing was booked")
+	case v.beyond(d.Shown):
+		next := &ownerApproval{UserID: o.UserID, Kind: approveDirect}
+		next.Direct = d
+		next.Direct.Shown = v
+		res, appr := h.directApproval(o, meeting, minutes, next)
+		return res, ownerApproveOut{Result: "Not booked yet: something changed. A new card is showing.", Approval: appr}, nil
+	}
 	b, err := h.createBookingForSlugWith(ctx, d.Slug, d.Start,
 		booking.Attendee{Name: d.Name, Email: d.Email, IANATimezone: o.zone()},
-		nil, bookingExtras{OwnerInvited: true, OutsideRules: true})
+		nil, bookingExtras{OwnerInvited: true, OutsideRules: true, OwnerApproved: v.Clash, OverBookings: v.Clash})
 	if err != nil {
-		return nil, ownerApproveOut{}, directBookingError(o, d.Start, err)
+		return nil, ownerApproveOut{}, ownerBookingError(err)
 	}
 	out := h.bookedView(ctx, o, b, d.Name, d.Email)
-	h.agentDid(ctx, o, fmt.Sprintf("you approved booking %s outside your hours.\nWhen: %s\n%s", d.Name, out.When.Text, out.Invitation),
-		fmt.Sprintf("the owner tapped Allow on a card and booked %s for %s, outside their hours.", d.Name, out.When.Text))
+	h.rememberFor(ctx, o.UserID, "event", fmt.Sprintf("Through a connected AI app, the owner tapped Book anyway on a card and booked %s for %s.", d.Name, out.When.Text))
 	return nil, ownerApproveOut{Result: "Booked " + d.Name + " for " + out.When.Text + ".", Booked: out}, nil
+}
+
+// ownerBookingError words a booking that failed after the owner's tap, to the owner.
+func ownerBookingError(err error) error {
+	var answerErr *answerError
+	switch {
+	case errors.Is(err, booking.ErrDoubleBooked):
+		return errors.New("another BookMeet booking is in the way. Nothing was booked")
+	case errors.Is(err, errCalendarUnavailable):
+		return errors.New("your calendar could not be checked just now. Nothing was booked; try again in a moment")
+	case errors.Is(err, errSlotUnavailable), errors.Is(err, errNoHostAvailable):
+		return errors.New("that time is no longer available. Nothing was booked")
+	case errors.As(err, &answerErr):
+		return errors.New("that meeting type has required questions for the guest, so it can't be booked from here. Nothing was booked")
+	case errors.Is(err, errPaymentRequired):
+		return errors.New("that meeting type takes payment, so the guest has to book it on the booking page. Nothing was booked")
+	case errors.Is(err, booking.ErrEmailThrottled), errors.Is(err, booking.ErrBookingLimitReached):
+		return errors.New("that guest has reached a booking limit. Nothing was booked")
+	}
+	return fmt.Errorf("book after approval: %w", err)
 }
 
 // approveSuggestionNow is Telegram's Book anyway on a guest's suggested time (bookSuggested
@@ -287,11 +329,11 @@ func (h *Handler) approveSuggestionNow(ctx context.Context, o *mcpOwner, a *owne
 	case errors.Is(err, personallink.ErrNotBookable):
 		return nil, ownerApproveOut{}, errors.New("that link has already been used or closed, so nothing was booked")
 	case errors.Is(err, booking.ErrDoubleBooked):
-		return nil, ownerApproveOut{}, errors.New("another Bookmeet booking starts at exactly that time, and two can't start at the same moment. Nothing was booked")
+		return nil, ownerApproveOut{}, errors.New("another BookMeet booking starts at exactly that time, and two can't start at the same moment. Nothing was booked")
 	default:
-		return nil, ownerApproveOut{}, directBookingError(o, a.At, err)
+		return nil, ownerApproveOut{}, ownerBookingError(err)
 	}
-	h.suggestedTimeBooked(ctx, held, l, a.At, b) // tells the owner on Telegram, as the tap does
+	h.suggestedTimeBooked(ctx, held, l, a.At, b, false) // the card tells the owner
 	h.rememberFor(ctx, o.UserID, "event", "Through a connected AI app, the owner tapped Book anyway on a card and booked a time "+l.GuestName+" suggested.")
 	out := h.bookedView(ctx, o, b, l.GuestName, l.GuestEmail)
 	return nil, ownerApproveOut{Result: "Booked " + l.GuestName + " for " + out.When.Text + ".", Booked: out}, nil
@@ -301,8 +343,8 @@ func (h *Handler) approveSuggestionNow(ctx context.Context, o *mcpOwner, a *owne
 
 func (h *Handler) addAssistantCards(s *mcp.Server) {
 	s.AddResource(&mcp.Resource{
-		URI: mcpCardURI, Name: "bookmeet_card", Title: "Bookmeet",
-		Description: "Bookmeet's card for personal links and bookings: the offer, the link, what's waiting, and the owner's approvals.",
+		URI: mcpCardURI, Name: "bookmeet_card", Title: "BookMeet",
+		Description: "BookMeet's card for personal links and bookings: the offer, the link, what's waiting, and the owner's approvals.",
 		MIMEType:    mcpCardMIME,
 	}, func(context.Context, *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 		return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{
@@ -314,7 +356,7 @@ func (h *Handler) addAssistantCards(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "owner_approve",
 		Title: "Owner approval (card only)",
-		Description: "Used only by Bookmeet's card, when the owner taps Allow. Not for the model: calls that do not come from the card are refused. " +
+		Description: "Used only by BookMeet's card, when the owner taps Allow. Not for the model: calls that do not come from the card are refused. " +
 			"To ask for an approval, call the tool the owner wanted (create_personal_link, book_for_guest or answer_guest); the card shows the Allow button.",
 		Annotations: toolWrites,
 		Meta:        mcp.Meta{"ui": map[string]any{"resourceUri": mcpCardURI, "visibility": []string{"app"}}},
@@ -323,7 +365,7 @@ func (h *Handler) addAssistantCards(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "show_my_calendar",
 		Title:       "Show my calendar (card only)",
-		Description: "Used only by Bookmeet's card, for its Show my calendar button: the owner's busy times, usual hours and Bookmeet bookings on the days a card is about. Not for the model: calls that do not come from the card are refused.",
+		Description: "Used only by BookMeet's card, for its Show my calendar button: the owner's busy times, usual hours and BookMeet bookings on the days a card is about. Not for the model: calls that do not come from the card are refused.",
 		Annotations: toolReadOnly,
 		Meta:        mcp.Meta{"ui": map[string]any{"resourceUri": mcpCardURI, "visibility": []string{"app"}}},
 	}, h.mcpCalendarDays)

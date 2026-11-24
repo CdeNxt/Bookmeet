@@ -478,8 +478,7 @@ func TestMCPAssistant_askOwnerHandsADirectBookingToTheirTap(t *testing.T) {
 	if n := f.count(t, `SELECT COUNT(*) FROM bookings`); n != 0 {
 		t.Fatalf("%d bookings before the owner tapped", n)
 	}
-	f.tap(t, "Allow outside my availability")
-	f.tap(t, "Book it")
+	f.tap(t, "Book anyway")
 	if n := f.count(t, `SELECT COUNT(*) FROM bookings`); n != 1 {
 		t.Fatalf("%d bookings after the owner's taps; want 1", n)
 	}

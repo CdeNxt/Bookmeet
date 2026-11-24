@@ -35,7 +35,7 @@ type mcpOfferIn struct {
 	ReplacesLinkID string        `json:"replaces_link_id,omitempty" jsonschema:"to change the offer on an existing link: its link_id. The old address stops working and the guest's email and phone carry over"`
 	PlaceQuery     string        `json:"place_query,omitempty" jsonschema:"for an in-person meeting: the place as the owner named it (\"Equator Coffee on Mission\"). The check looks it up and returns place_options"`
 	Place          string        `json:"place,omitempty" jsonschema:"for an in-person meeting: the option the owner picked, copied exactly from place_options. Never write an address yourself"`
-	AskOwner       bool          `json:"ask_owner,omitempty" jsonschema:"create only: when some times are outside the owner's usual hours, send the owner the details on Telegram to confirm with their own tap. Only after the owner says yes to asking"`
+	AskOwner       bool          `json:"ask_owner,omitempty" jsonschema:"only for apps that show no BookMeet cards, ignored otherwise. Create only: when some times are outside the owner's usual hours, send the owner the details on Telegram to confirm with their own tap. Only after the owner says yes to asking"`
 }
 
 type mcpWindowCheck struct {
@@ -211,7 +211,19 @@ func (h *Handler) checkOffer(ctx context.Context, o *mcpOwner, in mcpOfferIn) (*
 	exceptions := h.assistantExceptions(ctx)
 	out := &mcpOfferCheck{OwnerTimezone: o.zone(), Today: today, Meeting: et.Name, Minutes: et.Minutes, SkippedDays: skipped}
 	var empty []string
+	rules, err := h.loadBookableEventType(ctx, et.Slug)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("load meeting type: %w", err)
+	}
 	for i, w := range ws {
+		// A window inside the owner's hours that only the minimum notice cuts into is not
+		// "outside your hours", and is not worded that way.
+		shortNotice := false
+		if normal[i] < exception[i] {
+			if shortNotice, err = h.onlyShortNotice(ctx, rules, o.UserID, windows[i]); err != nil {
+				return nil, nil, nil, fmt.Errorf("check availability: %w", err)
+			}
+		}
 		c := mcpWindowCheck{
 			mcpTimeSpan: mcpTimeSpan{Start: rfc3339OrEmpty(w.start), End: rfc3339OrEmpty(w.end), Text: o.span(w.start, w.end)},
 		}
@@ -223,6 +235,8 @@ func (h *Handler) checkOffer(ctx context.Context, o *mcpOwner, in mcpOfferIn) (*
 		switch {
 		case exception[i] == 0:
 			c.Verdict, c.VerdictText = "busy_throughout", "the owner is busy the whole time, so nothing can be offered"
+		case shortNotice:
+			c.Verdict, c.VerdictText = "short_notice", "sooner than the "+noticeWords(rules.MinNoticeMinutes)+" minimum notice the owner requires, in full or in part"
 		case normal[i] == 0 && et.MaxFutureDays > 0 && w.date > now.In(o.Loc).AddDate(0, 0, et.MaxFutureDays).Format("2006-01-02"):
 			c.Verdict, c.VerdictText = "beyond_booking_horizon", fmt.Sprintf("beyond the %d days ahead the owner takes bookings", et.MaxFutureDays)
 		case normal[i] == 0:
@@ -232,7 +246,7 @@ func (h *Handler) checkOffer(ctx context.Context, o *mcpOwner, in mcpOfferIn) (*
 		default:
 			c.Verdict, c.VerdictText = "open", "open"
 		}
-		outside := c.Verdict == "outside_hours" || c.Verdict == "beyond_booking_horizon" || c.Verdict == "partly_outside_hours"
+		outside := c.Verdict == "short_notice" || c.Verdict == "outside_hours" || c.Verdict == "beyond_booking_horizon" || c.Verdict == "partly_outside_hours"
 		c.NeedsApproval = outside && exceptions
 		if !exceptions && c.Verdict == "partly_outside_hours" {
 			c.VerdictText = "only the part inside the owner's hours will be offered"
@@ -255,7 +269,7 @@ func (h *Handler) checkOffer(ctx context.Context, o *mcpOwner, in mcpOfferIn) (*
 	if !exceptions {
 		for _, c := range out.Windows {
 			if c.Verdict == "outside_hours" || c.Verdict == "beyond_booking_horizon" {
-				hint = " The owner keeps links to their usual hours (\"Allow exceptions to my availability\" is off in Bookmeet, Settings → AI), so times outside them are not offered; only the owner can change that."
+				hint = " The owner keeps links to their usual hours (\"Allow exceptions to my availability\" is off in BookMeet, Settings → AI), so times outside them are not offered; only the owner can change that."
 				break
 			}
 		}
@@ -329,7 +343,7 @@ func (h *Handler) mcpCreatePersonalLink(ctx context.Context, req *mcp.CallToolRe
 		return nil, createPersonalLinkOut{}, err
 	}
 	if !h.assistantEnabled(ctx) {
-		return nil, createPersonalLinkOut{}, fmt.Errorf("personal links are switched off, so a new link would not open. The owner can switch the booking assistant on in Bookmeet, Settings → AI")
+		return nil, createPersonalLinkOut{}, fmt.Errorf("personal links are switched off, so a new link would not open. The owner can switch the booking assistant on in BookMeet, Settings → AI")
 	}
 	name := strings.TrimSpace(in.GuestName)
 	if name == "" || len(name) > 200 {
@@ -357,21 +371,27 @@ func (h *Handler) mcpCreatePersonalLink(ctx context.Context, req *mcp.CallToolRe
 				PlaceName: placeName, PlaceAddress: placeAddr, Windows: windows}})
 		lines := []string{et.Name}
 		var outside []string
+		onlyNotice := true
 		var spans []mcpTimeSpan
 		for _, w := range check.Windows {
 			lines = append(lines, w.Text)
 			spans = append(spans, w.mcpTimeSpan)
 			if w.NeedsApproval {
 				outside = append(outside, w.Text)
+				onlyNotice = onlyNotice && w.Verdict == "short_notice"
 			}
 		}
+		title, why := "Link for "+name+" with times outside your hours?", "Outside your usual hours: "
+		if onlyNotice {
+			title, why = "Link for "+name+" with short-notice times?", "Sooner than your minimum notice: "
+		}
 		return approvalResult(ap), createPersonalLinkOut{Offer: check, Approval: &mcpApprovalOut{
-			Ticket: ap.Ticket, Title: "Link for " + name + " with times outside your hours?", Lines: lines,
-			Why: "Outside your usual hours: " + strings.Join(outside, "; ") + ".", Button: "Allow and create link",
+			Ticket: ap.Ticket, Title: title, Lines: lines,
+			Why: why + strings.Join(outside, "; ") + ".", Button: "Allow and create link",
 			EventType: et.Slug, Spans: spans,
 		}}, nil
 	}
-	if !check.CanCreate && check.NeedsOwner && check.TimesOffered > 0 && in.AskOwner {
+	if !check.CanCreate && check.NeedsOwner && check.TimesOffered > 0 && in.AskOwner && !mcpDrawsCards(req) {
 		return nil, createPersonalLinkOut{}, errors.New(h.askOwnerToConfirmLink(ctx, o, et, name, email, topic, check, windows, strings.TrimSpace(in.ReplacesLinkID)))
 	}
 	if !check.CanCreate {
@@ -409,7 +429,7 @@ func (h *Handler) mcpCreatePersonalLink(ctx context.Context, req *mcp.CallToolRe
 	if replaces != "" {
 		lead = "a new link for " + l.GuestName + " (the old one no longer works)"
 	}
-	h.agentDid(ctx, o, fmt.Sprintf("%s, %s: %s.\n\n%s", lead, et.Name, offerWords(o, l), url),
+	h.agentDid(ctx, req, o, fmt.Sprintf("%s, %s: %s.\n\n%s", lead, et.Name, offerWords(o, l), url),
 		fmt.Sprintf("the owner made %s, %s, offering %s.", lead, et.Name, offerWords(o, l)))
 	return nil, createPersonalLinkOut{
 		LinkID: l.ID, URL: url, MessageToSend: "Here's a link to grab a time with me: " + url,
@@ -424,7 +444,7 @@ func (h *Handler) addAssistantCreateTools(s *mcp.Server) {
 		Title: "Check a personal link offer",
 		Description: "Preview a personal link before making it: check the days and times the owner wants to offer against their availability. " +
 			"Use it when the owner wants to see first or the days are unclear; when the guest and times are clear, call create_personal_link directly, which runs the same check. " +
-			"Pass guest_name when you know it: in apps that show Bookmeet's card, the card then has the button that creates the link. " +
+			"Pass guest_name when you know it: in apps that show BookMeet's card, the card then has the button that creates the link. " +
 			"Pass dates and clock times in the owner's own time zone; each window comes back with its weekday and date written out, so you can confirm with the owner that the days are right. " +
 			"Takes the same arguments as create_personal_link. Says per window how many times the guest would be offered, and whether a window is outside the owner's hours, beyond how far ahead they take bookings, or busy throughout. Changes nothing.",
 		Annotations: toolReadOnly,
@@ -435,7 +455,7 @@ func (h *Handler) addAssistantCreateTools(s *mcp.Server) {
 		Title: "Create a personal link",
 		Description: "Make a single-use booking link for one named guest, limited to the windows given, and return its address and a message for the owner to send. " +
 			"When the owner has named the guest and the days and times, call it directly: it checks the offer itself. If any day is unclear, check_personal_link_offer first and confirm with the owner. " +
-			"If some times are outside the owner's usual hours, an app that shows Bookmeet's card gets an approval card with an Allow button in the chat: that tap is the owner's approval, so do not ask them to approve in words first. " +
+			"If some times are outside the owner's usual hours, an app that shows BookMeet's card gets an approval card with an Allow button in the chat: that tap is the owner's approval, so do not ask them to approve in words first. " +
 			"Refuses an offer with nothing in it. " +
 			"For an in-person meeting, pass place_query, show the owner the place_options the check returns, and pass the one they pick as place. " +
 			"To change an existing link's offer, pass replaces_link_id: the old address stops working. Never send the link to the guest yourself; the owner sends it.",

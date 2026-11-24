@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bookmeet</title>
+<title>BookMeet</title>
 <style>
-/* Bookmeet's card inside an AI app (MCP Apps). Framework-free on purpose, like the public
+/* BookMeet's card inside an AI app (MCP Apps). Framework-free on purpose, like the public
    booking pages: it runs in the app's sandbox with no network of its own. Colours follow
    the app's theme (hostContext.theme), falling back to the system's. */
 :root {
@@ -87,7 +87,7 @@ h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 4px;
 </style>
 </head>
 <body>
-<div id="root"><div class="card"><div class="brand"><span class="dot"></span>Bookmeet</div><p class="muted">Loading…</p></div></div>
+<div id="root"><div class="card"><div class="brand"><span class="dot"></span>BookMeet</div><p class="muted">Loading…</p></div></div>
 <script>
 (function () {
   "use strict";
@@ -142,16 +142,25 @@ h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 4px;
   }
   if (window.ResizeObserver) new ResizeObserver(reportSize).observe(root);
 
-  // callTool runs a Bookmeet tool from a button and draws what comes back.
+  // callTool runs a BookMeet tool from a button and draws what comes back.
   function callTool(name, args, button) {
     if (button) { button.disabled = true; button.dataset.label = button.textContent; button.textContent = "Working…"; }
     return request("tools/call", { name: name, arguments: args || {} }).then(function (res) {
       safely(function () { render(name, res || {}); });
+      if (name === "owner_approve") tellModel(res || {});
       return res;
     }).catch(function (err) {
       if (button) { button.disabled = false; button.textContent = button.dataset.label; }
       showError(err.message);
     });
+  }
+
+  // The assistant does not see what a button here did, so an approval's outcome is put in
+  // its context. An app that does not take this ignores it.
+  function tellModel(res) {
+    var s = res.structuredContent || {};
+    var said = res.isError ? "Nothing was done: " + textOf(res) : (s.result || textOf(res));
+    request("ui/update-model-context", { content: [{ type: "text", text: "The owner tapped the approval button on the BookMeet card. " + said }] }).catch(function () {});
   }
 
   // ── drawing ──────────────────────────────────────────────────────────────────────
@@ -161,7 +170,7 @@ h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 4px;
     });
   }
   function card(kind, title, sub, body) {
-    root.innerHTML = '<div class="card ' + kind + '"><div class="brand"><span class="dot"></span>Bookmeet</div>' +
+    root.innerHTML = '<div class="card ' + kind + '"><div class="brand"><span class="dot"></span>BookMeet</div>' +
       '<h1>' + esc(title) + '</h1>' + (sub ? '<p class="sub">' + esc(sub) + '</p>' : "") + body + '</div>';
     requestAnimationFrame(reportSize);
   }
@@ -217,7 +226,7 @@ h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 4px;
 
   // ── Show my calendar ─────────────────────────────────────────────────────────────
   // The days a card is about, side by side: the owner's usual hours, when their calendar is
-  // busy (no titles: Bookmeet never puts calendar titles on a card), their Bookmeet bookings
+  // busy (no titles: BookMeet never puts calendar titles on a card), their BookMeet bookings
   // and the times being asked about. Drawn from show_my_calendar, which only this card calls.
   function calendarButton(spans) { return spans && spans.length ? '<button id="show-cal">Show my calendar</button>' : ""; }
   function wireCalendar(eventType, spans) {
@@ -279,7 +288,7 @@ h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 4px;
     h += '</div>';
     h += '<div class="legend"><span><i style="background:var(--bg);border:1px solid var(--line)"></i>Your hours</span>' +
       '<span><i class="busy" style="background:color-mix(in srgb, var(--muted) 35%, transparent)"></i>Busy</span>' +
-      '<span><i style="background:color-mix(in srgb, var(--accent) 22%, var(--bg));border-left:3px solid var(--accent)"></i>Bookmeet booking</span>' +
+      '<span><i style="background:color-mix(in srgb, var(--accent) 22%, var(--bg));border-left:3px solid var(--accent)"></i>BookMeet booking</span>' +
       '<span><i style="border:2px solid var(--warn)"></i>Asked for</span></div>';
     if (!c.calendar_checked) h += '<p class="muted">Your calendar could not be read just now, so busy times are missing.</p>';
     if (c.zone) h += '<p class="muted">Times in ' + esc(c.zone) + '.</p>';
@@ -307,7 +316,7 @@ h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 4px;
     if (name === "whats_waiting" || s.needs_owner) return renderWaiting(s);
     if (name === "list_personal_links" || s.links) return renderLinks(s);
     if (name === "get_personal_link" || s.left_for_owner) return renderOneLink(s);
-    card("", "Bookmeet", "", '<p>' + esc(textOf(res)) + '</p>');
+    card("", "BookMeet", "", '<p>' + esc(textOf(res)) + '</p>');
   }
 
   // The verdicts in the owner's own words: the card is read by the owner, not the agent.
@@ -315,6 +324,7 @@ h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 4px;
     busy_throughout: "busy the whole time",
     outside_hours: "outside your hours",
     beyond_booking_horizon: "further ahead than you take bookings",
+    short_notice: "short notice",
     partly_outside_hours: "partly outside your hours"
   };
   function verdictBadge(w) {
@@ -331,7 +341,7 @@ h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 4px;
     (s.windows || []).forEach(function (w) { h += '<li><span>' + esc(w.text) + '</span>' + verdictBadge(w) + '</li>'; });
     h += '</ul>';
     if (s.skipped_days && s.skipped_days.length) h += '<p class="muted">Left out (not a working day): ' + esc(s.skipped_days.join(", ")) + '</p>';
-    if (s.needs_owner_approval) h += '<div class="note warn">Some of these times are outside your usual hours. Allow them to include them in the link.</div>';
+    if (s.needs_owner_approval) h += '<div class="note warn">Some of these times are outside your usual booking rules. Allow them to include them in the link.</div>';
     else if (!s.can_create) h += '<div class="note bad">' + esc(s.advice) + '</div>';
     var canGo = s.can_create || (s.needs_owner_approval && s.times_offered > 0);
     var label = s.needs_owner_approval ? "Allow and create link" : "Create link";
@@ -377,7 +387,7 @@ h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 4px;
     var h = '<p>' + (s.replaced ? "The old link no longer works. " : "") + 'It works once, and expires ' + esc(s.expires && s.expires.text) + '.</p>';
     h += '<div class="url"><input id="url-box" readonly value="' + esc(s.url) + '"><button id="copy-url" data-copy-label="Copy link">Copy link</button></div>';
     h += '<div class="actions"><button class="primary" id="copy-msg" data-copy-label="Copy message">Copy message</button></div>';
-    h += '<p class="muted">Send it to ' + esc(guest || "your guest") + ' yourself; Bookmeet does not send it.</p>';
+    h += '<p class="muted">Send it to ' + esc(guest || "your guest") + ' yourself; BookMeet does not send it.</p>';
     card("ok", "Link ready" + (guest ? " for " + guest : ""), "", h);
     on("copy-url", function (b) { copy(s.url, b); });
     on("copy-msg", function (b) { copy(s.message_to_send, b); });

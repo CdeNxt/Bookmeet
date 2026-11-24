@@ -255,3 +255,108 @@ func TestMCPCards_approvalsCarryTheirTimesForTheCalendar(t *testing.T) {
 		t.Fatalf("approval: %v %s", err, sc)
 	}
 }
+
+// A time inside the minimum notice and over a calendar event: one card that says both, in
+// those words and not "outside your hours"; the tap books it, and Telegram hears nothing.
+func TestMCPCards_bookAnywaySaysEveryReasonAndTheTapBooks(t *testing.T) {
+	realBookingClock(t)
+	f := newOwnerFixture(t)
+	if _, err := f.h.db.Exec(`UPDATE event_types SET min_notice_minutes = 4320, buffer_after_minutes = 30 WHERE slug = 'intro'`); err != nil {
+		t.Fatal(err)
+	}
+	day, _ := time.Parse("2006-01-02", date(2))
+	at := day.Add(10 * time.Hour)
+	setBusy := func(start, end time.Time) {
+		f.cal.mu.Lock()
+		defer f.cal.mu.Unlock()
+		f.cal.busy = []slots.Interval{{Start: start, End: end}}
+		f.cal.titled = []calendar.BusyEvent{{Title: "Dentist", Start: start, End: end}}
+	}
+	cs := connectCardApp(t, f.h)
+	args := map[string]any{"guest_name": "Ann Agent", "guest_email": "ann@example.com", "event_type": "intro", "date": date(2), "time": "10:00", "ask_owner": true}
+	card := func(res *mcp.CallToolResult) string {
+		blob, _ := json.Marshal(res.StructuredContent)
+		if strings.Contains(string(blob), "Dentist") {
+			t.Fatalf("a calendar title reached the app: %s", blob)
+		}
+		return string(blob)
+	}
+	before := len(f.texts())
+
+	// Something that ends as the meeting would start: only the buffer is in the way.
+	setBusy(at.Add(-time.Hour), at)
+	got := card(callRaw(t, cs, "book_for_guest", args))
+	for _, want := range []string{"3-day minimum notice", "inside the buffer", "Book anyway"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the card does not say %q: %s", want, got)
+		}
+	}
+	if strings.Contains(got, "outside the hours") {
+		t.Errorf("a time inside the owner's hours was called outside them: %s", got)
+	}
+	res := callRaw(t, cs, "book_for_guest", args)
+	ticket, key := approvalOf(t, res)
+
+	// Something new at the time itself since that card: not booked over unseen.
+	setBusy(at, at.Add(30*time.Minute))
+	again := approve(t, cs, ticket, key)
+	if again.IsError || !strings.Contains(card(again), "You have something on your calendar") {
+		t.Fatalf("a new clash: %+v", again.Content)
+	}
+	if n := f.count(t, `SELECT COUNT(*) FROM bookings`); n != 0 {
+		t.Fatalf("%d bookings before the owner saw the new clash", n)
+	}
+	ticket, key = approvalOf(t, again)
+	if ok := approve(t, cs, ticket, key); ok.IsError {
+		t.Fatalf("Book anyway: %+v", ok.Content)
+	}
+	if n := f.count(t, `SELECT COUNT(*) FROM bookings`); n != 1 {
+		t.Fatalf("%d bookings after Book anyway; want 1", n)
+	}
+	if sent := f.texts()[before:]; len(sent) != 0 {
+		t.Errorf("a card app's booking was sent to Telegram: %v", sent)
+	}
+}
+
+// With exceptions switched off, a card app is refused with the reason and is never sent to
+// Telegram.
+func TestMCPCards_aCardAppIsNeverSentToTelegram(t *testing.T) {
+	f := newOwnerFixture(t)
+	f.closeDay(t, 3)
+	if _, err := f.h.db.Exec(`UPDATE server_settings SET assistant_exceptions = 0 WHERE id = 1`); err != nil {
+		t.Fatal(err)
+	}
+	before := len(f.texts())
+	cs := connectCardApp(t, f.h)
+	msg := toolError(t, cs, "book_for_guest", map[string]any{"guest_name": "Ann Agent", "guest_email": "ann@example.com", "event_type": "intro", "date": date(3), "time": "09:00", "ask_owner": true})
+	if !strings.Contains(msg, "outside the times") || strings.Contains(msg, "Telegram") {
+		t.Errorf("refusal = %s", msg)
+	}
+	if sent := f.texts()[before:]; len(sent) != 0 {
+		t.Errorf("sent to Telegram: %v", sent)
+	}
+}
+
+// A link whose times are only short of the minimum notice is worded that way.
+func TestMCPCards_shortNoticeIsNotCalledOutsideHours(t *testing.T) {
+	realBookingClock(t)
+	f := newOwnerFixture(t)
+	if _, err := f.h.db.Exec(`UPDATE event_types SET min_notice_minutes = 4320 WHERE slug = 'intro'`); err != nil {
+		t.Fatal(err)
+	}
+	cs := connectCardApp(t, f.h)
+	res := callRaw(t, cs, "create_personal_link", offerArgs(2, "09:00", "11:00"))
+	blob, _ := json.Marshal(res.StructuredContent)
+	if !strings.Contains(string(blob), "short_notice") || !strings.Contains(string(blob), "Sooner than your minimum notice") {
+		t.Errorf("offer = %s", blob)
+	}
+}
+
+// realBookingClock undoes TestMain's pinned clock, which puts every test date far outside
+// any minimum notice.
+func realBookingClock(t *testing.T) {
+	t.Helper()
+	pinned := bookingNow
+	bookingNow = time.Now
+	t.Cleanup(func() { bookingNow = pinned })
+}

@@ -191,7 +191,10 @@ default). Off, links keep to the owner's usual hours and the assistant only repo
   time inside them the owner is not busy for. `linkException` (link made so, OR the setting
   on now) feeds `slotsWanted.OwnerException` in `personalLinkSlots` and `OutsideRules` when
   it books, read each time, so turning the setting on fixes a link already sent.
-- **A direct booking (one exact time) needs the Allow tap** outside the owner's hours too.
+- **A direct booking (one exact time) has one button.** "Book it" when nothing is in the
+  way; "Book anyway" when the minimum notice, hours, the calendar or its buffer is
+  (`bookDirectAnyway`, which waives what the panel showed and redraws on anything new).
+  Only a booking starting at the same instant cannot be waived. The MCP card does the same.
 - **When the setting is what blocks a meeting, the owner is told before any guest is**
   (`exceptionsOffHint`): on the panel, when Create is refused, and in the empty-link message.
   Keep that true for any new path where the setting can leave a link with nothing to offer.
@@ -202,7 +205,7 @@ default). Off, links keep to the owner's usual hours and the assistant only repo
   `bookingExtras.OwnerInvited` drop it; the panel no longer warns about it. A link that
   was refused for it showed the guest "I'm having trouble" (the engine rejects a date range
   wholly beyond the horizon), which is how this was found. Hours and notice still need the
-  Allow tap.
+  owner's tap.
 - **Three separate waivers, and only the owner sets any of them** (`bookingExtras`):
   `OutsideRules` sets aside the owner's hours, minimum notice and booking horizon and KEEPS
   the calendar check; `OwnerApproved` also books over what the calendar shows;

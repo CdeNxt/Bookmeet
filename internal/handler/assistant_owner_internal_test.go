@@ -12,8 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/calnode/calnode/internal/calendar"
 	"github.com/calnode/calnode/internal/llm"
 	"github.com/calnode/calnode/internal/personallink"
+	"github.com/calnode/calnode/internal/slots"
 )
 
 // fakeModel stands in for the AI model. Each call answers with the next scripted message,
@@ -473,11 +475,50 @@ func TestOwnerAssistant_aDirectBookingOnABusyTimeBooksNothing(t *testing.T) {
 	if n := f.count(t, `SELECT COUNT(*) FROM bookings`); n != 1 {
 		t.Fatalf("%d bookings; want only the one that was already there", n)
 	}
-	if !f.anyText("isn't free on your calendar") {
+	if !f.anyText("isn't free, so nothing was booked") {
 		t.Errorf("the owner was not told the time is taken; last message:\n%s", f.lastText())
 	}
 	if n := f.count(t, `SELECT COUNT(*) FROM assistant_drafts WHERE status = 'open'`); n != 1 {
 		t.Errorf("the panel was closed after a booking that did not happen")
+	}
+}
+
+// Something on the owner's calendar: the panel names it to the owner and offers Book
+// anyway, and that one tap books over it. Something new since the panel was drawn redraws it
+// first.
+func TestOwnerAssistant_bookAnywayBooksOverTheCalendar(t *testing.T) {
+	f := newOwnerFixture(t)
+	day, _ := time.Parse("2006-01-02", date(3))
+	at := day.Add(10 * time.Hour)
+	setBusy := func(start, end time.Time) {
+		f.cal.mu.Lock()
+		defer f.cal.mu.Unlock()
+		f.cal.busy = []slots.Interval{{Start: start, End: end}}
+		f.cal.titled = []calendar.BusyEvent{{Title: "Dentist", Start: start, End: end}}
+	}
+	if _, err := f.h.db.Exec(`UPDATE event_types SET buffer_after_minutes = 30 WHERE id = ?`, f.etID); err != nil {
+		t.Fatal(err)
+	}
+	setBusy(at.Add(-time.Hour), at) // only the buffer is in the way
+	f.model.calls("show_details", map[string]any{
+		"guest_name": "Bill Mathers", "event_type": "intro", "guest_email": "bill@example.com",
+		"book_at": map[string]string{"date": date(3), "time": "10:00"},
+	})
+	f.message(t, "book Bill at 10")
+	if !strings.Contains(f.panel(), "inside the buffer") || f.buttons()["Book it"] != "" {
+		t.Fatalf("panel:\n%s", f.panel())
+	}
+	setBusy(at, at.Add(30*time.Minute)) // now something at the time itself
+	f.tap(t, "Book anyway")
+	if n := f.count(t, `SELECT COUNT(*) FROM bookings`); n != 0 {
+		t.Fatalf("%d bookings over a clash the owner had not seen", n)
+	}
+	if !strings.Contains(f.panel(), "Dentist") {
+		t.Fatalf("the redrawn panel does not name the clash:\n%s", f.panel())
+	}
+	f.tap(t, "Book anyway")
+	if n := f.count(t, `SELECT COUNT(*) FROM bookings`); n != 1 {
+		t.Fatalf("%d bookings after Book anyway; want 1", n)
 	}
 }
 

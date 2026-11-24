@@ -155,6 +155,16 @@ func (h *Handler) windowSlotCounts(ctx context.Context, slug, tzName string, win
 	return normal, exception, nil
 }
 
+// onlyShortNotice reports whether a window the rules cut into is inside the host's hours,
+// so that the minimum notice is the thing in the way and "outside your hours" would be
+// wrong.
+func (h *Handler) onlyShortNotice(ctx context.Context, et *bookableEventType, hostID string, w personallink.Window) (bool, error) {
+	if !w.Start.Before(time.Now().Add(time.Duration(et.MinNoticeMinutes) * time.Minute)) {
+		return false, nil
+	}
+	return h.hostAvailableAt(ctx, hostID, et.ID, w.Start, w.End)
+}
+
 // bookPersonalLink books startAt through the link, once.
 //
 // The link is claimed before the booking is attempted and released if the attempt fails, so
@@ -179,6 +189,14 @@ type timeVerdict struct {
 	Outside bool // outside the owner's hours, notice or booking horizon
 	Clash   bool // something on the owner's calendar, or another Bookmeet booking, is there
 	Unknown bool // the calendar could not be checked
+	// Which rules make it Outside (see timeRules), and the minimum notice in minutes.
+	Rules     timeRules
+	MinNotice int
+	// BufferOnly: nothing is at the time itself; it is inside the buffer kept around
+	// something on the calendar.
+	BufferOnly bool
+	// SameStart: another Bookmeet booking starts at that very instant. Nothing can waive it.
+	SameStart bool
 	// Conflicts names what is in the way, when it can be named. The titles come from the
 	// owner's own calendar and are for the owner alone: never the guest, never a model,
 	// never stored.
@@ -197,7 +215,11 @@ func (v timeVerdict) free() bool { return !v.Outside && !v.Clash && !v.Unknown }
 func (v timeVerdict) note() string {
 	var parts []string
 	if v.Outside {
-		parts = append(parts, "outside your hours")
+		if v.Rules.TooSoon && !v.Rules.OutsideHours {
+			parts = append(parts, "inside your minimum notice")
+		} else {
+			parts = append(parts, "outside your hours")
+		}
 	}
 	switch {
 	case v.Clash && len(v.Conflicts) > 0:
@@ -255,6 +277,7 @@ func (h *Handler) timeVerdictFor(ctx context.Context, slug string, minutes int, 
 	default:
 		v.Unknown = true
 	}
+	h.explainVerdict(ctx, slug, startAt, endAt, &v)
 	hosts := params.HostIDs
 	if len(hosts) == 0 {
 		hosts = []string{ownerID}
@@ -262,7 +285,8 @@ func (h *Handler) timeVerdictFor(ctx context.Context, slug string, minutes int, 
 	// Another Bookmeet booking in the way is a clash too, and one that can be named.
 	if overlaps, err := h.bookingSvc.Overlapping(ctx, hosts, startAt, endAt); err == nil {
 		for _, o := range overlaps {
-			v.Clash = true
+			v.Clash, v.BufferOnly = true, false
+			v.SameStart = v.SameStart || o.StartAt.Equal(startAt)
 			title := o.EventTypeName
 			if o.GuestName != "" {
 				title += " with " + o.GuestName
@@ -281,6 +305,39 @@ func (h *Handler) timeVerdictFor(ctx context.Context, slug string, minutes int, 
 		}
 	}
 	return v
+}
+
+// explainVerdict fills in the detail behind Outside and Clash, from the same checks the
+// booking core makes. On any lookup failure the verdict stays as general as it was.
+func (h *Handler) explainVerdict(ctx context.Context, slug string, startAt, endAt time.Time, v *timeVerdict) {
+	if !v.Outside && !v.Clash {
+		return
+	}
+	et, err := h.loadBookableEventType(ctx, slug)
+	if err != nil {
+		return
+	}
+	hosts, err := h.resolveEventTypeHosts(ctx, et.ID)
+	if err != nil {
+		return
+	}
+	candidates, required, optional := resolveBookingHostPool(hosts, et.RoutingMode)
+	if len(candidates) == 0 {
+		return
+	}
+	if v.Outside {
+		et.MaxFutureDays = 0 // as planBooking does for a meeting the owner arranged
+		v.MinNotice = et.MinNoticeMinutes
+		if broken, err := h.timeRulesBroken(ctx, et, et.RoutingMode, candidates, required, startAt, endAt); err == nil {
+			v.Rules = broken
+		}
+	}
+	if v.Clash && et.BufferBeforeMinutes+et.BufferAfterMinutes > 0 {
+		et.BufferBeforeMinutes, et.BufferAfterMinutes = 0, 0
+		if _, _, err := h.calendarFreeHosts(ctx, et, candidates, required, optional, startAt, endAt); err == nil {
+			v.BufferOnly = true
+		}
+	}
 }
 
 func (h *Handler) bookPersonalLinkWith(ctx context.Context, l *personallink.Link, startAt time.Time, organizer booking.Attendee, outsideWindows, ownerApproved bool) (*booking.Booking, error) {

@@ -16,7 +16,7 @@ import (
 // the owner can see what is around the times before tapping. The owner's eyes only: the tool
 // is app-only (the model cannot call it, and its result goes to the card), and even so it
 // carries no calendar titles, only when the owner is busy, their usual hours and their own
-// Bookmeet bookings. Titles stay where they already are: the owner's Telegram messages.
+// BookMeet bookings. Titles stay where they already are: the owner's Telegram messages.
 
 const calendarMaxDays = 7
 
@@ -55,7 +55,7 @@ type calendarDaysOut struct {
 
 func (h *Handler) mcpCalendarDays(ctx context.Context, req *mcp.CallToolRequest, in calendarDaysIn) (*mcp.CallToolResult, calendarDaysOut, error) {
 	if !mcpDrawsCards(req) {
-		return nil, calendarDaysOut{}, errors.New("the calendar view is part of Bookmeet's card; this app does not show cards")
+		return nil, calendarDaysOut{}, errors.New("the calendar view is part of BookMeet's card; this app does not show cards")
 	}
 	o, err := h.mcpAssistantOwner(ctx)
 	if err != nil {
@@ -92,8 +92,8 @@ func (h *Handler) mcpCalendarDays(ctx context.Context, req *mcp.CallToolRequest,
 
 	out := calendarDaysOut{Zone: o.zone(), H24: o.H24}
 
-	// Busy times from the owner's calendars, minus the events Bookmeet put there itself:
-	// those are drawn as bookings, from Bookmeet's own records.
+	// Busy times from the owner's calendars, minus the events BookMeet put there itself:
+	// those are drawn as bookings, from BookMeet's own records.
 	var busy []slots.Interval
 	if gc := h.getCal(); gc != nil {
 		b, err := gc.FreeBusy(ctx, o.UserID, from, to)
@@ -170,7 +170,7 @@ type ownerBooking struct {
 	label string
 }
 
-// ownerBookingsBetween is the owner's confirmed Bookmeet bookings in a range, labelled by
+// ownerBookingsBetween is the owner's confirmed BookMeet bookings in a range, labelled by
 // meeting type and guest: the owner's own records, the same the agent can list.
 func (h *Handler) ownerBookingsBetween(ctx context.Context, userID string, from, to time.Time) ([]ownerBooking, error) {
 	rows, err := h.db.QueryContext(ctx, `

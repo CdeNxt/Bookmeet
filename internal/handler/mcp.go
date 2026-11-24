@@ -15,7 +15,7 @@ import (
 	"github.com/calnode/calnode/internal/buildinfo"
 )
 
-// MCPServer builds the Model Context Protocol server exposing Calnode's booking
+// MCPServer builds the Model Context Protocol server exposing BookMeet's booking
 // operations as typed tools (PRD §11). The same server instance is served over both
 // transports: stdio (the `calnode mcp` subcommand, for local agents) and Streamable
 // HTTP (mounted at POST /mcp behind API-key auth, for remote agents). Tools call the
@@ -23,7 +23,7 @@ import (
 func (h *Handler) MCPServer() *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{
 		Name:    "bookmeet",
-		Title:   "Bookmeet booking",
+		Title:   "BookMeet booking",
 		Version: buildinfo.Get().Version,
 	}, &mcp.ServerOptions{Instructions: mcpInstructions})
 

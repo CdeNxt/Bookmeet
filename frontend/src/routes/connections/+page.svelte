@@ -119,7 +119,7 @@
 
 	<p class="mt-3 text-xs text-muted-foreground">
 		In Claude: <span class="font-medium">Settings → Connectors → Add custom connector</span>,
-		paste the URL, then sign in with your Bookmeet account to authorize it. Access is scoped to
+		name it <span class="font-medium">BookMeet</span>, paste the URL, then sign in with your BookMeet account to authorize it. Access is scoped to
 		your own role, and you can revoke it here at any time.
 	</p>
 </div>
